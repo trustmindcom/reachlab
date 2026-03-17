@@ -82,4 +82,50 @@ describe("Database initialization", () => {
     expect(colNames).toContain("all_appearances");
     db.close();
   });
+
+  it("creates all AI tables after migration", () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const tables = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+      )
+      .all()
+      .map((r: any) => r.name);
+
+    const aiTables = [
+      "ai_taxonomy",
+      "ai_post_topics",
+      "ai_tags",
+      "ai_runs",
+      "insights",
+      "insight_lineage",
+      "recommendations",
+      "ai_overview",
+      "ai_logs",
+    ];
+
+    for (const table of aiTables) {
+      expect(tables, `missing table: ${table}`).toContain(table);
+    }
+    db.close();
+  });
+
+  it("creates AI table indexes", () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const indexes = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_ai%' OR name LIKE 'idx_insights%' OR name LIKE 'idx_recommendations%'"
+      )
+      .all()
+      .map((r: any) => r.name);
+
+    expect(indexes).toContain("idx_ai_tags_post_id");
+    expect(indexes).toContain("idx_insights_run_id");
+    expect(indexes).toContain("idx_insights_stable_key");
+    expect(indexes).toContain("idx_recommendations_run_id");
+    expect(indexes).toContain("idx_ai_logs_run_id");
+    expect(indexes).toContain("idx_ai_post_topics_post_id");
+    expect(indexes).toContain("idx_ai_post_topics_taxonomy_id");
+    db.close();
+  });
 });
