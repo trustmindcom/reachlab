@@ -5,8 +5,9 @@ import Posts from "./pages/Posts";
 import Coach from "./pages/Coach";
 import Timing from "./pages/Timing";
 import Followers from "./pages/Followers";
+import Settings from "./pages/Settings";
 
-const tabs = ["Overview", "Posts", "Coach", "Timing", "Followers"] as const;
+const tabs = ["Overview", "Posts", "Coach", "Timing", "Followers", "Settings"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function App() {
@@ -75,6 +76,7 @@ export default function App() {
         {tab === "Coach" && <Coach />}
         {tab === "Timing" && <Timing />}
         {tab === "Followers" && <Followers />}
+        {tab === "Settings" && <Settings />}
       </main>
     </div>
   );

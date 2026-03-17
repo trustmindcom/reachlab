@@ -165,4 +165,16 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ feedback }),
     }).then((r) => r.json()),
+  authorPhoto: () =>
+    fetch(`${BASE_URL}/settings/author-photo`).then((r) =>
+      r.ok ? r.blob().then((b) => URL.createObjectURL(b)) : null
+    ),
+  uploadAuthorPhoto: (file: File) =>
+    fetch(`${BASE_URL}/settings/author-photo`, {
+      method: "POST",
+      body: file,
+      headers: { "Content-Type": file.type },
+    }).then((r) => r.json()),
+  deleteAuthorPhoto: () =>
+    fetch(`${BASE_URL}/settings/author-photo`, { method: "DELETE" }).then((r) => r.json()),
 };
