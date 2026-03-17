@@ -92,6 +92,39 @@ describe("synthesisPrompt", () => {
   });
 });
 
+describe("patternDetectionPrompt language rules and schema", () => {
+  it("includes language rules", () => {
+    const prompt = patternDetectionPrompt("summary", "patterns");
+    expect(prompt).toContain("Never use abbreviations");
+    expect(prompt).toContain("engagement rate");
+    expect(prompt).toContain("topic/hook text");
+    expect(prompt).toContain("Never reference posts by ID");
+  });
+
+  it("includes full_text and hook_text in schema", () => {
+    const prompt = patternDetectionPrompt("summary", "patterns");
+    expect(prompt).toContain("full_text");
+    expect(prompt).toContain("hook_text");
+    expect(prompt).toContain("image_urls");
+    expect(prompt).toContain("image_local_paths");
+  });
+
+  it("includes ai_image_tags schema", () => {
+    const prompt = patternDetectionPrompt("summary", "patterns");
+    expect(prompt).toContain("ai_image_tags");
+    expect(prompt).toContain("text_density");
+    expect(prompt).toContain("energy");
+  });
+});
+
+describe("synthesisPrompt language rules", () => {
+  it("includes language rules", () => {
+    const prompt = synthesisPrompt("findings", "feedback");
+    expect(prompt).toContain("Never use abbreviations");
+    expect(prompt).toContain("topic/hook text");
+  });
+});
+
 describe("taxonomyPrompt", () => {
   it("returns a string mentioning JSON", () => {
     const result = taxonomyPrompt("post summaries here");

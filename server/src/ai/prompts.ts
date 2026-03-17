@@ -1,6 +1,13 @@
 // Pure functions that return system/user prompt strings for AI analysis stages.
 // No external dependencies.
 
+const LANGUAGE_RULES = `
+## Language Rules
+- Never use abbreviations or internal metric names. Say "engagement rate" not "WER". Say "shares" not "reposts".
+- When referencing specific posts, describe them by their topic/hook text (e.g., "your post about due diligence questions for investors") and include the date. Never reference posts by ID number.
+- All numbers must have plain-English context. Don't say "WER 0.0608" — say "6.1% engagement rate".
+- Don't just identify what works — explain WHY it works and give a specific next action the author can take this week.`;
+
 export function getTier(postCount: number): string {
   if (postCount < 30) return "foundation";
   if (postCount < 60) return "patterns";
@@ -33,7 +40,7 @@ ${summary}
 ## Database Schema
 Available tables and columns for query_db:
 
-- **posts**: id (TEXT PK), content_preview (TEXT), content_type (TEXT), published_at (DATETIME), url (TEXT), created_at (DATETIME)
+- **posts**: id (TEXT PK), content_preview (TEXT), full_text (TEXT), hook_text (TEXT), image_urls (TEXT JSON array), image_local_paths (TEXT JSON array), content_type (TEXT), published_at (DATETIME), url (TEXT), created_at (DATETIME)
 - **post_metrics**: id (INTEGER PK), post_id (TEXT FK→posts.id), scraped_at (DATETIME), impressions (INTEGER), members_reached (INTEGER), reactions (INTEGER), comments (INTEGER), reposts (INTEGER), saves (INTEGER), sends (INTEGER), video_views (INTEGER), watch_time_seconds (INTEGER), avg_watch_time_seconds (INTEGER)
 - **follower_snapshots**: date (DATE PK), total_followers (INTEGER)
 - **profile_snapshots**: date (DATE PK), profile_views (INTEGER), search_appearances (INTEGER), all_appearances (INTEGER)
@@ -41,11 +48,17 @@ Available tables and columns for query_db:
 - **ai_post_topics**: post_id (TEXT FK→posts.id), taxonomy_id (INTEGER FK→ai_taxonomy.id)
 - **ai_taxonomy**: id (INTEGER PK), name (TEXT), description (TEXT)
 
+- **ai_image_tags**: post_id (TEXT FK→posts.id), image_index (INTEGER), format (TEXT), people (TEXT), setting (TEXT), text_density (TEXT), energy (TEXT), tagged_at (DATETIME), model (TEXT)
+
 Note: post_metrics may have multiple rows per post (scraped at different times). Use the latest row per post for current metrics.
 Weighted engagement formula: (comments*5 + reposts*3 + saves*3 + sends*3 + reactions*1) / impressions
 
+## Image Analysis
+Correlate image classifications with performance metrics. Look for patterns like: do posts with the author visible get more comments? Do screenshots get more shares? Do polished vs raw images perform differently?
+
 ## Instructions
-Using the data summary above, identify patterns in content performance. Use the query_db tool to explore the database and find correlations between content attributes and engagement metrics. Focus on actionable patterns the author can use to improve.`;
+Using the data summary above, identify patterns in content performance. Use the query_db tool to explore the database and find correlations between content attributes and engagement metrics. Focus on actionable patterns the author can use to improve.
+${LANGUAGE_RULES}`;
 }
 
 export function hypothesisTestingPrompt(
@@ -68,7 +81,8 @@ For each finding, systematically check these potential confounders:
 4. **Measurement confounders**: Could metric collection delays, algorithm changes, or impression counting differences explain it?
 
 ## Instructions
-Test each Stage 1 finding against these confounders using the query_db tool. Strengthen, weaken, or refine each hypothesis based on evidence. Compare with previous insights to identify trend continuations or reversals.`;
+Test each Stage 1 finding against these confounders using the query_db tool. Strengthen, weaken, or refine each hypothesis based on evidence. Compare with previous insights to identify trend continuations or reversals.
+${LANGUAGE_RULES}`;
 }
 
 export function synthesisPrompt(
@@ -97,7 +111,8 @@ Classify recommendations as: quick_win, experiment, long_term, or stop_doing.
 - Always back claims by citing specific numbers (e.g., "Posts with questions get 2.3x more comments")
 - Never make claims without citing supporting data
 - Incorporate user feedback to refine recommendations
-- Use the submit_analysis tool to deliver your final structured output.`;
+- Use the submit_analysis tool to deliver your final structured output.
+${LANGUAGE_RULES}`;
 }
 
 export function overviewSummaryPrompt(
