@@ -52,18 +52,14 @@
 Add to `server/src/__tests__/ai-queries.test.ts` (in the existing `beforeAll`/`afterAll` block with the test db):
 
 ```typescript
-// Add these imports at the top of the file:
-import {
-  getSetting,
-  upsertSetting,
-  saveWritingPromptHistory,
-  getWritingPromptHistory,
-  upsertAnalysisGap,
-  getLatestAnalysisGaps,
-  getLatestPromptSuggestions,
-} from "../db/ai-queries.js";
+// Merge these names into the existing import block from "../db/ai-queries.js"
+// (do not add a duplicate import statement — extend the existing named import list):
+//   getSetting, upsertSetting, saveWritingPromptHistory, getWritingPromptHistory,
+//   upsertAnalysisGap, getLatestAnalysisGaps, getLatestPromptSuggestions
 
-// Add these describe blocks at the bottom of the file:
+// Nest these describe blocks inside the existing outer describe("AI queries", ...) block,
+// before its closing `});`:
+
 describe("settings table", () => {
   it("returns null for missing key", () => {
     expect(getSetting(db, "nonexistent")).toBeNull();
@@ -297,7 +293,7 @@ export function getLatestPromptSuggestions(db: Database.Database): PromptSuggest
 }
 ```
 
-Also update the existing `InsightInput`, `RecommendationInput`, and `OverviewInput` interfaces + `upsertOverview` function:
+Find and replace in-place the existing `InsightInput`, `RecommendationInput`, and `OverviewInput` interfaces + `upsertOverview` function (do not append duplicate definitions):
 
 ```typescript
 // Change InsightInput.confidence from number to string:
@@ -585,12 +581,12 @@ export function getPostPreview(post: {
   full_text: string | null;
   content_preview: string | null;
 }): string {
-  const text =
+  const rawText =
     post.hook_text ??
-    (post.full_text ? post.full_text.slice(0, 80) : null) ??
-    (post.content_preview ? post.content_preview.slice(0, 80) : null);
-  if (!text) return "Untitled post";
-  return text.length > 80 ? text.slice(0, 77) + "..." : text;
+    post.full_text ??
+    post.content_preview;
+  if (!rawText) return "Untitled post";
+  return rawText.length > 80 ? rawText.slice(0, 77) + "..." : rawText;
 }
 
 export function formatInTimezone(
@@ -657,6 +653,7 @@ Add to `server/src/__tests__/stats-report.test.ts`:
 ```typescript
 import BetterSqlite3 from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 import { buildStatsReport } from "../ai/stats-report.js";
 import { initDatabase } from "../db/index.js";
 
@@ -699,13 +696,9 @@ describe("buildStatsReport", () => {
 
   afterAll(() => {
     db.close();
-    try {
-      import("fs").then((fs) => {
-        fs.unlinkSync(TEST_DB_PATH);
-        fs.unlinkSync(TEST_DB_PATH + "-wal");
-        fs.unlinkSync(TEST_DB_PATH + "-shm");
-      });
-    } catch {}
+    try { fs.unlinkSync(TEST_DB_PATH); } catch {}
+    try { fs.unlinkSync(TEST_DB_PATH + "-wal"); } catch {}
+    try { fs.unlinkSync(TEST_DB_PATH + "-shm"); } catch {}
   });
 
   it("returns a non-empty string", () => {
@@ -764,7 +757,7 @@ Expected: FAIL — `buildStatsReport` returns `"PLACEHOLDER"`, tests checking fo
 
 - [ ] **Step 3: Implement `buildStatsReport` in `server/src/ai/stats-report.ts`**
 
-Replace the placeholder `buildStatsReport` with:
+Delete the placeholder `buildStatsReport` function at the bottom of the file (lines starting with `// Placeholder for buildStatsReport` through the closing `}`) and replace with:
 
 ```typescript
 // ── DB loader ──────────────────────────────────────────────
@@ -1747,20 +1740,12 @@ git commit -m "feat: replace agent loop with single interpretStats call; remove 
 
 Add to `server/src/__tests__/ai-orchestrator.test.ts`:
 
-```typescript
-// Existing tests for shouldRunPipeline remain unchanged.
-// Add this import and test:
+The existing tests for `shouldRunPipeline` in `server/src/__tests__/ai-orchestrator.test.ts` remain unchanged. No new tests are added here — the pipeline is validated by the integration smoke test in the Final Verification section. Confirm existing tests still pass after Step 2:
 
-import { vi } from "vitest";
-
-describe("runPipeline (mocked AI)", () => {
-  it("reads timezone from settings before building stats report", async () => {
-    // This is an integration concern validated manually after full implementation.
-    // The unit test for shouldRunPipeline above covers the pure logic.
-    expect(true).toBe(true);
-  });
-});
 ```
+cd server && npm test -- ai-orchestrator
+```
+Expected: Existing shouldRunPipeline tests pass.
 
 - [ ] **Step 2: Replace `server/src/ai/orchestrator.ts`**
 
@@ -1926,7 +1911,11 @@ export async function runPipeline(
             db,
             newInsightId,
             existing.id,
-            insight.direction === "reversed" ? "reversal" : "continuation"
+            existing.direction !== insight.direction &&
+              ["positive", "negative"].includes(existing.direction) &&
+              ["positive", "negative"].includes(insight.direction)
+              ? "reversal"
+              : "continuation"
           );
           retireInsight(db, existing.id);
         }
@@ -2710,14 +2699,65 @@ git commit -m "feat: add timezone detection, prompt suggestions and data gaps to
 
 ---
 
-### Task 11: Settings Page (Writing Prompt), Posts Banner, Timing Highlights
+### Task 11: Settings Page (Writing Prompt + Photo Feedback), Posts Banner, Timing Highlights, Overview WER Cleanup
 
 **Files:**
 - Modify: `dashboard/src/pages/Settings.tsx`
 - Modify: `dashboard/src/pages/Posts.tsx`
 - Modify: `dashboard/src/pages/Timing.tsx`
+- Modify: `dashboard/src/pages/Overview.tsx`
 
-- [ ] **Step 1: Add writing prompt editor to `dashboard/src/pages/Settings.tsx`**
+- [ ] **Step 1a: Add author photo upload feedback to `dashboard/src/pages/Settings.tsx`**
+
+Read the existing `handlePhotoUpload` function (or however the upload is triggered). Replace the silent fire-and-forget with explicit state feedback:
+
+```typescript
+// Add state near the top of the Settings component:
+const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+const [photoError, setPhotoError] = useState<string | null>(null);
+
+// When loading the component, fetch the existing photo:
+useEffect(() => {
+  fetch("/api/settings/author-photo")
+    .then((r) => {
+      if (r.ok) setPhotoPreviewUrl(`/api/settings/author-photo?t=${Date.now()}`);
+    })
+    .catch(() => {});
+}, []);
+
+// In the upload handler, replace silent behavior with:
+const handlePhotoUpload = async (file: File) => {
+  setPhotoError(null);
+  try {
+    const res = await fetch("/api/settings/author-photo", {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setPhotoError((err as any).error ?? "Upload failed");
+      return;
+    }
+    setPhotoPreviewUrl(`/api/settings/author-photo?t=${Date.now()}`);
+  } catch {
+    setPhotoError("Upload failed — check your connection");
+  }
+};
+```
+
+In the JSX, show the preview and error state next to the file input:
+
+```tsx
+{photoPreviewUrl && (
+  <img src={photoPreviewUrl} alt="Author photo preview" className="w-16 h-16 rounded-full object-cover" />
+)}
+{photoError && (
+  <p className="text-xs text-negative">{photoError}</p>
+)}
+```
+
+- [ ] **Step 1b: Add writing prompt editor to `dashboard/src/pages/Settings.tsx`**
 
 Add state and handlers in the `Settings` component:
 
@@ -2827,17 +2867,6 @@ Add state and effect for backfill count (add after existing state declarations):
 const [backfillCount, setBackfillCount] = useState<number>(0);
 
 useEffect(() => {
-  api
-    .get<{ post_ids: string[] }>("/posts/needs-content")
-    .then((r) => setBackfillCount(r.post_ids.length))
-    .catch(() => {});
-}, []);
-```
-
-Wait — `api.get` is not exported. Use a direct fetch instead. Add this helper call inside the existing `useEffect` that loads posts, OR add a new one:
-
-```typescript
-useEffect(() => {
   fetch("/api/posts/needs-content")
     .then((r) => r.json())
     .then((r) => setBackfillCount(r.post_ids?.length ?? 0))
@@ -2914,18 +2943,32 @@ function cellColor(slot: TimingSlot | undefined): string {
 }
 ```
 
-- [ ] **Step 4: Build the dashboard**
+- [ ] **Step 4: Remove WER references from `dashboard/src/pages/Overview.tsx`**
+
+Read the file and search for any of: "WER", "Weighted Engagement Rate", raw decimal engagement rate displays (e.g., `0.0608`), or the old label "Weighted ER". Replace each with plain-English equivalents:
+
+- "WER" → "engagement rate"
+- Any raw decimal like `0.0608` being displayed directly → format as percentage: `(value * 100).toFixed(1) + "%"`
+- Any tooltip or label saying "Weighted Engagement Rate" → "Engagement Rate"
+
+After editing, confirm the file has no remaining occurrences of "WER":
+```
+grep -n "WER" dashboard/src/pages/Overview.tsx
+```
+Expected: no output.
+
+- [ ] **Step 5: Build the dashboard**
 
 ```
 cd dashboard && npm run build
 ```
 Expected: No TypeScript errors, build succeeds.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add dashboard/src/pages/Settings.tsx dashboard/src/pages/Posts.tsx dashboard/src/pages/Timing.tsx
-git commit -m "feat: add writing prompt editor, backfill banner, and timing highlights"
+git add dashboard/src/pages/Settings.tsx dashboard/src/pages/Posts.tsx dashboard/src/pages/Timing.tsx dashboard/src/pages/Overview.tsx
+git commit -m "feat: add writing prompt editor, photo feedback, backfill banner, timing highlights, remove WER"
 ```
 
 ---
