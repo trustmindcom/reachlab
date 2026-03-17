@@ -344,8 +344,23 @@ async function scrapePostPages(
       });
 
       if (clickResult?.result) {
-        // Wait for text expansion
-        await new Promise((r) => setTimeout(r, 1500));
+        // Poll for text expansion (up to 3s) instead of fixed wait
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () =>
+            new Promise<void>((resolve) => {
+              const start = Date.now();
+              const check = () => {
+                const btn = document.querySelector(
+                  ".feed-shared-inline-show-more-text__see-more-less-toggle"
+                );
+                // Button removed or text changed = expansion complete
+                if (!btn || Date.now() - start > 3000) resolve();
+                else setTimeout(check, 200);
+              };
+              check();
+            }),
+        });
         // Re-scrape to get full expanded text
         const fullResult = await sendScrapeCommand(tabId);
         if (fullResult.type === "post-content") {
@@ -357,16 +372,24 @@ async function scrapePostPages(
     }
 
     // POST content to server as a partial post update
-    await postToServer({
-      posts: [
-        {
-          id: postId,
-          full_text: fullText,
-          hook_text: hookText,
-          image_urls: imageUrls,
-        },
-      ],
-    });
+    try {
+      await postToServer({
+        posts: [
+          {
+            id: postId,
+            full_text: fullText,
+            hook_text: hookText,
+            image_urls: imageUrls,
+          },
+        ],
+      });
+    } catch (err: any) {
+      console.error(
+        `[LinkedIn Analytics] Failed to send content for ${postId}:`,
+        err.message
+      );
+      // Continue with remaining posts — don't abort the loop
+    }
   }
 }
 
