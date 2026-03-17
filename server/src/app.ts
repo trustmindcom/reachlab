@@ -307,7 +307,6 @@ export function buildApp(dbPath: string) {
     app.register(fastifyStatic, {
       root: dashboardDir,
       prefix: "/",
-      wildcard: false,
     });
     // SPA fallback — serve index.html for non-API routes
     app.setNotFoundHandler((request, reply) => {
