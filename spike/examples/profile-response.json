@@ -1,0 +1,19 @@
+{
+  "data": {
+    "data": {
+      "identityDashProfilesByMemberIdentity": {
+        "*elements": ["urn:li:fsd_profile:ACoAAA_EXAMPLE_URN"],
+        "$type": "com.linkedin.restli.common.CollectionResponse"
+      },
+      "$type": "com.linkedin.graphql.Query"
+    }
+  },
+  "included": [
+    {
+      "entityUrn": "urn:li:fsd_profile:ACoAAA_EXAMPLE_URN",
+      "versionTag": "1234567890",
+      "$type": "com.linkedin.voyager.dash.identity.profile.Profile"
+    }
+  ],
+  "_note": "Anonymized example of LinkedIn Voyager profile lookup response. Real responses include microSchema metadata."
+}
