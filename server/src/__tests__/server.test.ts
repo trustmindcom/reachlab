@@ -616,6 +616,85 @@ describe("GET /api/images/:postId/:index", () => {
   });
 });
 
+describe("Settings: author photo", () => {
+  const photoPath = path.join(path.dirname(TEST_DB_PATH), "author-reference.jpg");
+
+  afterAll(() => {
+    try {
+      fs.unlinkSync(photoPath);
+    } catch {}
+  });
+
+  it("GET /api/settings/author-photo returns 404 when no photo", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/settings/author-photo",
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("DELETE /api/settings/author-photo returns ok even when no photo", async () => {
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/settings/author-photo",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().ok).toBe(true);
+  });
+
+  it("POST /api/settings/author-photo uploads a photo via raw binary", async () => {
+    const fakeJpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/settings/author-photo",
+      headers: { "content-type": "image/jpeg" },
+      payload: fakeJpeg,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().ok).toBe(true);
+    expect(fs.existsSync(photoPath)).toBe(true);
+  });
+
+  it("GET /api/settings/author-photo serves the uploaded photo", async () => {
+    // Ensure photo exists from previous test
+    const fakeJpeg = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]);
+    fs.mkdirSync(path.dirname(photoPath), { recursive: true });
+    fs.writeFileSync(photoPath, fakeJpeg);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/settings/author-photo",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/jpeg");
+    expect(response.rawPayload.length).toBe(fakeJpeg.length);
+  });
+
+  it("POST /api/settings/author-photo rejects empty body", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/settings/author-photo",
+      headers: { "content-type": "image/jpeg" },
+      payload: Buffer.alloc(0),
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("DELETE /api/settings/author-photo removes the photo", async () => {
+    // Ensure photo exists
+    fs.writeFileSync(photoPath, Buffer.from([0xFF, 0xD8, 0xFF]));
+    expect(fs.existsSync(photoPath)).toBe(true);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/settings/author-photo",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().ok).toBe(true);
+    expect(fs.existsSync(photoPath)).toBe(false);
+  });
+});
+
 describe("CORS", () => {
   it("allows chrome-extension:// origins", async () => {
     const res = await app.inject({

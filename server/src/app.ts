@@ -21,7 +21,9 @@ import {
   queryHealth,
 } from "./db/queries.js";
 import { ingestPayloadSchema } from "./schemas.js";
+import multipart from "@fastify/multipart";
 import { registerInsightsRoutes } from "./routes/insights.js";
+import { registerSettingsRoutes } from "./routes/settings.js";
 
 export function buildApp(dbPath: string) {
   const app = Fastify({ logger: false });
@@ -285,6 +287,18 @@ export function buildApp(dbPath: string) {
 
   // AI Insights routes
   registerInsightsRoutes(app, db);
+
+  // Settings routes (author photo upload/serve/delete)
+  app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
+  app.addContentTypeParser(
+    ["image/jpeg", "image/png"],
+    { parseAs: "buffer" },
+    (_req: any, body: Buffer, done: (err: null, body: Buffer) => void) => {
+      done(null, body);
+    }
+  );
+  const dataDir = path.dirname(dbPath);
+  registerSettingsRoutes(app, dataDir);
 
   // Serve dashboard static files
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
