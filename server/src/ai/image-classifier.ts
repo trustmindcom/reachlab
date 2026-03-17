@@ -118,7 +118,9 @@ export async function classifyImages(
     const imagePaths: string[] = JSON.parse(post.image_local_paths);
 
     for (let i = 0; i < imagePaths.length; i++) {
-      const fullPath = path.join(dataDir, "images", imagePaths[i]);
+      const fullPath = path.resolve(dataDir, "images", imagePaths[i]);
+      const imagesRoot = path.resolve(dataDir, "images");
+      if (!fullPath.startsWith(imagesRoot + path.sep)) continue;
       if (!fs.existsSync(fullPath)) continue;
 
       const imageBase64 = fs.readFileSync(fullPath).toString("base64");
@@ -173,6 +175,9 @@ export async function classifyImages(
         });
 
         const classification = parseClassifierResponse(text);
+        if (!classification) {
+          console.warn(`[Image Classifier] Could not parse response for ${post.id} image ${i}`);
+        }
         if (classification) {
           upsertImageTag(db, {
             post_id: post.id,

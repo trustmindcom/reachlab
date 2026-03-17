@@ -39,3 +39,33 @@ test("parseClassifierResponse returns null for missing fields", () => {
   const response = JSON.stringify({ format: "photo" });
   expect(parseClassifierResponse(response)).toBeNull();
 });
+
+test("parseClassifierResponse returns null for invalid dimension values", () => {
+  const response = JSON.stringify({
+    format: "watercolor",
+    people: "author-solo",
+    setting: "casual-or-personal",
+    text_density: "no-text",
+    energy: "raw",
+  });
+  expect(parseClassifierResponse(response)).toBeNull();
+});
+
+test("parseClassifierResponse extracts JSON from surrounding text", () => {
+  const response = `Here is the classification:\n${JSON.stringify({
+    format: "screenshot",
+    people: "no-people",
+    setting: "digital-only",
+    text_density: "text-heavy",
+    energy: "informational",
+  })}\nHope that helps!`;
+
+  const result = parseClassifierResponse(response);
+  expect(result).toEqual({
+    format: "screenshot",
+    people: "no-people",
+    setting: "digital-only",
+    text_density: "text-heavy",
+    energy: "informational",
+  });
+});
