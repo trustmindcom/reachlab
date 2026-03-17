@@ -110,6 +110,33 @@ describe("Database initialization", () => {
     db.close();
   });
 
+  it("posts table has full_text, hook_text, image_urls, image_local_paths columns", () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const info = db.prepare("PRAGMA table_info(posts)").all() as { name: string }[];
+    const names = info.map((c) => c.name);
+    expect(names).toContain("full_text");
+    expect(names).toContain("hook_text");
+    expect(names).toContain("image_urls");
+    expect(names).toContain("image_local_paths");
+    db.close();
+  });
+
+  it("ai_image_tags table exists with correct columns", () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const info = db.prepare("PRAGMA table_info(ai_image_tags)").all() as { name: string }[];
+    const names = info.map((c) => c.name);
+    expect(names).toContain("post_id");
+    expect(names).toContain("image_index");
+    expect(names).toContain("format");
+    expect(names).toContain("people");
+    expect(names).toContain("setting");
+    expect(names).toContain("text_density");
+    expect(names).toContain("energy");
+    expect(names).toContain("tagged_at");
+    expect(names).toContain("model");
+    db.close();
+  });
+
   it("creates AI table indexes", () => {
     const db = initDatabase(TEST_DB_PATH);
     const indexes = db
