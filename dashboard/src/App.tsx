@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { api, type HealthData } from "./api/client";
 import Overview from "./pages/Overview";
 import Posts from "./pages/Posts";
+import Coach from "./pages/Coach";
 import Timing from "./pages/Timing";
 import Followers from "./pages/Followers";
 
-const tabs = ["Overview", "Posts", "Timing", "Followers"] as const;
+const tabs = ["Overview", "Posts", "Coach", "Timing", "Followers"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function App() {
@@ -71,6 +72,7 @@ export default function App() {
       <main className="px-6 py-6 max-w-[1400px] mx-auto">
         {tab === "Overview" && <Overview />}
         {tab === "Posts" && <Posts />}
+        {tab === "Coach" && <Coach />}
         {tab === "Timing" && <Timing />}
         {tab === "Followers" && <Followers />}
       </main>

@@ -70,6 +70,52 @@ export interface ProfileSnapshot {
   all_appearances: number | null;
 }
 
+export interface AiOverview {
+  summary_text: string;
+  top_performer_post_id: string | null;
+  top_performer_reason: string | null;
+  quick_insights: string; // JSON array string
+}
+
+export interface Recommendation {
+  id: number;
+  type: string;
+  priority: string;
+  confidence: string;
+  headline: string;
+  detail: string;
+  action: string;
+  evidence_json: string | null;
+  feedback: string | null;
+  acted_on: number;
+  created_at: string;
+}
+
+export interface Insight {
+  id: number;
+  category: string;
+  stable_key: string;
+  claim: string;
+  evidence: string;
+  confidence: string;
+  direction: string;
+  consecutive_appearances: number;
+  status: string;
+}
+
+export interface Changelog {
+  confirmed: Insight[];
+  new_signal: Insight[];
+  reversed: Insight[];
+  retired: Insight[];
+}
+
+export interface TaxonomyItem {
+  id: number;
+  name: string;
+  description: string;
+}
+
 export interface HealthData {
   last_sync_at: string | null;
   sources: {
@@ -103,4 +149,20 @@ export const api = {
   followers: () => get<{ snapshots: FollowerSnapshot[] }>("/followers"),
   profile: () => get<{ snapshots: ProfileSnapshot[] }>("/profile"),
   health: () => get<HealthData>("/health"),
+  insightsOverview: () => get<{ overview: AiOverview | null }>("/insights/overview"),
+  insights: () => get<{ recommendations: Recommendation[]; insights: Insight[] }>("/insights"),
+  insightsChangelog: () => get<Changelog>("/insights/changelog"),
+  insightsTags: (postIds: string[]) =>
+    get<{ tags: Record<string, { hook_type: string; tone: string; format_style: string }> }>(
+      `/insights/tags?post_ids=${postIds.join(",")}`
+    ),
+  insightsTaxonomy: () => get<{ taxonomy: TaxonomyItem[] }>("/insights/taxonomy"),
+  insightsRefresh: () =>
+    fetch(`${BASE_URL}/insights/refresh`, { method: "POST" }).then((r) => r.json()),
+  recommendationFeedback: (id: number, feedback: string) =>
+    fetch(`${BASE_URL}/insights/recommendations/${id}/feedback`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedback }),
+    }).then((r) => r.json()),
 };

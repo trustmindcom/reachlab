@@ -1,10 +1,13 @@
 interface Props {
   label: string;
   value: string;
-  subtitle?: string;
+  subtitle?: string | null;
 }
 
 export default function KPICard({ label, value, subtitle }: Props) {
+  const isPositive = subtitle?.startsWith("+");
+  const isNegative = subtitle?.startsWith("-");
+
   return (
     <div className="bg-surface-1 border border-border rounded-lg p-5 flex flex-col gap-1">
       <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
@@ -14,7 +17,17 @@ export default function KPICard({ label, value, subtitle }: Props) {
         {value}
       </span>
       {subtitle && (
-        <span className="text-xs text-text-secondary">{subtitle}</span>
+        <span
+          className={`text-xs font-medium ${
+            isPositive
+              ? "text-positive"
+              : isNegative
+                ? "text-negative"
+                : "text-text-secondary"
+          }`}
+        >
+          {subtitle}
+        </span>
       )}
     </div>
   );

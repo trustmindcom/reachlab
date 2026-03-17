@@ -1,19 +1,9 @@
 import { useState, useEffect } from "react";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Tooltip,
-} from "chart.js";
-import { Bar } from "react-chartjs-2";
-import { api, type OverviewData, type Post } from "../api/client";
+import { api, type OverviewData, type AiOverview } from "../api/client";
 import KPICard from "../components/KPICard";
 import DateRangeSelector, {
   daysToDateRange,
 } from "../components/DateRangeSelector";
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip);
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "--";
@@ -25,150 +15,170 @@ function fmtPct(n: number | null | undefined): string {
   return (n * 100).toFixed(1) + "%";
 }
 
+function pctChange(
+  current: number | null | undefined,
+  previous: number | null | undefined,
+): string | null {
+  if (current == null || previous == null || previous === 0) return null;
+  const delta = ((current - previous) / previous) * 100;
+  const sign = delta >= 0 ? "+" : "";
+  return `${sign}${delta.toFixed(1)}% vs prior`;
+}
+
 export default function Overview() {
   const [range, setRange] = useState(30);
   const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [prevOverview, setPrevOverview] = useState<OverviewData | null>(null);
+  const [aiOverview, setAiOverview] = useState<AiOverview | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const params = daysToDateRange(range);
     api.overview(params).then(setOverview).catch(() => {});
+
+    // Fetch previous period for comparison
+    if (range > 0) {
+      const until = new Date();
+      until.setDate(until.getDate() - range);
+      const since = new Date();
+      since.setDate(since.getDate() - range * 2);
+      api
+        .overview({ since: since.toISOString(), until: until.toISOString() })
+        .then(setPrevOverview)
+        .catch(() => {});
+    } else {
+      setPrevOverview(null);
+    }
+
     api
-      .posts({
-        ...params,
-        sort_by: "published_at",
-        sort_order: "desc",
-        limit: 10,
-      })
-      .then((r) => setPosts(r.posts))
+      .insightsOverview()
+      .then((r) => setAiOverview(r.overview))
       .catch(() => {});
   }, [range]);
 
-  // Group posts by content type for engagement comparison
-  const byType: Record<string, { count: number; totalEngagement: number }> = {};
-  for (const p of posts) {
-    const t = p.content_type;
-    if (!byType[t]) byType[t] = { count: 0, totalEngagement: 0 };
-    byType[t].count++;
-    byType[t].totalEngagement += p.engagement_rate ?? 0;
+  const handleRefresh = () => {
+    setRefreshing(true);
+    api
+      .insightsRefresh()
+      .then(() => {
+        // Reload AI overview after refresh
+        return api.insightsOverview();
+      })
+      .then((r) => setAiOverview(r.overview))
+      .catch(() => {})
+      .finally(() => setRefreshing(false));
+  };
+
+  let quickInsights: string[] = [];
+  if (aiOverview?.quick_insights) {
+    try {
+      quickInsights = JSON.parse(aiOverview.quick_insights);
+    } catch {
+      /* ignore parse errors */
+    }
   }
-  const typeLabels = Object.keys(byType);
-  const typeData = typeLabels.map(
-    (t) => ((byType[t].totalEngagement / byType[t].count) * 100)
-  );
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Overview</h2>
-        <DateRangeSelector selected={range} onChange={setRange} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing..." : "Refresh AI"}
+          </button>
+          <DateRangeSelector selected={range} onChange={setRange} />
+        </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* AI Summary Card */}
+      {aiOverview ? (
+        <div className="bg-gradient-to-r from-accent/10 via-accent/5 to-surface-1 border border-accent/20 rounded-lg p-5">
+          <h3 className="text-sm font-medium text-accent mb-2">AI Summary</h3>
+          <p className="text-sm text-text-primary leading-relaxed">
+            {aiOverview.summary_text}
+          </p>
+        </div>
+      ) : (
+        <div className="bg-surface-1 border border-border rounded-lg p-5 text-center">
+          <p className="text-sm text-text-muted">
+            AI insights are not available yet. You need at least 10 posts, or
+            click <strong>Refresh AI</strong> to generate your first analysis.
+          </p>
+        </div>
+      )}
+
+      {/* KPI Cards with % change */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           label="Impressions"
           value={fmt(overview?.total_impressions)}
+          subtitle={pctChange(
+            overview?.total_impressions,
+            prevOverview?.total_impressions,
+          )}
         />
         <KPICard
           label="Avg Engagement"
           value={fmtPct(overview?.avg_engagement_rate)}
+          subtitle={pctChange(
+            overview?.avg_engagement_rate,
+            prevOverview?.avg_engagement_rate,
+          )}
         />
         <KPICard
           label="Followers"
           value={fmt(overview?.total_followers)}
+          subtitle={pctChange(
+            overview?.total_followers,
+            prevOverview?.total_followers,
+          )}
         />
         <KPICard
           label="Profile Views"
           value={fmt(overview?.profile_views)}
+          subtitle={pctChange(
+            overview?.profile_views,
+            prevOverview?.profile_views,
+          )}
         />
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        {/* Engagement by content type */}
-        {typeLabels.length > 0 && (
-          <div className="bg-surface-1 border border-border rounded-lg p-5">
-            <h3 className="text-sm font-medium text-text-secondary mb-4">
-              Avg Engagement by Content Type
+        {/* Top Performer Card */}
+        {aiOverview?.top_performer_reason && (
+          <div className="bg-positive/5 border border-positive/20 rounded-lg p-5">
+            <h3 className="text-sm font-medium text-positive mb-2">
+              Top Performer
             </h3>
-            <Bar
-              data={{
-                labels: typeLabels,
-                datasets: [
-                  {
-                    data: typeData,
-                    backgroundColor: [
-                      "#0a66c2",
-                      "#34d399",
-                      "#fbbf24",
-                      "#a78bfa",
-                      "#f87171",
-                    ],
-                    borderRadius: 4,
-                    maxBarThickness: 48,
-                  },
-                ],
-              }}
-              options={{
-                indexAxis: "y",
-                responsive: true,
-                plugins: {
-                  tooltip: {
-                    callbacks: {
-                      label: (ctx) => `${ctx.parsed.x.toFixed(2)}%`,
-                    },
-                  },
-                },
-                scales: {
-                  x: {
-                    ticks: { color: "#8888a8", callback: (v) => `${v}%` },
-                    grid: { color: "#2a2a4a" },
-                  },
-                  y: {
-                    ticks: { color: "#ededed" },
-                    grid: { display: false },
-                  },
-                },
-              }}
-            />
+            <p className="text-sm text-text-primary leading-relaxed">
+              {aiOverview.top_performer_reason}
+            </p>
           </div>
         )}
 
-        {/* Recent posts */}
-        <div className="bg-surface-1 border border-border rounded-lg p-5">
-          <h3 className="text-sm font-medium text-text-secondary mb-4">
-            Recent Posts
-          </h3>
-          <div className="space-y-3">
-            {posts.slice(0, 5).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-start justify-between gap-3 text-sm"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-text-primary">
-                    {p.content_preview || "(no preview)"}
-                  </p>
-                  <div className="flex gap-3 mt-0.5 text-text-muted text-xs">
-                    <span className="font-mono">{p.content_type}</span>
-                    <span>
-                      {new Date(p.published_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="font-mono text-text-primary">
-                    {fmt(p.impressions)}
-                  </p>
-                  <p className="text-xs text-text-muted">impressions</p>
-                </div>
-              </div>
-            ))}
-            {posts.length === 0 && (
-              <p className="text-text-muted text-sm">No posts yet</p>
-            )}
+        {/* Quick Insights */}
+        {quickInsights.length > 0 && (
+          <div className="bg-surface-1 border border-border rounded-lg p-5">
+            <h3 className="text-sm font-medium text-text-secondary mb-3">
+              Quick Insights
+            </h3>
+            <ul className="space-y-2">
+              {quickInsights.map((insight, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-text-primary"
+                >
+                  <span className="text-accent mt-0.5 shrink-0">&#8226;</span>
+                  <span>{insight}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
