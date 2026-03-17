@@ -1,0 +1,19 @@
+{
+  "name": "linkedin-analytics",
+  "private": true,
+  "workspaces": [
+    "server",
+    "extension",
+    "dashboard"
+  ],
+  "scripts": {
+    "start": "npm run start -w server",
+    "dev": "npm run dev -w server",
+    "test": "npm test -w server",
+    "build:dashboard": "npm run build -w dashboard",
+    "build:extension": "npm run build -w extension"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

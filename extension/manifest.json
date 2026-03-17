@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Analytics Collector",
+  "version": "0.1.0",
+  "description": "Collects your LinkedIn post analytics and stores them locally",
+  "permissions": ["alarms", "cookies", "storage", "tabs", "webNavigation"],
+  "host_permissions": ["*://*.linkedin.com/*", "http://localhost:3210/*"],
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.linkedin.com/*"],
+      "js": ["src/content/index.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html"
+  }
+}
