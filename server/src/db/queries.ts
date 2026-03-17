@@ -213,7 +213,8 @@ export function queryPosts(db: Database.Database, params: PostsQueryParams) {
   `;
 
   const querySql = `
-    SELECT p.id, p.content_preview, p.content_type, p.published_at, p.url,
+    SELECT p.id, p.content_preview, p.hook_text, p.full_text, p.image_local_paths,
+      p.content_type, p.published_at, p.url,
       m.impressions, m.reactions, m.comments, m.reposts,
       CASE WHEN m.impressions > 0
         THEN CAST(COALESCE(m.reactions, 0) + COALESCE(m.comments, 0) + COALESCE(m.reposts, 0) AS REAL) / m.impressions

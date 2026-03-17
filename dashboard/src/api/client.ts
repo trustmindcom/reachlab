@@ -17,6 +17,9 @@ export interface OverviewData {
 export interface Post {
   id: string;
   content_preview: string | null;
+  hook_text: string | null;
+  full_text: string | null;
+  image_local_paths: string | null;
   content_type: string;
   published_at: string;
   url: string | null;

@@ -170,9 +170,23 @@ export default function Posts() {
                 }`}
               >
                 <td className="px-4 py-3">
-                  <p className="truncate max-w-xs text-text-primary">
-                    {p.content_preview || "(no preview)"}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    {p.image_local_paths && (() => {
+                      try {
+                        return JSON.parse(p.image_local_paths).length > 0 ? (
+                          <img
+                            src={`/api/images/${p.id}/0`}
+                            alt=""
+                            className="w-10 h-10 rounded object-cover shrink-0"
+                            loading="lazy"
+                          />
+                        ) : null;
+                      } catch { return null; }
+                    })()}
+                    <p className="truncate max-w-xs text-text-primary">
+                      {p.hook_text || (p.full_text ? p.full_text.slice(0, 80) : p.content_preview) || "(no preview)"}
+                    </p>
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <span className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-surface-3 text-text-secondary">
