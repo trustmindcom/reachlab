@@ -582,14 +582,16 @@ async function finishSync() {
 
   // Check for posts needing content or image backfill
   try {
-    const [contentRes, imagesRes] = await Promise.all([
+    const [contentRes, imagesRes, videoRes] = await Promise.all([
       fetch(`${SERVER_URL}/api/posts/needs-content`),
       fetch(`${SERVER_URL}/api/posts/needs-images`),
+      fetch(`${SERVER_URL}/api/posts/needs-video-url`),
     ]);
     const contentIds = contentRes.ok ? (await contentRes.json()).post_ids : [];
     const imageIds = imagesRes.ok ? (await imagesRes.json()).post_ids : [];
+    const videoIds = videoRes.ok ? (await videoRes.json()).post_ids : [];
     // Deduplicate
-    const allIds = [...new Set([...contentIds, ...imageIds])];
+    const allIds = [...new Set([...contentIds, ...imageIds, ...videoIds])];
     if (allIds.length > 0) {
       await chrome.storage.session.set({
         backfillQueue: allIds,

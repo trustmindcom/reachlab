@@ -238,6 +238,13 @@ export function buildApp(dbPath: string) {
            ORDER BY published_at DESC`
         ).all() as { id: string }[]).map(r => r.id)
       : undefined;
+    const needsVideoUrl = payload.posts
+      ? (db.prepare(
+          `SELECT id FROM posts
+           WHERE content_type = 'video' AND video_url IS NULL
+           ORDER BY published_at DESC`
+        ).all() as { id: string }[]).map(r => r.id)
+      : undefined;
     // Posts that have recent metrics (scraped within last 12 hours)
     const hasRecentMetrics = payload.posts
       ? (db.prepare(
@@ -253,6 +260,7 @@ export function buildApp(dbPath: string) {
       ...(errors.length > 0 ? { errors } : {}),
       ...(needsContent ? { needs_content: needsContent } : {}),
       ...(needsImages ? { needs_images: needsImages } : {}),
+      ...(needsVideoUrl ? { needs_video_url: needsVideoUrl } : {}),
       ...(hasRecentMetrics ? { has_recent_metrics: hasRecentMetrics } : {}),
     };
   });
@@ -297,6 +305,19 @@ export function buildApp(dbPath: string) {
          WHERE content_type IN ('image', 'carousel')
            AND (image_local_paths IS NULL OR image_local_paths = '[]')
            AND (image_urls IS NULL OR image_urls = '[]')
+         ORDER BY published_at DESC`
+      )
+      .all() as { id: string }[];
+    return { post_ids: rows.map((r) => r.id) };
+  });
+
+  // Video posts needing video URL scraping
+  app.get("/api/posts/needs-video-url", async () => {
+    const rows = db
+      .prepare(
+        `SELECT id FROM posts
+         WHERE content_type = 'video'
+           AND video_url IS NULL
          ORDER BY published_at DESC`
       )
       .all() as { id: string }[];
