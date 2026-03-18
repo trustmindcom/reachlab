@@ -1,10 +1,10 @@
 # LinkedIn Analytics
 
-LinkedIn's built-in analytics are surface-level: impressions, a handful of reactions, and a chart that resets every 365 days. If you're serious about growing on LinkedIn, you need to understand *what's actually working* — which topics drive engagement, how your content performs over time, and what to write next. But the only tools available are either expensive SaaS platforms that harvest your data or spreadsheets you have to maintain manually.
+Your LinkedIn data is trapped behind a dashboard you don't own.
 
-This is a local-first analytics and coaching platform for LinkedIn creators. A Chrome extension silently collects your post performance data, a local server stores everything in SQLite on your machine, and an AI coach analyzes your patterns to tell you what's working, what isn't, and what to try next.
+This gets it out. A Chrome extension collects your post metrics automatically, stores everything locally in SQLite, and runs an AI coach that tells you what's working and what to write next.
 
-No subscriptions. No third-party data sharing. Your data never leaves your machine.
+No SaaS. No data sharing. Runs on your machine.
 
 ## What it does
 
