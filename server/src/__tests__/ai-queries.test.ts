@@ -241,6 +241,7 @@ describe("AI queries", () => {
         hook_type: "question",
         tone: "professional",
         format_style: "list",
+        post_category: "thought_leadership",
         model: "claude-3",
       });
       const tags = getAiTags(db, ["p1"]);
@@ -256,6 +257,7 @@ describe("AI queries", () => {
         hook_type: "question",
         tone: "professional",
         format_style: "list",
+        post_category: "thought_leadership",
         model: "claude-3",
       });
       upsertAiTag(db, {
@@ -263,6 +265,7 @@ describe("AI queries", () => {
         hook_type: "story",
         tone: "casual",
         format_style: "paragraph",
+        post_category: "announcement",
         model: "claude-4",
       });
       const tags = getAiTags(db, ["p1"]);
@@ -283,6 +286,7 @@ describe("AI queries", () => {
         hook_type: "question",
         tone: "pro",
         format_style: "list",
+        post_category: "how_to",
         model: "m",
       });
       upsertAiTag(db, {
@@ -290,6 +294,7 @@ describe("AI queries", () => {
         hook_type: "story",
         tone: "casual",
         format_style: "para",
+        post_category: "opinion",
         model: "m",
       });
       const tags = getAiTags(db, ["p1", "p2"]);
@@ -304,6 +309,7 @@ describe("AI queries", () => {
         hook_type: "q",
         tone: "t",
         format_style: "f",
+        post_category: "other",
         model: "m",
       });
       const untagged = getUntaggedPostIds(db);
@@ -317,6 +323,7 @@ describe("AI queries", () => {
         hook_type: "q",
         tone: "t",
         format_style: "f",
+        post_category: "other",
         model: "m",
       });
       expect(getUntaggedPostIds(db)).toEqual([]);

@@ -7,6 +7,7 @@ export interface AiTag {
   hook_type: string | null;
   tone: string | null;
   format_style: string | null;
+  post_category: string | null;
   tagged_at: string;
   model: string | null;
 }
@@ -218,16 +219,18 @@ export function upsertAiTag(
     hook_type: string;
     tone: string;
     format_style: string;
+    post_category: string;
     model: string;
   }
 ): void {
   db.prepare(
-    `INSERT INTO ai_tags (post_id, hook_type, tone, format_style, model)
-     VALUES (@post_id, @hook_type, @tone, @format_style, @model)
+    `INSERT INTO ai_tags (post_id, hook_type, tone, format_style, post_category, model)
+     VALUES (@post_id, @hook_type, @tone, @format_style, @post_category, @model)
      ON CONFLICT(post_id) DO UPDATE SET
        hook_type = @hook_type,
        tone = @tone,
        format_style = @format_style,
+       post_category = @post_category,
        model = @model,
        tagged_at = CURRENT_TIMESTAMP`
   ).run(tag);
@@ -241,7 +244,7 @@ export function getAiTags(
   const placeholders = postIds.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `SELECT post_id, hook_type, tone, format_style, tagged_at, model
+      `SELECT post_id, hook_type, tone, format_style, post_category, tagged_at, model
        FROM ai_tags WHERE post_id IN (${placeholders})`
     )
     .all(...postIds) as AiTag[];
@@ -622,6 +625,339 @@ export function getLatestPromptSuggestions(db: Database.Database): PromptSuggest
   } catch {
     return null;
   }
+}
+
+// ── recommendation lifecycle ──────────────────────────────
+
+export function resolveRecommendation(
+  db: Database.Database,
+  id: number,
+  type: "accepted" | "dismissed"
+): void {
+  db.prepare(
+    `UPDATE recommendations SET resolved_at = CURRENT_TIMESTAMP, resolved_type = ? WHERE id = ?`
+  ).run(type, id);
+}
+
+export function getRecommendationsWithCooldown(
+  db: Database.Database,
+  runId?: number
+): { active: any[]; resolved: any[] } {
+  const latest = runId ?? getLatestCompletedRun(db)?.id;
+  if (!latest) return { active: [], resolved: [] };
+
+  const allRecs = db
+    .prepare("SELECT * FROM recommendations WHERE run_id = ? ORDER BY priority ASC")
+    .all(latest);
+
+  // Get recently resolved stable_keys with their cooldown windows
+  const recentlyResolved = db
+    .prepare(
+      `SELECT stable_key, resolved_type, resolved_at, headline
+       FROM recommendations
+       WHERE resolved_at IS NOT NULL
+         AND (
+           (resolved_type = 'accepted' AND resolved_at > datetime('now', '-6 months'))
+           OR (resolved_type = 'dismissed' AND resolved_at > datetime('now', '-3 months'))
+         )`
+    )
+    .all() as { stable_key: string | null; resolved_type: string; resolved_at: string; headline: string }[];
+
+  const cooldownKeys = new Set(
+    recentlyResolved.map((r) => r.stable_key ?? r.headline)
+  );
+
+  const active: any[] = [];
+  const resolved: any[] = [];
+
+  for (const rec of allRecs as any[]) {
+    if (rec.resolved_at) {
+      resolved.push(rec);
+    } else {
+      const key = rec.stable_key ?? rec.headline;
+      if (cooldownKeys.has(key)) {
+        // Skip — in cooldown from a previous resolution
+        continue;
+      }
+      active.push(rec);
+    }
+  }
+
+  // Also include recently resolved from any run for the resolved section
+  const resolvedFromOtherRuns = db
+    .prepare(
+      `SELECT * FROM recommendations
+       WHERE resolved_at IS NOT NULL AND run_id != ?
+       ORDER BY resolved_at DESC LIMIT 10`
+    )
+    .all(latest) as any[];
+
+  const resolvedIds = new Set(resolved.map((r: any) => r.id));
+  for (const r of resolvedFromOtherRuns) {
+    if (!resolvedIds.has(r.id)) resolved.push(r);
+  }
+
+  return { active, resolved };
+}
+
+// ── deep dive: progress ───────────────────────────────────
+
+export interface MetricsSummary {
+  median_er: number | null;
+  median_impressions: number | null;
+  total_posts: number;
+  avg_comments: number | null;
+}
+
+export function getProgressMetrics(
+  db: Database.Database,
+  days: number = 30
+): { current: MetricsSummary; previous: MetricsSummary } {
+  const computeSummary = (sinceDays: number, untilDays: number): MetricsSummary => {
+    const rows = db
+      .prepare(
+        `SELECT pm.impressions, pm.reactions, pm.comments, pm.reposts
+         FROM posts p
+         JOIN post_metrics pm ON pm.post_id = p.id
+         WHERE p.published_at > datetime('now', ? || ' days')
+           AND p.published_at <= datetime('now', ? || ' days')
+           AND pm.impressions > 0`
+      )
+      .all(String(-sinceDays), String(-untilDays)) as {
+      impressions: number;
+      reactions: number;
+      comments: number;
+      reposts: number;
+    }[];
+
+    if (rows.length === 0) {
+      return { median_er: null, median_impressions: null, total_posts: 0, avg_comments: null };
+    }
+
+    const ers = rows
+      .map((r) => ((r.reactions + r.comments + r.reposts) / r.impressions) * 100)
+      .sort((a, b) => a - b);
+    const impressions = rows.map((r) => r.impressions).sort((a, b) => a - b);
+    const comments = rows.map((r) => r.comments);
+
+    const med = (arr: number[]) => {
+      const mid = Math.floor(arr.length / 2);
+      return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+    };
+
+    return {
+      median_er: Math.round(med(ers) * 100) / 100,
+      median_impressions: Math.round(med(impressions)),
+      total_posts: rows.length,
+      avg_comments: Math.round((comments.reduce((a, b) => a + b, 0) / comments.length) * 10) / 10,
+    };
+  };
+
+  return {
+    current: computeSummary(days, 0),
+    previous: computeSummary(days * 2, days),
+  };
+}
+
+// ── deep dive: category performance ───────────────────────
+
+export interface CategoryPerformance {
+  category: string;
+  post_count: number;
+  median_er: number | null;
+  median_impressions: number | null;
+  median_interactions: number | null;
+  status: "underexplored_high" | "reliable" | "declining" | "normal";
+}
+
+export function getCategoryPerformance(db: Database.Database): CategoryPerformance[] {
+  const rows = db
+    .prepare(
+      `SELECT t.post_category as category,
+              pm.impressions, pm.reactions, pm.comments, pm.reposts
+       FROM ai_tags t
+       JOIN post_metrics pm ON pm.post_id = t.post_id
+       WHERE t.post_category IS NOT NULL
+         AND pm.impressions > 0`
+    )
+    .all() as {
+    category: string;
+    impressions: number;
+    reactions: number;
+    comments: number;
+    reposts: number;
+  }[];
+
+  // Group by category
+  const groups: Record<string, { ers: number[]; impressions: number[]; interactions: number[] }> = {};
+  for (const r of rows) {
+    if (!groups[r.category]) groups[r.category] = { ers: [], impressions: [], interactions: [] };
+    const er = ((r.reactions + r.comments + r.reposts) / r.impressions) * 100;
+    groups[r.category].ers.push(er);
+    groups[r.category].impressions.push(r.impressions);
+    groups[r.category].interactions.push(r.reactions + r.comments + r.reposts);
+  }
+
+  // Compute overall median ER for status classification
+  const allErs = rows
+    .map((r) => ((r.reactions + r.comments + r.reposts) / r.impressions) * 100)
+    .sort((a, b) => a - b);
+  const overallMedianEr =
+    allErs.length > 0
+      ? allErs.length % 2
+        ? allErs[Math.floor(allErs.length / 2)]
+        : (allErs[Math.floor(allErs.length / 2) - 1] + allErs[Math.floor(allErs.length / 2)]) / 2
+      : 0;
+
+  const med = (arr: number[]) => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+
+  const results: CategoryPerformance[] = [];
+  for (const [category, data] of Object.entries(groups)) {
+    const medianEr = Math.round(med(data.ers) * 100) / 100;
+    const medianImpressions = Math.round(med(data.impressions));
+    const medianInteractions = Math.round(med(data.interactions));
+    const postCount = data.ers.length;
+
+    let status: CategoryPerformance["status"] = "normal";
+    if (postCount < 3 && medianEr > overallMedianEr) {
+      status = "underexplored_high";
+    } else if (postCount >= 3 && medianEr > overallMedianEr) {
+      status = "reliable";
+    } else if (postCount >= 3 && medianEr < overallMedianEr * 0.7) {
+      status = "declining";
+    }
+
+    results.push({
+      category,
+      post_count: postCount,
+      median_er: medianEr,
+      median_impressions: medianImpressions,
+      median_interactions: medianInteractions,
+      status,
+    });
+  }
+
+  return results.sort((a, b) => (b.median_er ?? 0) - (a.median_er ?? 0));
+}
+
+// ── deep dive: engagement quality ─────────────────────────
+
+export interface EngagementQuality {
+  comment_ratio: number | null;
+  save_rate: number | null;
+  repost_rate: number | null;
+  weighted_er: number | null;
+  standard_er: number | null;
+  total_posts: number;
+}
+
+export function getEngagementQuality(db: Database.Database): EngagementQuality {
+  const rows = db
+    .prepare(
+      `SELECT pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+       FROM post_metrics pm
+       WHERE pm.impressions > 0`
+    )
+    .all() as {
+    impressions: number;
+    reactions: number;
+    comments: number;
+    reposts: number;
+    saves: number | null;
+    sends: number | null;
+  }[];
+
+  if (rows.length === 0) {
+    return { comment_ratio: null, save_rate: null, repost_rate: null, weighted_er: null, standard_er: null, total_posts: 0 };
+  }
+
+  let totalReactions = 0, totalComments = 0, totalReposts = 0;
+  let totalSaves = 0, totalSends = 0, totalImpressions = 0;
+
+  for (const r of rows) {
+    totalReactions += r.reactions;
+    totalComments += r.comments;
+    totalReposts += r.reposts;
+    totalSaves += r.saves ?? 0;
+    totalSends += r.sends ?? 0;
+    totalImpressions += r.impressions;
+  }
+
+  const commentRatio = totalReactions > 0
+    ? Math.round((totalComments / totalReactions) * 100) / 100
+    : null;
+  const saveRate = totalImpressions > 0
+    ? Math.round((totalSaves / totalImpressions) * 10000) / 100
+    : null;
+  const repostRate = totalImpressions > 0
+    ? Math.round((totalReposts / totalImpressions) * 10000) / 100
+    : null;
+  const standardEr = totalImpressions > 0
+    ? Math.round(((totalReactions + totalComments + totalReposts) / totalImpressions) * 10000) / 100
+    : null;
+  const weightedEr = totalImpressions > 0
+    ? Math.round(
+        ((totalComments * 5 + totalReposts * 3 + totalSaves * 3 + totalSends * 3 + totalReactions * 1) /
+          totalImpressions) *
+          10000
+      ) / 100
+    : null;
+
+  return {
+    comment_ratio: commentRatio,
+    save_rate: saveRate,
+    repost_rate: repostRate,
+    weighted_er: weightedEr,
+    standard_er: standardEr,
+    total_posts: rows.length,
+  };
+}
+
+// ── sparkline data: per-post time series ─────────────────
+
+export interface SparklinePoint {
+  date: string;
+  er: number;
+  impressions: number;
+  comments: number;
+  comment_ratio: number;
+  save_rate: number;
+}
+
+export function getSparklineData(
+  db: Database.Database,
+  days: number = 90
+): SparklinePoint[] {
+  const rows = db
+    .prepare(
+      `SELECT p.published_at, pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves
+       FROM posts p
+       JOIN post_metrics pm ON pm.post_id = p.id
+       WHERE p.published_at > datetime('now', ? || ' days')
+         AND pm.impressions > 0
+       ORDER BY p.published_at ASC`
+    )
+    .all(String(-days)) as {
+    published_at: string;
+    impressions: number;
+    reactions: number;
+    comments: number;
+    reposts: number;
+    saves: number | null;
+  }[];
+
+  return rows.map((r) => ({
+    date: r.published_at,
+    er: Math.round(((r.reactions + r.comments + r.reposts) / r.impressions) * 10000) / 100,
+    impressions: r.impressions,
+    comments: r.comments,
+    comment_ratio: r.reactions > 0 ? Math.round((r.comments / r.reactions) * 100) / 100 : 0,
+    save_rate: r.impressions > 0 ? Math.round(((r.saves ?? 0) / r.impressions) * 10000) / 100 : 0,
+  }));
 }
 
 export function getRecentFeedbackWithReasons(

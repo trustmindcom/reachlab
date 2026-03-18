@@ -7,28 +7,6 @@ const mockLogger = {
   log: vi.fn(),
 };
 
-// Mock Anthropic client that returns valid JSON
-function makeMockClient(jsonOutput: object): Anthropic {
-  return {
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [
-          {
-            type: "thinking",
-            thinking: "Some thinking...",
-          },
-          {
-            type: "text",
-            text: JSON.stringify(jsonOutput),
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-        stop_reason: "end_turn",
-      }),
-    },
-  } as unknown as Anthropic;
-}
-
 const validOutput = {
   insights: [
     {
@@ -70,23 +48,32 @@ const validOutput = {
   ],
 };
 
+// Mock client where every create call returns the same valid JSON
+function makeMockClient(): Anthropic {
+  return {
+    messages: {
+      create: vi.fn().mockResolvedValue({
+        content: [
+          { type: "thinking", thinking: "Some thinking..." },
+          { type: "text", text: JSON.stringify(validOutput) },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+        stop_reason: "end_turn",
+      }),
+    },
+  } as unknown as Anthropic;
+}
+
 describe("interpretStats", () => {
-  it("calls messages.create once with the stats report as user message", async () => {
-    const client = makeMockClient(validOutput);
-    const result = await interpretStats(
-      client,
-      "Stats report content here",
-      "System prompt here",
-      mockLogger as any
-    );
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
-    const call = (client.messages.create as any).mock.calls[0][0];
-    expect(call.messages[0].content).toBe("Stats report content here");
-    expect(call.system).toBe("System prompt here");
+  it("calls Opus, GPT-5.4, and Sonnet reconciliation (3 total calls)", async () => {
+    const client = makeMockClient();
+    await interpretStats(client, "Stats report", "System prompt", mockLogger as any);
+    // 2 parallel interpretation calls + 1 reconciliation
+    expect(client.messages.create).toHaveBeenCalledTimes(3);
   });
 
-  it("parses and returns structured JSON from LLM response", async () => {
-    const client = makeMockClient(validOutput);
+  it("parses and returns structured JSON from reconciled output", async () => {
+    const client = makeMockClient();
     const result = await interpretStats(client, "report", "system", mockLogger as any);
     expect(result).not.toBeNull();
     expect(result!.insights).toHaveLength(1);
@@ -96,20 +83,38 @@ describe("interpretStats", () => {
     expect(result!.prompt_suggestions.assessment).toBe("working_well");
   });
 
-  it("retries once on failure and returns null if both fail", async () => {
-    vi.useFakeTimers();
+  it("falls back to Opus if GPT-5.4 fails", async () => {
+    let callCount = 0;
     const client = {
       messages: {
-        create: vi.fn().mockRejectedValue(new Error("rate limit")),
+        create: vi.fn().mockImplementation((params: any) => {
+          callCount++;
+          // Second call (GPT-5.4) fails
+          if (params.model === "openai/gpt-5.4") {
+            return Promise.reject(new Error("GPT failed"));
+          }
+          return Promise.resolve({
+            content: [{ type: "text", text: JSON.stringify(validOutput) }],
+            usage: { input_tokens: 100, output_tokens: 200 },
+          });
+        }),
       },
     } as unknown as Anthropic;
 
-    const promise = interpretStats(client, "report", "system", mockLogger as any);
-    await vi.advanceTimersByTimeAsync(5000);
-    const result = await promise;
-    vi.useRealTimers();
+    const result = await interpretStats(client, "report", "system", mockLogger as any);
+    // Should return Opus result directly (no reconciliation)
+    expect(result).not.toBeNull();
+    expect(result!.insights).toHaveLength(1);
+  });
 
+  it("returns null if both models fail", async () => {
+    const client = {
+      messages: {
+        create: vi.fn().mockRejectedValue(new Error("all broken")),
+      },
+    } as unknown as Anthropic;
+
+    const result = await interpretStats(client, "report", "system", mockLogger as any);
     expect(result).toBeNull();
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
   });
 });

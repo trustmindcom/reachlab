@@ -17,6 +17,7 @@ export interface TagResult {
   hook_type: string;
   tone: string;
   format_style: string;
+  post_category: string;
 }
 
 // ── Pure functions ─────────────────────────────────────────
@@ -108,6 +109,7 @@ export async function tagPosts(
         hook_type: tag.hook_type,
         tone: tag.tone,
         format_style: tag.format_style,
+        post_category: tag.post_category || "other",
         model: MODELS.HAIKU,
       });
 

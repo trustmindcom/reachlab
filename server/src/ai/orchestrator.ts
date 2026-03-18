@@ -73,10 +73,13 @@ export async function runPipeline(
   }
 
   const postCount = getPostCountWithMetrics(db);
-  const lastRun = getLatestCompletedRun(db);
-  const check = shouldRunPipeline(postCount, lastRun ? { post_count: lastRun.post_count } : null);
-  if (!check.should) {
-    return { runId: 0, status: "failed", error: check.reason };
+  // Skip threshold check for retag (force re-classification of all posts)
+  if (triggeredBy !== "retag") {
+    const lastRun = getLatestCompletedRun(db);
+    const check = shouldRunPipeline(postCount, lastRun ? { post_count: lastRun.post_count } : null);
+    if (!check.should) {
+      return { runId: 0, status: "failed", error: check.reason };
+    }
   }
 
   const runId = createRun(db, triggeredBy, postCount);
@@ -228,15 +231,52 @@ export async function runPipeline(
           }
         | undefined;
 
-      // Step 7: Haiku call for top performer reason
+      // Step 7: Haiku call for top performer reason with comparisons
       let topPerformerReason: string | null = null;
       if (topPerformer) {
+        // Fetch similar posts by content type for comparison
+        const similarPosts = db
+          .prepare(
+            `SELECT COALESCE(p.hook_text, SUBSTR(p.full_text, 1, 80), p.content_preview) as preview,
+                    pm.impressions, pm.reactions, pm.comments, pm.reposts, p.content_type,
+                    CAST((COALESCE(pm.reactions,0) + COALESCE(pm.comments,0) + COALESCE(pm.reposts,0)) AS REAL)
+                      / NULLIF(pm.impressions, 0) * 100 as er
+             FROM posts p
+             JOIN post_metrics pm ON pm.post_id = p.id
+             JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+               ON pm.id = latest.max_id
+             WHERE p.content_type = ? AND p.id != ? AND pm.impressions > 0
+             ORDER BY p.published_at DESC LIMIT 5`
+          )
+          .all(topPerformer.preview ? "video" : topPerformer.preview, topPerformer.id) as any[];
+
+        // Actually query by the top performer's content type
+        const comparisons = db
+          .prepare(
+            `SELECT COALESCE(p.hook_text, SUBSTR(p.full_text, 1, 80), p.content_preview) as preview,
+                    pm.impressions, p.content_type,
+                    CAST((COALESCE(pm.reactions,0) + COALESCE(pm.comments,0) + COALESCE(pm.reposts,0)) AS REAL)
+                      / NULLIF(pm.impressions, 0) * 100 as er
+             FROM posts p
+             JOIN post_metrics pm ON pm.post_id = p.id
+             JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+               ON pm.id = latest.max_id
+             WHERE p.content_type = (SELECT content_type FROM posts WHERE id = ?)
+               AND p.id != ? AND pm.impressions > 0
+             ORDER BY pm.impressions DESC LIMIT 5`
+          )
+          .all(topPerformer.id, topPerformer.id) as { preview: string; impressions: number; er: number; contentType: string }[];
+
+        const topPerformerContentType = (db
+          .prepare("SELECT content_type FROM posts WHERE id = ?")
+          .get(topPerformer.id) as { content_type: string } | undefined)?.content_type ?? "post";
+
         try {
           const reasonResponse = await client.messages.create({
             model: MODELS.HAIKU,
-            max_tokens: 150,
+            max_tokens: 300,
             system:
-              "You write concise, plain-language explanations of why LinkedIn posts performed well. One sentence max. No filler phrases.",
+              "You write concise, plain-language explanations of why LinkedIn posts performed well. 2-3 sentences max. No filler phrases.",
             messages: [
               {
                 role: "user",
@@ -244,7 +284,14 @@ export async function runPipeline(
                   topPerformer.preview ?? "Unknown post",
                   new Date(topPerformer.published_at).toLocaleDateString(),
                   topPerformer.impressions,
-                  topPerformer.comments
+                  topPerformer.comments,
+                  topPerformerContentType,
+                  comparisons.map((c) => ({
+                    preview: c.preview ?? "Untitled",
+                    impressions: c.impressions,
+                    er: c.er ?? 0,
+                    contentType: c.contentType ?? topPerformerContentType,
+                  }))
                 ),
               },
             ],

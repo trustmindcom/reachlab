@@ -191,18 +191,18 @@ describe("buildStatsReport", () => {
 
   it("includes day-of-week section", () => {
     const report = buildStatsReport(db, "America/New_York", null);
-    expect(report).toContain("## 6. Day-of-Week");
+    expect(report).toContain("## 7. Day-of-Week");
   });
 
   it("includes writing prompt when provided", () => {
     const report = buildStatsReport(db, "America/New_York", "Always start with a question hook");
     expect(report).toContain("Always start with a question hook");
-    expect(report).toContain("## 12. Author");
+    expect(report).toContain("## 13. Author");
   });
 
   it("omits writing prompt section when null", () => {
     const report = buildStatsReport(db, "America/New_York", null);
-    expect(report).toContain("## 12. Author");
+    expect(report).toContain("## 13. Author");
     expect(report).toContain("(none set");
   });
 });

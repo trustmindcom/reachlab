@@ -616,6 +616,16 @@ describe("GET /api/posts/top-examples", () => {
       },
     });
 
+    // Tag the announcement post with post_category = 'announcement'
+    {
+      const writeDb = new BetterSqlite3(TEST_DB_PATH);
+      writeDb.prepare(
+        `INSERT INTO ai_tags (post_id, hook_type, tone, format_style, post_category, model)
+         VALUES ('top-ex-2', 'personal', 'professional', 'long_form', 'announcement', 'test')`
+      ).run();
+      writeDb.close();
+    }
+
     // Short post (should be filtered out by SQL — less than 200 chars)
     await app.inject({
       method: "POST",

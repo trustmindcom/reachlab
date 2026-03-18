@@ -92,6 +92,9 @@ export interface Recommendation {
   feedback: string | null;
   acted_on: number;
   created_at: string;
+  resolved_at: string | null;
+  resolved_type: string | null;
+  stable_key: string | null;
 }
 
 export interface Insight {
@@ -148,6 +151,50 @@ export interface TaxonomyItem {
   id: number;
   name: string;
   description: string;
+}
+
+export interface MetricsSummary {
+  median_er: number | null;
+  median_impressions: number | null;
+  total_posts: number;
+  avg_comments: number | null;
+}
+
+export interface ProgressData {
+  current: MetricsSummary;
+  previous: MetricsSummary;
+}
+
+export interface CategoryPerformance {
+  category: string;
+  post_count: number;
+  median_er: number | null;
+  median_impressions: number | null;
+  median_interactions: number | null;
+  status: "underexplored_high" | "reliable" | "declining" | "normal";
+}
+
+export interface SparklinePoint {
+  date: string;
+  er: number;
+  impressions: number;
+  comments: number;
+  comment_ratio: number;
+  save_rate: number;
+}
+
+export interface EngagementQuality {
+  comment_ratio: number | null;
+  save_rate: number | null;
+  repost_rate: number | null;
+  weighted_er: number | null;
+  standard_er: number | null;
+  total_posts: number;
+}
+
+export interface RecommendationsWithCooldown {
+  active: Recommendation[];
+  resolved: Recommendation[];
 }
 
 export interface HealthData {
@@ -233,6 +280,31 @@ export const api = {
 
   getWritingPromptHistory: () =>
     get<{ history: WritingPromptHistory[] }>("/settings/writing-prompt/history"),
+
+  // Recommendations with cooldown
+  recommendationsWithCooldown: () =>
+    get<RecommendationsWithCooldown>("/insights/recommendations"),
+
+  // Resolve a recommendation
+  resolveRecommendation: (id: number, type: "accepted" | "dismissed") =>
+    fetch(`${BASE_URL}/insights/recommendations/${id}/resolve`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    }).then((r) => r.json()),
+
+  // Deep Dive endpoints
+  deepDiveProgress: (days = 30) =>
+    get<ProgressData>(`/insights/deep-dive/progress?days=${days}`),
+
+  deepDiveCategories: () =>
+    get<{ categories: CategoryPerformance[] }>("/insights/deep-dive/categories"),
+
+  deepDiveEngagement: () =>
+    get<{ engagement: EngagementQuality }>("/insights/deep-dive/engagement"),
+
+  deepDiveSparkline: (days = 90) =>
+    get<{ points: SparklinePoint[] }>(`/insights/deep-dive/sparkline?days=${days}`),
 
   // Analysis gaps
   insightsGaps: () =>

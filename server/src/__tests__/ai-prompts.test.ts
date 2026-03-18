@@ -185,8 +185,12 @@ describe("buildSystemPrompt", () => {
 
 describe("buildTopPerformerPrompt", () => {
   it("includes post details", () => {
-    const prompt = buildTopPerformerPrompt("Post about AI", "2026-03-01", 500, 20);
+    const prompt = buildTopPerformerPrompt("Post about AI", "2026-03-01", 500, 20, "text", [
+      { preview: "Other post", impressions: 300, er: 2.1, contentType: "text" },
+    ]);
     expect(prompt).toContain("Post about AI");
     expect(prompt).toContain("500");
+    expect(prompt).toContain("Other post");
+    expect(prompt).toContain("Content type: text");
   });
 });

@@ -2,15 +2,21 @@ import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
 import {
   getRecommendations,
+  getRecommendationsWithCooldown,
   getActiveInsights,
   getLatestOverview,
   getAiTags,
   getTaxonomy,
   getChangelog,
   updateRecommendationFeedback,
+  resolveRecommendation,
   getRunningRun,
   getLatestAnalysisGaps,
   getLatestPromptSuggestions,
+  getProgressMetrics,
+  getCategoryPerformance,
+  getEngagementQuality,
+  getSparklineData,
 } from "../db/ai-queries.js";
 import { createClient } from "../ai/client.js";
 import { runPipeline } from "../ai/orchestrator.js";
@@ -54,6 +60,24 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     return { ok: true, message: "Analysis started" };
   });
 
+  app.post("/api/insights/retag", async (_request, reply) => {
+    const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
+    if (!apiKey) {
+      return reply.status(400).send({ error: "No API key configured. Set TRUSTMIND_LLM_API_KEY." });
+    }
+    const running = getRunningRun(db);
+    if (running) {
+      return reply.status(409).send({ error: "Analysis already running", started_at: running.started_at });
+    }
+    // Clear all tags to force re-tagging with post_category
+    db.prepare("DELETE FROM ai_tags").run();
+    const client = createClient(apiKey);
+    runPipeline(client, db, "retag").catch((err) => {
+      console.error("[AI Pipeline] Retag failed:", err.message);
+    });
+    return { ok: true, message: "Cleared tags, re-tagging all posts with post_category classification" };
+  });
+
   app.patch("/api/insights/recommendations/:id/feedback", async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as { feedback?: string | { rating: string; reason?: string }; acted_on?: boolean };
@@ -90,4 +114,48 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
   app.get("/api/insights/prompt-suggestions", async () => ({
     prompt_suggestions: getLatestPromptSuggestions(db),
   }));
+
+  // Coach redesign: recommendations with cooldown filtering
+  app.get("/api/insights/recommendations", async () => {
+    return getRecommendationsWithCooldown(db);
+  });
+
+  // Resolve (accept/dismiss) a recommendation
+  app.patch("/api/insights/recommendations/:id/resolve", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { type?: "accepted" | "dismissed" };
+    if (!body.type || !["accepted", "dismissed"].includes(body.type)) {
+      return reply.status(400).send({ error: "Provide type: 'accepted' or 'dismissed'" });
+    }
+    const rec = db.prepare("SELECT id FROM recommendations WHERE id = ?").get(Number(id));
+    if (!rec) {
+      return reply.status(404).send({ error: "Recommendation not found" });
+    }
+    resolveRecommendation(db, Number(id), body.type);
+    return { ok: true };
+  });
+
+  // Deep Dive: progress metrics
+  app.get("/api/insights/deep-dive/progress", async (request) => {
+    const q = request.query as { days?: string };
+    const days = parseInt(q.days ?? "30", 10) || 30;
+    return getProgressMetrics(db, days);
+  });
+
+  // Deep Dive: category performance
+  app.get("/api/insights/deep-dive/categories", async () => ({
+    categories: getCategoryPerformance(db),
+  }));
+
+  // Deep Dive: engagement quality
+  app.get("/api/insights/deep-dive/engagement", async () => ({
+    engagement: getEngagementQuality(db),
+  }));
+
+  // Deep Dive: sparkline data (per-post time series)
+  app.get("/api/insights/deep-dive/sparkline", async (request) => {
+    const q = request.query as { days?: string };
+    const days = parseInt(q.days ?? "90", 10) || 90;
+    return { points: getSparklineData(db, days) };
+  });
 }

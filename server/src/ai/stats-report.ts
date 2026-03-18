@@ -178,11 +178,20 @@ function buildOverviewSection(
     `Date range: ${earliest} to ${latest}`,
   ];
 
+  const allImpressions = posts.map((p) => p.impressions);
+  const globalMedianImpr = median(allImpressions);
+  const totalImpressions = allImpressions.reduce((sum, v) => sum + v, 0);
+
   if (globalMedianER !== null) {
     const iqrStr = globalIQR !== null ? ` (IQR: ${pct(globalIQR)})` : "";
     lines.push(`Median engagement rate: ${pct(globalMedianER)}${iqrStr} — ${benchmarkLabel(globalMedianER)}`);
   } else {
     lines.push("Median engagement rate: N/A (no posts with impressions)");
+  }
+
+  if (globalMedianImpr !== null) {
+    lines.push(`Median impressions per post: ${globalMedianImpr.toLocaleString()}`);
+    lines.push(`Total impressions: ${totalImpressions.toLocaleString()}`);
   }
 
   if (followerRow) {
@@ -202,9 +211,13 @@ function buildRecentVsBaselineSection(posts: PostWithER[], timezone: string): st
 
   const recentERs = recent.filter((p) => p.er !== null).map((p) => p.er!);
   const baselineERs = baseline.filter((p) => p.er !== null).map((p) => p.er!);
+  const recentImpressions = recent.map((p) => p.impressions);
+  const baselineImpressions = baseline.map((p) => p.impressions);
 
-  const recentMedian = median(recentERs);
-  const baselineMedian = median(baselineERs);
+  const recentMedianER = median(recentERs);
+  const baselineMedianER = median(baselineERs);
+  const recentMedianImpr = median(recentImpressions);
+  const baselineMedianImpr = median(baselineImpressions);
 
   const lines = [
     "## 2. Recent vs Baseline (last 14 days vs all-time)",
@@ -212,30 +225,51 @@ function buildRecentVsBaselineSection(posts: PostWithER[], timezone: string): st
     `All-time baseline: ${baseline.length} posts`,
   ];
 
-  if (recentMedian !== null && baselineMedian !== null) {
-    const direction = recentMedian > baselineMedian ? "above" : "below";
+  if (recentMedianER !== null && baselineMedianER !== null) {
+    const erDir = recentMedianER > baselineMedianER ? "above" : "below";
     lines.push(
-      `Recent median ER: ${pct(recentMedian)} — ${direction} all-time median of ${pct(baselineMedian)}`
+      `Recent median ER: ${pct(recentMedianER)} — ${erDir} all-time median of ${pct(baselineMedianER)}`
     );
-  } else if (recentMedian !== null) {
-    lines.push(`Recent median ER: ${pct(recentMedian)} (no baseline yet)`);
-  } else {
-    lines.push("Insufficient data for comparison.");
   }
 
-  const topRecent = [...recent]
+  if (recentMedianImpr !== null && baselineMedianImpr !== null) {
+    const imprDir = recentMedianImpr > baselineMedianImpr ? "above" : "below";
+    const ratio = (recentMedianImpr / baselineMedianImpr).toFixed(1);
+    lines.push(
+      `Recent median impressions: ${recentMedianImpr.toLocaleString()} — ${imprDir} all-time median of ${baselineMedianImpr.toLocaleString()} (${ratio}x)`
+    );
+  }
+
+  if (recentMedianER !== null && baselineMedianER !== null &&
+      recentMedianImpr !== null && baselineMedianImpr !== null) {
+    const erDown = recentMedianER < baselineMedianER;
+    const imprUp = recentMedianImpr > baselineMedianImpr;
+    if (erDown && imprUp) {
+      lines.push(
+        `⚠ Note: ER is down but impressions are up. This is expected when LinkedIn pushes content to broader, colder audiences — higher reach naturally dilutes ER. Evaluate recent posts on BOTH dimensions.`
+      );
+    }
+  }
+
+  // Standout recent posts — show top by ER and top by impressions
+  const topRecentByER = [...recent]
     .filter((p) => p.er !== null)
     .sort((a, b) => b.er! - a.er!)
     .slice(0, 3);
-  if (topRecent.length > 0) {
-    lines.push("Standout recent posts:");
-    for (const p of topRecent) {
-      const preview = getPostPreview(p);
-      const date = formatInTimezone(new Date(p.published_at), timezone, {
-        month: "short",
-        day: "numeric",
-      });
-      lines.push(`  - "${preview}" (${date}) — ${pct(p.er!)} ER`);
+  const topRecentByImpr = [...recent]
+    .sort((a, b) => b.impressions - a.impressions)
+    .slice(0, 3);
+
+  if (topRecentByER.length > 0) {
+    lines.push("Standout recent posts (by engagement rate):");
+    for (const p of topRecentByER) {
+      lines.push(`  - ${formatPostLine(p, timezone)}`);
+    }
+  }
+  if (topRecentByImpr.length > 0) {
+    lines.push("Standout recent posts (by impressions/reach):");
+    for (const p of topRecentByImpr) {
+      lines.push(`  - ${formatPostLine(p, timezone)}`);
     }
   }
 
@@ -243,27 +277,30 @@ function buildRecentVsBaselineSection(posts: PostWithER[], timezone: string): st
 }
 
 function buildFormatSection(posts: PostWithER[]): string {
-  const byType = new Map<string, number[]>();
+  const byType = new Map<string, PostWithER[]>();
   for (const p of posts) {
     if (p.er === null) continue;
     const arr = byType.get(p.content_type) ?? [];
-    arr.push(p.er);
+    arr.push(p);
     byType.set(p.content_type, arr);
   }
 
   const allERs = posts.filter((p) => p.er !== null).map((p) => p.er!);
   const lines = ["## 3. Format Comparison"];
 
-  for (const [type, ers] of byType) {
-    const med = median(ers);
-    if (med === null) continue;
-    if (ers.length < 5) {
-      lines.push(`- ${type} (n=${ers.length}): too few posts for reliable comparison — ${pct(med)} median ER`);
+  for (const [type, typePosts] of byType) {
+    const ers = typePosts.map((p) => p.er!);
+    const impressions = typePosts.map((p) => p.impressions);
+    const medER = median(ers);
+    const medImpr = median(impressions);
+    if (medER === null) continue;
+    if (typePosts.length < 5) {
+      lines.push(`- ${type} (n=${typePosts.length}): too few posts — ${pct(medER)} median ER, ${medImpr?.toLocaleString() ?? "N/A"} median impressions`);
       continue;
     }
     const delta = cliffsDelta(ers, allERs);
     lines.push(
-      `- ${type} (n=${ers.length}): ${pct(med)} median ER — ${delta.label} difference vs overall (Cliff's δ=${delta.d.toFixed(2)})`
+      `- ${type} (n=${typePosts.length}): ${pct(medER)} median ER, ${medImpr?.toLocaleString() ?? "N/A"} median impressions — ${delta.label} ER difference vs overall (Cliff's δ=${delta.d.toFixed(2)})`
     );
   }
 
@@ -284,50 +321,63 @@ function formatPostLine(p: PostWithER, tz: string): string {
 }
 
 function buildTopBottomSection(posts: PostWithER[], timezone: string): string {
-  const sorted = [...posts]
-    .filter((p) => p.er !== null)
-    .sort((a, b) => b.er! - a.er!);
-  const top = sorted.slice(0, 10);
-  const bottom = sorted.slice(-10).reverse();
+  const withER = [...posts].filter((p) => p.er !== null);
+
+  // Top/bottom by ER
+  const sortedByER = [...withER].sort((a, b) => b.er! - a.er!);
+  const topER = sortedByER.slice(0, 10);
+  const bottomER = sortedByER.slice(-10).reverse();
+
+  // Top by impressions (reach)
+  const sortedByImpr = [...posts].sort((a, b) => b.impressions - a.impressions);
+  const topImpr = sortedByImpr.slice(0, 10);
 
   const lines = ["## 4. Top 10 Posts (by engagement rate)"];
-  if (top.length === 0) {
+  if (topER.length === 0) {
     lines.push("No data.");
   } else {
-    for (const p of top) lines.push(formatPostLine(p, timezone));
+    for (const p of topER) lines.push(formatPostLine(p, timezone));
   }
 
-  lines.push("", "## 5. Bottom 10 Posts (by engagement rate)");
-  if (bottom.length === 0) {
+  lines.push("", "## 5. Top 10 Posts (by impressions/reach)");
+  if (topImpr.length === 0) {
     lines.push("No data.");
   } else {
-    for (const p of bottom) lines.push(formatPostLine(p, timezone));
+    for (const p of topImpr) lines.push(formatPostLine(p, timezone));
+  }
+
+  lines.push("", "## 6. Bottom 10 Posts (by engagement rate)");
+  if (bottomER.length === 0) {
+    lines.push("No data.");
+  } else {
+    for (const p of bottomER) lines.push(formatPostLine(p, timezone));
   }
 
   return lines.join("\n");
 }
 
 function buildDaySection(posts: PostWithER[], timezone: string): string {
-  const byDay = new Map<string, number[]>();
+  const byDay = new Map<string, PostWithER[]>();
   const dayOrder = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   for (const p of posts) {
     if (p.er === null) continue;
     const day = getLocalDayName(p.published_at, timezone);
     const arr = byDay.get(day) ?? [];
-    arr.push(p.er);
+    arr.push(p);
     byDay.set(day, arr);
   }
 
-  const lines = ["## 6. Day-of-Week Breakdown"];
+  const lines = ["## 7. Day-of-Week Breakdown"];
   for (const day of dayOrder) {
-    const ers = byDay.get(day);
-    if (!ers || ers.length === 0) {
+    const dayPosts = byDay.get(day);
+    if (!dayPosts || dayPosts.length === 0) {
       lines.push(`- ${day}: no posts`);
       continue;
     }
-    const med = median(ers)!;
-    lines.push(`- ${day} (n=${ers.length}): ${pct(med)} median ER`);
+    const medER = median(dayPosts.map((p) => p.er!))!;
+    const medImpr = median(dayPosts.map((p) => p.impressions));
+    lines.push(`- ${day} (n=${dayPosts.length}): ${pct(medER)} median ER, ${medImpr?.toLocaleString() ?? "N/A"} median impressions`);
   }
 
   return lines.join("\n");
@@ -342,18 +392,18 @@ function getTimeWindow(hour: number): string {
 }
 
 function buildTimeSection(posts: PostWithER[], timezone: string): string {
-  const byWindow = new Map<string, number[]>();
+  const byWindow = new Map<string, PostWithER[]>();
 
   for (const p of posts) {
     if (p.er === null) continue;
     const hour = getLocalHour(p.published_at, timezone);
     const window = getTimeWindow(hour);
     const arr = byWindow.get(window) ?? [];
-    arr.push(p.er);
+    arr.push(p);
     byWindow.set(window, arr);
   }
 
-  const lines = ["## 7. Time-of-Day Breakdown"];
+  const lines = ["## 8. Time-of-Day Breakdown"];
   const windowOrder = [
     "morning (6–10am)",
     "midday (10am–2pm)",
@@ -363,12 +413,14 @@ function buildTimeSection(posts: PostWithER[], timezone: string): string {
   ];
 
   for (const window of windowOrder) {
-    const ers = byWindow.get(window);
-    if (!ers || ers.length === 0) {
+    const windowPosts = byWindow.get(window);
+    if (!windowPosts || windowPosts.length === 0) {
       lines.push(`- ${window}: no posts`);
       continue;
     }
-    lines.push(`- ${window} (n=${ers.length}): ${pct(median(ers)!)} median ER`);
+    const medER = median(windowPosts.map((p) => p.er!))!;
+    const medImpr = median(windowPosts.map((p) => p.impressions));
+    lines.push(`- ${window} (n=${windowPosts.length}): ${pct(medER)} median ER, ${medImpr?.toLocaleString() ?? "N/A"} median impressions`);
   }
 
   return lines.join("\n");
@@ -382,7 +434,7 @@ function buildCommentQualitySection(posts: PostWithER[]): string {
     { label: "30+ comments", min: 30, max: Infinity },
   ];
 
-  const lines = ["## 8. Comment Volume Breakdown"];
+  const lines = ["## 9. Comment Volume Breakdown"];
 
   for (const bucket of buckets) {
     const inBucket = posts.filter(
@@ -411,7 +463,7 @@ function buildSavesSendsSection(posts: PostWithER[]): string {
   const medSaves = median(allSaves);
   const medSends = median(allSends);
 
-  const lines = ["## 9. Saves & Sends Highlights"];
+  const lines = ["## 10. Saves & Sends Highlights"];
 
   if (medSaves !== null) {
     lines.push(`Median saves: ${medSaves.toFixed(1)} (across ${withSaves.length} posts with save data)`);
@@ -439,7 +491,7 @@ function buildFrequencySection(posts: PostWithER[]): string {
   const postsPerWeek = (recent.length / 90) * 7;
 
   const lines = [
-    "## 10. Posting Frequency",
+    "## 11. Posting Frequency",
     `Posts in last 90 days: ${recent.length}`,
     `Average: ${postsPerWeek.toFixed(1)} posts/week`,
   ];
@@ -462,7 +514,7 @@ function buildContentGapsSection(db: Database.Database): string {
     )
     .get() as { count: number };
 
-  const lines = ["## 11. Content Gaps (data quality notes)"];
+  const lines = ["## 12. Content Gaps (data quality notes)"];
 
   if (missingText.count > 0) {
     lines.push(
@@ -480,7 +532,7 @@ function buildContentGapsSection(db: Database.Database): string {
 }
 
 function buildWritingPromptSection(writingPrompt: string | null): string {
-  const lines = ["## 12. Author's Writing Prompt"];
+  const lines = ["## 13. Author's Writing Prompt"];
   if (writingPrompt) {
     lines.push(writingPrompt);
   } else {

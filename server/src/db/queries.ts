@@ -13,7 +13,7 @@ export function upsertPost(
     image_urls?: string[] | null;
   }
 ): void {
-  const imageUrlsJson = post.image_urls ? JSON.stringify(post.image_urls) : null;
+  const imageUrlsJson = post.image_urls && post.image_urls.length > 0 ? JSON.stringify(post.image_urls) : null;
 
   // If the post already exists, do a partial UPDATE (avoids NOT NULL constraint
   // issues when content_type/published_at are omitted in a partial update).

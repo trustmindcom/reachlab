@@ -44,7 +44,7 @@ Available tables and columns for query_db:
 - **post_metrics**: id (INTEGER PK), post_id (TEXT FK→posts.id), scraped_at (DATETIME), impressions (INTEGER), members_reached (INTEGER), reactions (INTEGER), comments (INTEGER), reposts (INTEGER), saves (INTEGER), sends (INTEGER), video_views (INTEGER), watch_time_seconds (INTEGER), avg_watch_time_seconds (INTEGER)
 - **follower_snapshots**: date (DATE PK), total_followers (INTEGER)
 - **profile_snapshots**: date (DATE PK), profile_views (INTEGER), search_appearances (INTEGER), all_appearances (INTEGER)
-- **ai_tags**: post_id (TEXT PK), hook_type (TEXT), tone (TEXT), format_style (TEXT), tagged_at (DATETIME), model (TEXT)
+- **ai_tags**: post_id (TEXT PK), hook_type (TEXT), tone (TEXT), format_style (TEXT), post_category (TEXT — announcement|thought_leadership|question|personal_story|industry_news|how_to|opinion|case_study|other), tagged_at (DATETIME), model (TEXT)
 - **ai_post_topics**: post_id (TEXT FK→posts.id), taxonomy_id (INTEGER FK→ai_taxonomy.id)
 - **ai_taxonomy**: id (INTEGER PK), name (TEXT), description (TEXT)
 
@@ -165,6 +165,16 @@ For each post, return a JSON array of objects with:
 - "hook_type": The type of hook used (e.g., "question", "statistic", "story", "bold_claim", "how_to", "list", "contrarian", "personal", "other")
 - "tone": The overall tone (e.g., "professional", "conversational", "inspirational", "educational", "humorous", "provocative")
 - "format_style": The format style (e.g., "short_text", "long_form", "listicle", "story", "tips", "case_study", "poll", "carousel", "video")
+- "post_category": The primary category of the post. Must be exactly one of: "announcement", "thought_leadership", "question", "personal_story", "industry_news", "how_to", "opinion", "case_study", "other"
+  - "announcement": Posts announcing personal news — new role, company launch, paper published, award received, event attendance, milestone reached. These are engagement-inflated and should be excluded from performance benchmarks.
+  - "thought_leadership": Original insights, frameworks, or perspectives on industry topics
+  - "question": Posts primarily asking the audience a question to drive discussion
+  - "personal_story": Narrative-driven posts sharing personal experiences or lessons
+  - "industry_news": Commentary on external news, trends, or events
+  - "how_to": Tactical, instructional content with steps or tips
+  - "opinion": Strong takes or contrarian views on a topic
+  - "case_study": Detailed analysis of a specific example or result
+  - "other": Posts that don't fit the above categories
 
 Return ONLY the JSON array, no other text.`;
 }
@@ -183,6 +193,29 @@ ${knowledgeBase}
 
 ${feedbackHistory}
 
+## Impressions vs Engagement Rate — CRITICAL
+
+A post is NOT "low performing" just because its engagement rate is below average. You MUST evaluate posts on BOTH dimensions:
+- **Impressions (reach)**: How many people saw the content. This measures distribution and algorithmic amplification.
+- **Engagement rate**: What percentage interacted. This measures resonance with the audience who saw it.
+
+These metrics often move inversely: when LinkedIn pushes content to broader, colder audiences (high impressions), ER naturally drops because those viewers are less connected to the creator. A post with 14,000 impressions and 0.4% ER is performing VERY differently from a post with 1,000 impressions and 0.4% ER — the first is a reach win, the second is actually underperforming.
+
+**Rules:**
+- Never call a post "underperforming" based on ER alone when it has above-median impressions.
+- When comparing recent vs baseline, compare BOTH median ER and median impressions. If impressions are up but ER is down, say that — and explain that this is expected behavior for high-reach content.
+- For "top performer" analysis, consider both the ER leaderboard and the impressions leaderboard. Posts can be top performers on either dimension.
+- The most valuable posts are those that achieve both high reach AND high engagement — highlight these specifically.
+
+## Comparative Analysis — REQUIRED
+
+When highlighting a top-performing post, don't just explain it in isolation. Compare it against:
+1. Other posts with the same content type (e.g., other video shorts, other text posts)
+2. Other posts with similar topics or hook types
+3. Other posts published at similar times
+
+This helps the creator understand what made THIS post different from similar ones they've published.
+
 ## Language Rules
 
 - Never use abbreviations or internal metric names. Say "engagement rate" not "WER" or "ER".
@@ -190,8 +223,8 @@ ${feedbackHistory}
 - All numbers must have plain-English context. Don't say "0.0608" — say "6.1% engagement rate".
 - Times must be in the user's local timezone as shown in the stats report.
 - Don't just identify what works — explain WHY it works (referencing LinkedIn platform mechanics when relevant) and give a specific next action the author can take this week.
-- Compare recent posts (last 14 days) to baseline — notice what the author is changing and whether it's working.
-- For the writing prompt analysis: reference specific post evidence. Don't make generic suggestions.
+- Compare recent posts (last 14 days) to baseline — notice what the author is changing and whether it's working. Compare BOTH engagement rate and impressions.
+- For the writing prompt analysis: reference specific post evidence. Don't make generic suggestions. Prompt suggestions should NEVER tell the user to skip or disqualify stories that don't immediately connect to personal experience. Instead, suggest that the LLM brainstorm with the user about how a given story might relate to something they've personally built, shipped, witnessed, or gotten wrong. The goal is to help the user find the personal angle, not to gate-keep which stories get written about.
 
 ## Output Format
 
@@ -251,14 +284,28 @@ export function buildTopPerformerPrompt(
   preview: string,
   publishedAt: string,
   impressions: number,
-  comments: number
+  comments: number,
+  contentType: string,
+  comparisons: { preview: string; impressions: number; er: number; contentType: string }[]
 ): string {
+  let comparisonBlock = "";
+  if (comparisons.length > 0) {
+    comparisonBlock = `\n\nFor comparison, here are other ${contentType} posts by the same creator:\n` +
+      comparisons.map((c) =>
+        `- "${c.preview}" — ${c.impressions.toLocaleString()} impressions, ${c.er.toFixed(1)}% ER`
+      ).join("\n");
+  }
+
   return `This LinkedIn post was the top performer in the last 30 days:
 
 Post topic: "${preview}"
 Date: ${publishedAt}
+Content type: ${contentType}
 Impressions: ${impressions.toLocaleString()}
-Comments: ${comments}
+Comments: ${comments}${comparisonBlock}
 
-In one sentence, explain why this post resonated with the audience. Be specific about what element of the post drove engagement. No filler phrases.`;
+In 2-3 sentences, explain:
+1. Why this post resonated — what specific element (hook, framing, topic angle) drove performance
+2. How it compares to the creator's other ${contentType} posts — what did this one do differently
+Be specific. No filler phrases.`;
 }

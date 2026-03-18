@@ -141,6 +141,28 @@ export function buildApp(dbPath: string) {
       error_details: errors.length > 0 ? JSON.stringify(errorDetails) : null,
     });
 
+    // Auto-download author profile photo if provided
+    if (payload.author_photo_url) {
+      const photoDir = path.dirname(dbPath);
+      const photoPath = path.join(photoDir, "author-reference.jpg");
+      // Only download if we don't already have one
+      if (!fs.existsSync(photoPath)) {
+        fetch(payload.author_photo_url)
+          .then(async (res) => {
+            if (!res.ok) return;
+            const buffer = Buffer.from(await res.arrayBuffer());
+            if (buffer.length > 0) {
+              fs.mkdirSync(photoDir, { recursive: true });
+              fs.writeFileSync(photoPath, buffer);
+              console.log("[Author Photo] Downloaded profile photo from LinkedIn");
+            }
+          })
+          .catch((err: any) => {
+            console.error("[Author Photo] Download failed:", err.message);
+          });
+      }
+    }
+
     // Auto-trigger image downloads for posts with image_urls
     if (payload.posts) {
       const postsWithImages = payload.posts.filter(
@@ -193,11 +215,35 @@ export function buildApp(dbPath: string) {
       }).catch(() => {});
     }
 
+    // Include posts needing scraping so the extension doesn't need separate API calls
+    const needsContent = payload.posts
+      ? (db.prepare("SELECT id FROM posts WHERE full_text IS NULL ORDER BY published_at DESC").all() as { id: string }[]).map(r => r.id)
+      : undefined;
+    const needsImages = payload.posts
+      ? (db.prepare(
+          `SELECT id FROM posts
+           WHERE content_type IN ('image', 'carousel')
+             AND (image_local_paths IS NULL OR image_local_paths = '[]')
+             AND (image_urls IS NULL OR image_urls = '[]')
+           ORDER BY published_at DESC`
+        ).all() as { id: string }[]).map(r => r.id)
+      : undefined;
+    // Posts that have recent metrics (scraped within last 12 hours)
+    const hasRecentMetrics = payload.posts
+      ? (db.prepare(
+          `SELECT DISTINCT post_id FROM post_metrics
+           WHERE scraped_at > datetime('now', '-12 hours')`
+        ).all() as { post_id: string }[]).map(r => r.post_id)
+      : undefined;
+
     return {
       ok: true,
       posts_upserted: postsUpserted,
       metrics_inserted: metricsInserted,
       ...(errors.length > 0 ? { errors } : {}),
+      ...(needsContent ? { needs_content: needsContent } : {}),
+      ...(needsImages ? { needs_images: needsImages } : {}),
+      ...(hasRecentMetrics ? { has_recent_metrics: hasRecentMetrics } : {}),
     };
   });
 
@@ -233,6 +279,20 @@ export function buildApp(dbPath: string) {
     return { post_ids: rows.map((r) => r.id) };
   });
 
+  // Posts needing image scraping (visual content types with no downloaded images AND no URLs yet)
+  app.get("/api/posts/needs-images", async () => {
+    const rows = db
+      .prepare(
+        `SELECT id FROM posts
+         WHERE content_type IN ('image', 'carousel')
+           AND (image_local_paths IS NULL OR image_local_paths = '[]')
+           AND (image_urls IS NULL OR image_urls = '[]')
+         ORDER BY published_at DESC`
+      )
+      .all() as { id: string }[];
+    return { post_ids: rows.map((r) => r.id) };
+  });
+
   // Top-performing posts (excluding announcements)
   app.get("/api/posts/top-examples", async (request) => {
     const q = request.query as any;
@@ -249,32 +309,17 @@ export function buildApp(dbPath: string) {
         FROM posts p
         LEFT JOIN post_metrics m ON m.post_id = p.id
           AND m.id = (SELECT MAX(id) FROM post_metrics WHERE post_id = p.id)
+        LEFT JOIN ai_tags t ON t.post_id = p.id
         WHERE p.full_text IS NOT NULL
           AND LENGTH(p.full_text) >= 200
           AND m.impressions IS NOT NULL
-        ORDER BY m.impressions DESC`
+          AND (t.post_category IS NULL OR t.post_category != 'announcement')
+        ORDER BY m.impressions DESC
+        LIMIT ?`
       )
-      .all() as any[];
+      .all(limit) as any[];
 
-    const announcementPatterns = [
-      /excited to\b.*\bannounce/,
-      /thrilled to\b.*\bannounce/,
-      /proud to\b.*\bannounce/,
-      /pleased to\b.*\bannounce/,
-      /happy to share that/,
-      /excited to\b.*\bshare/,
-      /i'm joining/,
-      /we're launching/,
-      /grateful this/,
-      /had a great time (at|yesterday)/,
-    ];
-
-    const filtered = rows.filter((row) => {
-      const text = row.full_text.toLowerCase();
-      return !announcementPatterns.some((re) => re.test(text));
-    });
-
-    return { posts: filtered.slice(0, limit) };
+    return { posts: rows };
   });
 
   // Posts
@@ -343,6 +388,37 @@ export function buildApp(dbPath: string) {
   );
   const dataDir = path.dirname(dbPath);
   registerSettingsRoutes(app, dataDir, db);
+
+  // On startup, retry image downloads for posts that have URLs but no local files
+  app.addHook("onReady", async () => {
+    const postsNeedingDownload = db
+      .prepare(
+        `SELECT id, image_urls FROM posts
+         WHERE image_urls IS NOT NULL AND image_urls != '[]'
+           AND (image_local_paths IS NULL OR image_local_paths = '[]')`
+      )
+      .all() as { id: string; image_urls: string }[];
+
+    if (postsNeedingDownload.length > 0) {
+      console.log(`[Image Download] Retrying downloads for ${postsNeedingDownload.length} posts...`);
+      import("./ai/image-downloader.js").then(({ downloadPostImages }) => {
+        const imagesDir = path.join(path.dirname(dbPath), "images");
+        for (const post of postsNeedingDownload) {
+          const urls = JSON.parse(post.image_urls) as string[];
+          downloadPostImages(post.id, urls, imagesDir).then((paths) => {
+            if (paths.length > 0) {
+              db.prepare("UPDATE posts SET image_local_paths = ? WHERE id = ?").run(
+                JSON.stringify(paths),
+                post.id
+              );
+            }
+          }).catch((err: any) => {
+            console.error(`[Image Download] Retry failed for ${post.id}:`, err.message);
+          });
+        }
+      }).catch(() => {});
+    }
+  });
 
   // Serve dashboard static files
   const __dirname = path.dirname(fileURLToPath(import.meta.url));

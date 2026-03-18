@@ -170,30 +170,29 @@ async function startSync() {
       const posts = topPostsResult.data as ScrapedPost[];
 
       // POST posts to server (with offline queue fallback)
-      await postToServer({
+      // Include thumbnail URLs as image_urls so the server can download them
+      // The response tells us what still needs scraping (no extra API calls needed)
+      const ingestResult = await postToServer({
         posts: posts.map((p) => ({
           id: p.id,
           content_preview: p.content_preview ?? undefined,
           content_type: p.content_type,
           published_at: p.published_at,
           url: p.url,
+          image_urls: p.thumbnail_url ? [p.thumbnail_url] : undefined,
         })),
       });
 
-      // Scrape post pages for full text + images (only for posts missing content)
+      // Scrape post pages for content + images (merged, using ingest response)
       try {
-        const needsContentRes = await fetch(
-          `${SERVER_URL}/api/posts/needs-content`
+        const needsContentIds: string[] = ingestResult?.needs_content ?? [];
+        const needsImageIds: string[] = ingestResult?.needs_images ?? [];
+        const currentPostIds = new Set(posts.map((p: ScrapedPost) => p.id));
+        const toScrape = [...new Set([...needsContentIds, ...needsImageIds])].filter(
+          (id: string) => currentPostIds.has(id)
         );
-        if (needsContentRes.ok) {
-          const { post_ids: needsContentIds } = await needsContentRes.json();
-          const currentPostIds = new Set(posts.map((p: ScrapedPost) => p.id));
-          const toScrape = needsContentIds.filter((id: string) =>
-            currentPostIds.has(id)
-          );
-          if (toScrape.length > 0) {
-            await scrapePostPages(tab.id!, toScrape, isBackfill);
-          }
+        if (toScrape.length > 0) {
+          await scrapePostPages(tab.id!, toScrape, isBackfill);
         }
       } catch (err: any) {
         console.error(
@@ -205,14 +204,18 @@ async function startSync() {
 
       // Filter posts for detail scraping:
       // - Backfill: scrape all posts
-      // - Daily sync: only posts <30 days old
+      // - Daily sync: only posts <30 days old, skip those with recent metrics
+      const recentMetricsSet = new Set<string>(ingestResult?.has_recent_metrics ?? []);
       const postIdsToScrape = isBackfill
         ? posts.map((p) => p.id)
         : posts
             .filter((p) => {
               const publishedDate = activityIdToDate(p.id);
               const ageMs = Date.now() - publishedDate.getTime();
-              return ageMs < METRIC_DECAY_DAYS * 24 * 60 * 60 * 1000;
+              if (ageMs >= METRIC_DECAY_DAYS * 24 * 60 * 60 * 1000) return false;
+              // Skip posts that already have recent metrics
+              if (recentMetricsSet.has(p.id)) return false;
+              return true;
             })
             .map((p) => p.id);
 
@@ -307,14 +310,21 @@ async function processBatch(
   }
 }
 
+interface ScrapedContent {
+  id: string;
+  hook_text: string | null;
+  full_text: string | null;
+  image_urls: string[];
+}
+
 /**
  * Two-phase scrape: captures hook_text before expansion, full_text after.
- * Used by both sync-time scraping and backfill.
+ * Returns scraped data without sending to server (caller batches sends).
  */
-async function scrapeAndSendPostContent(
+async function scrapePostContent(
   tabId: number,
   postId: string,
-): Promise<void> {
+): Promise<ScrapedContent> {
   const postUrl = `https://www.linkedin.com/feed/update/urn:li:activity:${postId}/`;
   await chrome.tabs.update(tabId, { url: postUrl });
   await waitForTabLoad(tabId);
@@ -372,17 +382,23 @@ async function scrapeAndSendPostContent(
     // No see more button or script injection failed — continue with hook as full
   }
 
+  return { id: postId, hook_text: hookText, full_text: fullText, image_urls: imageUrls };
+}
+
+/**
+ * Scrape and send: single post convenience wrapper (used by backfill).
+ */
+async function scrapeAndSendPostContent(
+  tabId: number,
+  postId: string,
+): Promise<void> {
+  const content = await scrapePostContent(tabId, postId);
   await postToServer({
-    posts: [
-      {
-        id: postId,
-        full_text: fullText,
-        hook_text: hookText,
-        image_urls: imageUrls,
-      },
-    ],
+    posts: [content],
   });
 }
+
+const CONTENT_BATCH_SIZE = 10;
 
 async function scrapePostPages(
   tabId: number,
@@ -391,17 +407,30 @@ async function scrapePostPages(
 ): Promise<void> {
   const pacingMin = isBackfill ? BACKFILL_PACING_MIN_MS : PACING_MIN_MS;
   const pacingMax = isBackfill ? BACKFILL_PACING_MAX_MS : PACING_MAX_MS;
+  const batch: ScrapedContent[] = [];
 
   for (const postId of postIds) {
     await randomDelay(pacingMin, pacingMax);
     try {
-      await scrapeAndSendPostContent(tabId, postId);
+      const content = await scrapePostContent(tabId, postId);
+      batch.push(content);
+
+      // Flush batch when full
+      if (batch.length >= CONTENT_BATCH_SIZE) {
+        await postToServer({ posts: [...batch] });
+        batch.length = 0;
+      }
     } catch (err: any) {
       console.error(
-        `[LinkedIn Analytics] Failed to send content for ${postId}:`,
+        `[LinkedIn Analytics] Failed to scrape content for ${postId}:`,
         err.message
       );
     }
+  }
+
+  // Flush remaining
+  if (batch.length > 0) {
+    await postToServer({ posts: batch });
   }
 }
 
@@ -426,6 +455,9 @@ async function scrapeRemainingPages(tabId: number) {
         followers: { total_followers: audienceResult.data.total_followers },
       });
     }
+
+    // Try to scrape profile photo from this page
+    await scrapeAndSendProfilePhoto(tabId);
 
     // Profile views page
     await chrome.tabs.update(tabId, {
@@ -462,6 +494,40 @@ async function scrapeRemainingPages(tabId: number) {
     await finishSync();
   } catch (err: any) {
     await finishSyncWithError(err.message);
+  }
+}
+
+/**
+ * Scrape the user's profile photo from the current LinkedIn page and send to server.
+ */
+async function scrapeAndSendProfilePhoto(tabId: number): Promise<void> {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        // Look for the profile photo in the global nav or page elements
+        const selectors = [
+          ".global-nav__me-photo",
+          "img.feed-identity-module__member-photo",
+          "img.member-analytics-addon__member-photo",
+          ".global-nav__primary-link-me-menu-trigger img",
+          "img.nav-item__profile-member-photo",
+        ];
+        for (const sel of selectors) {
+          const img = document.querySelector(sel) as HTMLImageElement | null;
+          if (img?.src && img.src.includes("media.licdn.com")) {
+            return img.src;
+          }
+        }
+        return null;
+      },
+    });
+
+    if (result?.result) {
+      await postToServer({ author_photo_url: result.result });
+    }
+  } catch {
+    // Non-fatal — profile photo scraping is best-effort
   }
 }
 
@@ -514,18 +580,22 @@ async function finishSync() {
     } catch {}
   }
 
-  // Check for posts needing content backfill
+  // Check for posts needing content or image backfill
   try {
-    const needsContentRes = await fetch(`${SERVER_URL}/api/posts/needs-content`);
-    if (needsContentRes.ok) {
-      const { post_ids } = await needsContentRes.json();
-      if (post_ids.length > 0) {
-        await chrome.storage.session.set({
-          backfillQueue: post_ids,
-          backfillCursor: 0,
-        });
-        chrome.alarms.create("backfill-continue", { delayInMinutes: 0.1 });
-      }
+    const [contentRes, imagesRes] = await Promise.all([
+      fetch(`${SERVER_URL}/api/posts/needs-content`),
+      fetch(`${SERVER_URL}/api/posts/needs-images`),
+    ]);
+    const contentIds = contentRes.ok ? (await contentRes.json()).post_ids : [];
+    const imageIds = imagesRes.ok ? (await imagesRes.json()).post_ids : [];
+    // Deduplicate
+    const allIds = [...new Set([...contentIds, ...imageIds])];
+    if (allIds.length > 0) {
+      await chrome.storage.session.set({
+        backfillQueue: allIds,
+        backfillCursor: 0,
+      });
+      chrome.alarms.create("backfill-continue", { delayInMinutes: 0.1 });
     }
   } catch {
     // Non-fatal — backfill will happen next sync

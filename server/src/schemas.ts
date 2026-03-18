@@ -42,6 +42,7 @@ export const ingestPayloadSchema = z.object({
   post_metrics: z.array(postMetricsSchema).optional(),
   followers: followersSchema.optional(),
   profile: profileSchema.optional(),
+  author_photo_url: z.string().url().optional(),
 });
 
 export type IngestPayload = z.infer<typeof ingestPayloadSchema>;

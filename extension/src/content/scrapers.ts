@@ -89,6 +89,15 @@ export function scrapeTopPosts(doc: Document): ScrapedPost[] {
       ? parseMetricValue(impressionText)
       : null;
 
+    // Thumbnail image URL from the analytics page preview
+    let thumbnailUrl: string | null = null;
+    const thumbImg = item.querySelector(
+      ".ivm-image-view-model img[src*='media.licdn.com']"
+    ) as HTMLImageElement | null;
+    if (thumbImg?.src) {
+      thumbnailUrl = thumbImg.src;
+    }
+
     posts.push({
       id: activityId,
       content_preview: contentPreview,
@@ -96,6 +105,7 @@ export function scrapeTopPosts(doc: Document): ScrapedPost[] {
       published_at: publishedAt,
       url: `https://www.linkedin.com/feed/update/urn:li:activity:${activityId}/`,
       impressions,
+      thumbnail_url: thumbnailUrl,
     });
   }
 
@@ -218,6 +228,39 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
   }
 
   return { hook_text: hookText, full_text: fullText, image_urls: imageUrls };
+}
+
+/**
+ * Scrape the current user's profile photo URL from the page nav/header.
+ */
+export function scrapeProfilePhoto(doc: Document): string | null {
+  // LinkedIn nav bar profile photo (mini-profile image in the global nav)
+  const selectors = [
+    ".global-nav__me-photo",
+    "img.feed-identity-module__member-photo",
+    "img.member-analytics-addon__member-photo",
+    ".global-nav__primary-link-me-menu-trigger img",
+    "img.nav-item__profile-member-photo",
+  ];
+  for (const sel of selectors) {
+    const img = doc.querySelector(sel) as HTMLImageElement | null;
+    if (img?.src && img.src.includes("media.licdn.com")) {
+      return img.src;
+    }
+  }
+  // Fallback: any small profile photo in the page header area
+  const allImgs = doc.querySelectorAll("img[src*='media.licdn.com']");
+  for (const img of allImgs) {
+    const src = (img as HTMLImageElement).src;
+    const alt = (img as HTMLImageElement).alt?.toLowerCase() || "";
+    // Profile photos typically have the user's name as alt text and are small
+    if (alt && !alt.includes("logo") && !alt.includes("company") &&
+        (img.closest(".global-nav") || img.closest(".feed-identity-module") ||
+         img.closest(".member-analytics-addon"))) {
+      return src;
+    }
+  }
+  return null;
 }
 
 /**

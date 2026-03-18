@@ -6,6 +6,7 @@ import {
   scrapeProfileViews,
   scrapeSearchAppearances,
   scrapePostPage,
+  scrapeProfilePhoto,
 } from "./scrapers.js";
 import {
   scrapedPostSchema,

@@ -13,6 +13,7 @@ export const scrapedPostSchema = z.object({
   published_at: z.string().min(1),
   url: z.string().min(1),
   impressions: z.number().int().nullable(),
+  thumbnail_url: z.string().nullable().optional(),
 });
 
 export const scrapedPostMetricsSchema = z.object({

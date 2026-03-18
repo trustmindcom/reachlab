@@ -4,6 +4,7 @@ export const MODELS = {
   HAIKU: "anthropic/claude-3.5-haiku",
   SONNET: "anthropic/claude-sonnet-4-6",
   OPUS: "anthropic/claude-opus-4-6",
+  GPT54: "openai/gpt-5.4",
 } as const;
 
 const PROVIDER_PREFS = JSON.stringify({
