@@ -30,5 +30,5 @@ app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
     console.error(err);
     process.exit(1);
   }
-  console.log(`Linkling server running at ${address}`);
+  console.log(`ReachLab server running at ${address}`);
 });

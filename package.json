@@ -1,5 +1,5 @@
 {
-  "name": "linkling",
+  "name": "reachlab",
   "private": true,
   "workspaces": [
     "server",

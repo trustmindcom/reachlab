@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Linkling",
+  "name": "ReachLab",
   "version": "0.1.0",
   "description": "Local-first LinkedIn analytics and AI coaching",
   "permissions": ["alarms", "cookies", "scripting", "storage", "tabs", "webNavigation", "webRequest"],

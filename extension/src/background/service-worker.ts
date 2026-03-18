@@ -241,7 +241,7 @@ async function startSync() {
         }
       } catch (err: any) {
         console.error(
-          "[Linkling] Post page scraping failed:",
+          "[ReachLab] Post page scraping failed:",
           err.message
         );
         // Non-fatal — continue with detail metrics
@@ -470,7 +470,7 @@ async function scrapePostPages(
       }
     } catch (err: any) {
       console.error(
-        `[Linkling] Failed to scrape content for ${postId}:`,
+        `[ReachLab] Failed to scrape content for ${postId}:`,
         err.message
       );
     }
@@ -601,7 +601,7 @@ async function continueBackfill() {
       try {
         await scrapeAndSendPostContent(tab.id, postId);
       } catch (err: any) {
-        console.error(`[Linkling] Backfill failed for ${postId}:`, err.message);
+        console.error(`[ReachLab] Backfill failed for ${postId}:`, err.message);
       }
     }
 
@@ -613,7 +613,7 @@ async function continueBackfill() {
       await chrome.storage.session.set({ backfillQueue: null, backfillCursor: null });
     }
   } catch (err: any) {
-    console.error("[Linkling] Backfill error:", err.message);
+    console.error("[ReachLab] Backfill error:", err.message);
     await chrome.storage.session.set({ backfillQueue: null, backfillCursor: null });
   } finally {
     try { await chrome.tabs.remove(tab.id); } catch {}
@@ -668,7 +668,7 @@ async function finishSync() {
 }
 
 async function finishSyncWithError(error: string) {
-  console.error("[Linkling] Sync error:", error);
+  console.error("[ReachLab] Sync error:", error);
   const { syncTabId } = await chrome.storage.session.get("syncTabId");
   if (syncTabId) {
     try {
