@@ -14,7 +14,7 @@ No SaaS. No data sharing. Runs on your machine.
 
 **Analyzes what's actually driving your engagement.** The AI coach doesn't just tell you your numbers went up. It discovers your content taxonomy (the topics you actually write about), tracks which topics and formats perform best, identifies trends across your posting history, and generates specific recommendations with evidence. Insights persist across analysis runs — the system tracks which patterns are strengthening, reversing, or fading.
 
-**Helps you write better posts.** A writing prompt system lets you define your voice and goals, then exports a ready-to-use prompt with your top-performing posts as a style guide. The AI suggests prompt improvements based on what's actually working in your data.
+**Helps you write better posts.** A writing prompt system exports a ready-to-use prompt with your top-performing posts as a style guide. Paste it into any LLM and it already knows how you write.
 
 ## Dashboard
 
