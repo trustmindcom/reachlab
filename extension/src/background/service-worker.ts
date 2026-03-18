@@ -30,6 +30,10 @@ chrome.alarms.get(ALARM_NAME, (alarm) => {
 chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (details.tabId < 0) return; // background request, skip
+    // Only capture the DASH manifest URL, not individual HLS segments.
+    // Manifest: /playlist/vid/dash/<id>/<hash>?...
+    // Segments: /playlist/vid/v2/<id>/hls-720p-quality-analysis/.../15/...
+    if (!details.url.includes("/playlist/vid/dash/")) return;
     // Get the tab URL to find the post activity ID
     chrome.tabs.get(details.tabId, (tab) => {
       if (chrome.runtime.lastError || !tab?.url) return;

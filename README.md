@@ -157,8 +157,8 @@ brew install ffmpeg whisper-cpp
 
 The whisper model (~148MB) needs to be downloaded once:
 ```bash
-mkdir -p server/data/models
-curl -L -o server/data/models/ggml-base.en.bin \
+mkdir -p data/models
+curl -L -o data/models/ggml-base.en.bin \
   "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
 ```
 
