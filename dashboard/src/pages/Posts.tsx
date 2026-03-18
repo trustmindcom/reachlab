@@ -150,23 +150,9 @@ export default function Posts() {
                   }`}
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {p.image_local_paths && (() => {
-                        try {
-                          return JSON.parse(p.image_local_paths).length > 0 ? (
-                            <img
-                              src={`/api/images/${p.id}/0`}
-                              alt=""
-                              className="w-10 h-10 rounded object-cover shrink-0"
-                              loading="lazy"
-                            />
-                          ) : null;
-                        } catch { return null; }
-                      })()}
-                      <p className="truncate max-w-xs text-text-primary">
-                        {p.hook_text || (p.full_text ? p.full_text.slice(0, 80) : p.content_preview) || "(no preview)"}
-                      </p>
-                    </div>
+                    <p className="truncate max-w-xs text-text-primary">
+                      {p.hook_text || (p.full_text ? p.full_text.slice(0, 80) : p.content_preview) || "(no preview)"}
+                    </p>
                   </td>
                   <td className="px-4 py-3">
                     <span className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-surface-3 text-text-secondary">
@@ -233,8 +219,23 @@ export default function Posts() {
                           </div>
                         </div>
 
-                        {/* Content: text + images side by side */}
+                        {/* Content: images on left + text on right */}
                         <div className="flex gap-5">
+                          {/* Images */}
+                          {imageCount(selectedPost) > 0 && (
+                            <div className="flex flex-col gap-2 shrink-0">
+                              {Array.from({ length: Math.min(imageCount(selectedPost), 4) }, (_, i) => (
+                                <img
+                                  key={i}
+                                  src={`/api/images/${selectedPost.id}/${i}`}
+                                  alt=""
+                                  className="w-32 h-32 rounded-lg object-cover border border-border"
+                                  loading="lazy"
+                                />
+                              ))}
+                            </div>
+                          )}
+
                           {/* Full text */}
                           <div className="flex-1 min-w-0">
                             {selectedPost.full_text ? (
@@ -252,21 +253,6 @@ export default function Posts() {
                               <p className="text-sm text-text-muted italic">No text content available</p>
                             )}
                           </div>
-
-                          {/* Images */}
-                          {imageCount(selectedPost) > 0 && (
-                            <div className="flex gap-2 shrink-0">
-                              {Array.from({ length: Math.min(imageCount(selectedPost), 4) }, (_, i) => (
-                                <img
-                                  key={i}
-                                  src={`/api/images/${selectedPost.id}/${i}`}
-                                  alt=""
-                                  className="w-24 h-24 rounded-lg object-cover border border-border"
-                                  loading="lazy"
-                                />
-                              ))}
-                            </div>
-                          )}
                         </div>
 
                         {/* Metrics grid */}
