@@ -53,8 +53,10 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(409).send({ error: "Analysis already running", started_at: running.started_at });
     }
     const client = createClient(apiKey);
+    const body = request.body as { force?: boolean } | undefined;
+    const trigger = body?.force ? "force" : "manual";
     // Fire and forget — don't block the response
-    runPipeline(client, db, "manual").catch((err) => {
+    runPipeline(client, db, trigger).catch((err) => {
       console.error("[AI Pipeline] Refresh failed:", err.message);
     });
     return { ok: true, message: "Analysis started" };

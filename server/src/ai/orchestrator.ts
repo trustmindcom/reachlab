@@ -73,8 +73,8 @@ export async function runPipeline(
   }
 
   const postCount = getPostCountWithMetrics(db);
-  // Skip threshold check for retag (force re-classification of all posts)
-  if (triggeredBy !== "retag") {
+  // Skip threshold check for retag/force triggers
+  if (triggeredBy !== "retag" && triggeredBy !== "force") {
     const lastRun = getLatestCompletedRun(db);
     const check = shouldRunPipeline(postCount, lastRun ? { post_count: lastRun.post_count } : null);
     if (!check.should) {
