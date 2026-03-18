@@ -152,7 +152,7 @@ function ActionsTab({
   if (active.length === 0 && !promptSuggestions) {
     return (
       <div className="bg-surface-1 border border-border rounded-lg p-8 text-center animate-fade-up">
-        <p className="text-sm text-text-muted">
+        <p className="text-base text-text-muted">
           No recommendations yet. Click <strong>Refresh AI</strong> to generate insights from your posts.
         </p>
       </div>
@@ -188,7 +188,7 @@ function ActionsTab({
             </div>
 
             {/* Headline + detail */}
-            <p className="text-sm font-semibold text-text-primary leading-snug">{rec.headline}</p>
+            <p className="text-base font-semibold text-text-primary leading-snug">{rec.headline}</p>
             <p className="text-[13px] text-text-secondary leading-relaxed">{rec.detail}</p>
 
             {/* Action box */}
@@ -207,7 +207,7 @@ function ActionsTab({
                   <div className="flex flex-col">
                     <span className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Current</span>
                     <div className="flex-1 flex items-center">
-                      <p className="w-full text-xs bg-surface-0 rounded-md px-3 py-2.5 text-text-secondary leading-relaxed">
+                      <p className="w-full text-sm bg-surface-0 rounded-md px-3 py-2.5 text-text-secondary leading-relaxed">
                         {linkedSuggestion.current}
                       </p>
                     </div>
@@ -215,7 +215,7 @@ function ActionsTab({
                   <div className="flex flex-col">
                     <span className="text-[10px] text-accent uppercase tracking-wider mb-1 font-medium">Suggested</span>
                     <div className="flex-1 flex items-center">
-                      <p className="w-full text-xs bg-accent/5 border border-accent/15 rounded-md px-3 py-2.5 text-text-primary leading-relaxed">
+                      <p className="w-full text-sm bg-accent/5 border border-accent/15 rounded-md px-3 py-2.5 text-text-primary leading-relaxed">
                         {linkedSuggestion.suggested}
                       </p>
                     </div>
@@ -292,17 +292,17 @@ function ActionsTab({
               <div className="flex flex-col">
                 <span className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Current</span>
                 <div className="flex-1 flex items-center">
-                  <p className="w-full text-xs bg-surface-2 rounded-md px-3 py-2.5 text-text-secondary leading-relaxed">{s.current}</p>
+                  <p className="w-full text-sm bg-surface-2 rounded-md px-3 py-2.5 text-text-secondary leading-relaxed">{s.current}</p>
                 </div>
               </div>
               <div className="flex flex-col">
                 <span className="text-[10px] text-accent uppercase tracking-wider mb-1 font-medium">Suggested</span>
                 <div className="flex-1 flex items-center">
-                  <p className="w-full text-xs bg-accent/5 border border-accent/15 rounded-md px-3 py-2.5 text-text-primary leading-relaxed">{s.suggested}</p>
+                  <p className="w-full text-sm bg-accent/5 border border-accent/15 rounded-md px-3 py-2.5 text-text-primary leading-relaxed">{s.suggested}</p>
                 </div>
               </div>
             </div>
-            <p className="text-xs text-text-muted">{s.evidence}</p>
+            <p className="text-sm text-text-muted">{s.evidence}</p>
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -475,7 +475,7 @@ function InsightsTab({
           )}
         </div>
         {insights.length === 0 ? (
-          <p className="text-sm text-text-muted">No insights available yet.</p>
+          <p className="text-base text-text-muted">No insights available yet.</p>
         ) : (
           <div className="space-y-2">
             {insights.map((ins, i) => (
@@ -485,7 +485,7 @@ function InsightsTab({
                 style={{ animationDelay: `${i * 40}ms` }}
               >
                 <p className="text-[13px] font-medium text-text-primary leading-snug mb-1">{ins.claim}</p>
-                <p className="text-xs text-text-secondary leading-relaxed">{ins.evidence}</p>
+                <p className="text-sm text-text-secondary leading-relaxed">{ins.evidence}</p>
                 <div className="flex items-center gap-2 mt-2">
                   {ins.consecutive_appearances > 1 ? (
                     <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-positive/8 text-positive">
@@ -528,7 +528,7 @@ function InsightsTab({
                     <span className={`text-[10px] font-semibold uppercase tracking-widest ${color}`}>{label}</span>
                     {changelog![key].map((item) => (
                       <div key={item.id} className="bg-surface-1 border border-border rounded-md px-4 py-2.5">
-                        <p className="text-xs font-medium text-text-primary">{item.claim}</p>
+                        <p className="text-sm font-medium text-text-primary">{item.claim}</p>
                         <p className="text-[11px] text-text-muted mt-0.5">{item.evidence}</p>
                       </div>
                     ))}
@@ -570,7 +570,7 @@ function InsightsTab({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-text-primary mt-1">{gap.description}</p>
+                  <p className="text-sm text-text-primary mt-1">{gap.description}</p>
                   <p className="text-[11px] text-text-muted mt-0.5">{gap.impact}</p>
                 </div>
               ))}
@@ -661,7 +661,7 @@ function DeepDiveTab({
                   <div>
                     <div className="text-xl font-semibold font-mono tracking-tight">{m.fmt(m.current)}</div>
                     {deltaLabel(m.current, m.prev) && (
-                      <div className={`text-xs font-mono mt-0.5 ${deltaClass(m.current, m.prev)}`}>
+                      <div className={`text-sm font-mono mt-0.5 ${deltaClass(m.current, m.prev)}`}>
                         {deltaLabel(m.current, m.prev)} vs prev 30d
                       </div>
                     )}
@@ -686,7 +686,7 @@ function DeepDiveTab({
           </div>
         )}
         {progressOpen && !progress && (
-          <p className="text-sm text-text-muted">Not enough data yet.</p>
+          <p className="text-base text-text-muted">Not enough data yet.</p>
         )}
       </div>
 
@@ -701,7 +701,7 @@ function DeepDiveTab({
         </button>
         {categoriesOpen && categories.length > 0 && (
           <div className="bg-surface-1 border border-border rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted uppercase tracking-widest">
                   <th className="text-left px-4 py-2.5 font-medium text-[10px]">Category</th>
@@ -728,7 +728,7 @@ function DeepDiveTab({
           </div>
         )}
         {categoriesOpen && categories.length === 0 && (
-          <p className="text-sm text-text-muted">No category data available. Run AI analysis to classify your posts.</p>
+          <p className="text-base text-text-muted">No category data available. Run AI analysis to classify your posts.</p>
         )}
       </div>
 
@@ -785,19 +785,19 @@ function DeepDiveTab({
               <div className="text-[10px] text-text-muted uppercase tracking-widest mb-3">Engagement Rate Comparison</div>
               <div className="flex items-end gap-6">
                 <div>
-                  <div className="text-xs text-text-muted mb-1">Standard ER</div>
+                  <div className="text-sm text-text-muted mb-1">Standard ER</div>
                   <div className="text-2xl font-semibold font-mono tracking-tight">{engagement.standard_er?.toFixed(2) ?? "--"}%</div>
                   <div className="text-[10px] text-text-muted">(reactions + comments + reposts) / impressions</div>
                 </div>
                 <div className="text-text-muted text-lg mb-1">vs</div>
                 <div>
-                  <div className="text-xs text-accent mb-1 font-medium">Weighted ER</div>
+                  <div className="text-sm text-accent mb-1 font-medium">Weighted ER</div>
                   <div className="text-2xl font-semibold font-mono tracking-tight text-accent">{engagement.weighted_er?.toFixed(2) ?? "--"}%</div>
                   <div className="text-[10px] text-text-muted">comments x5 + reposts x3 + saves x3 + sends x3 + reactions x1</div>
                 </div>
               </div>
               {engagement.weighted_er != null && engagement.standard_er != null && engagement.weighted_er > engagement.standard_er && (
-                <p className="text-xs text-positive mt-3">
+                <p className="text-sm text-positive mt-3">
                   Your weighted ER is {((engagement.weighted_er / engagement.standard_er - 1) * 100).toFixed(0)}% higher than standard — your engagement is quality-heavy.
                 </p>
               )}
@@ -805,7 +805,7 @@ function DeepDiveTab({
           </div>
         )}
         {engagementOpen && (!engagement || engagement.total_posts === 0) && (
-          <p className="text-sm text-text-muted">Not enough engagement data yet.</p>
+          <p className="text-base text-text-muted">Not enough engagement data yet.</p>
         )}
       </div>
     </div>
