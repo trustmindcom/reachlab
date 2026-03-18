@@ -24,6 +24,32 @@ chrome.alarms.get(ALARM_NAME, (alarm) => {
   }
 });
 
+// Passively capture DASH video playlist URLs from LinkedIn video loads.
+// Content scripts can't see performance entries (isolated world), so we
+// intercept at the network level instead.
+chrome.webRequest.onCompleted.addListener(
+  (details) => {
+    if (details.tabId < 0) return; // background request, skip
+    // Get the tab URL to find the post activity ID
+    chrome.tabs.get(details.tabId, (tab) => {
+      if (chrome.runtime.lastError || !tab?.url) return;
+      const match = tab.url.match(/activity[:-](\d+)/);
+      if (!match) return;
+      const postId = match[1];
+      const videoUrl = details.url;
+      // Fire-and-forget POST to server
+      fetch(`${SERVER_URL}/api/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          posts: [{ id: postId, video_url: videoUrl }],
+        }),
+      }).catch(() => {});
+    });
+  },
+  { urls: ["*://dms.licdn.com/playlist/vid/*"] }
+);
+
 // Also try to drain offline queue on worker start
 drainOfflineQueue();
 
@@ -51,10 +77,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function getSyncStatus() {
-  const { lastSyncAt } = await chrome.storage.local.get("lastSyncAt");
   const { syncInProgress } = await chrome.storage.session.get("syncInProgress");
+  // Read last sync time from server (survives extension reinstalls)
+  let lastSyncAt: number | null = null;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/sync-state`);
+    if (res.ok) {
+      const data = await res.json();
+      lastSyncAt = data.last_sync_at ?? null;
+    }
+  } catch {}
   return {
-    lastSyncAt: lastSyncAt ?? null,
+    lastSyncAt,
     syncInProgress: syncInProgress ?? false,
   };
 }
@@ -112,10 +146,14 @@ async function trySync(manual = false) {
   if (backfillQueue) return; // Backfill still running, skip sync
 
   if (!manual) {
-    // Check if sync needed
-    const { lastSyncAt } = await chrome.storage.local.get("lastSyncAt");
-    if (lastSyncAt && Date.now() - lastSyncAt < SYNC_INTERVAL_MS) return;
-
+    // Check if sync needed (server-side state survives reinstalls)
+    try {
+      const res = await fetch(`${SERVER_URL}/api/sync-state`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.last_sync_at && Date.now() - data.last_sync_at < SYNC_INTERVAL_MS) return;
+      }
+    } catch {}
   }
 
   // Check server health
@@ -137,9 +175,15 @@ async function startSync() {
     isBackfill: false,
   });
 
-  // Check if this is the first sync (backfill)
-  const { lastSyncAt } = await chrome.storage.local.get("lastSyncAt");
-  const isBackfill = !lastSyncAt;
+  // Check if this is the first sync (backfill) — use server-side state
+  let isBackfill = true;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/sync-state`);
+    if (res.ok) {
+      const data = await res.json();
+      isBackfill = !data.last_sync_at;
+    }
+  } catch {}
 
   try {
     // Create background tab
@@ -603,7 +647,14 @@ async function finishSync() {
     // Non-fatal — backfill will happen next sync
   }
 
-  await chrome.storage.local.set({ lastSyncAt: Date.now() });
+  // Persist sync timestamp server-side (survives extension reinstalls)
+  try {
+    await fetch(`${SERVER_URL}/api/sync-state`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ last_sync_at: Date.now() }),
+    });
+  } catch {}
   await chrome.storage.session.set({
     syncInProgress: false,
     syncTabId: null,

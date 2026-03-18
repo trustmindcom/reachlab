@@ -45,35 +45,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-// Auto-detect video URLs on post pages (fire-and-forget, no backfill needed)
-if (location.href.includes("/feed/update/urn:li:activity:")) {
-  const postIdMatch = location.href.match(/activity:(\d+)/);
-  if (postIdMatch) {
-    // Wait for video to start loading so DASH playlist appears in performance entries
-    setTimeout(() => {
-      let videoUrl: string | null = null;
-      try {
-        const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
-        const dashEntry = entries.find(
-          (e) => e.name.includes("dms.licdn.com/playlist/vid/dash/")
-        );
-        if (dashEntry) videoUrl = dashEntry.name;
-      } catch {}
-      if (videoUrl && postIdMatch[1]) {
-        fetch("http://localhost:3210/api/ingest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            posts: [{
-              id: postIdMatch[1],
-              video_url: videoUrl,
-            }],
-          }),
-        }).catch(() => {});
-      }
-    }, 3000);
-  }
-}
+// Video URL capture is handled by the service worker's webRequest listener,
+// which intercepts DASH playlist requests at the network level (content scripts
+// can't access performance entries from the page's isolated world).
 
 async function requireSelector(
   selector: string,

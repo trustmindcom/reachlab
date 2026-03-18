@@ -3,8 +3,8 @@
   "name": "LinkedIn Analytics Collector",
   "version": "0.1.0",
   "description": "Collects your LinkedIn post analytics and stores them locally",
-  "permissions": ["alarms", "cookies", "scripting", "storage", "tabs", "webNavigation"],
-  "host_permissions": ["*://*.linkedin.com/*", "http://localhost:3210/*"],
+  "permissions": ["alarms", "cookies", "scripting", "storage", "tabs", "webNavigation", "webRequest"],
+  "host_permissions": ["*://*.linkedin.com/*", "*://*.licdn.com/*", "http://localhost:3210/*"],
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"

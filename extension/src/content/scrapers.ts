@@ -227,33 +227,10 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
     }
   }
 
-  // Extract video URL — LinkedIn uses DASH streaming, so check performance entries
-  // for the playlist manifest URL, then fall back to DOM elements
-  let videoUrl: string | null = null;
-  try {
-    const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
-    const dashEntry = entries.find(
-      (e) => e.name.includes("dms.licdn.com/playlist/vid/dash/")
-    );
-    if (dashEntry) {
-      videoUrl = dashEntry.name;
-    }
-  } catch {}
-  // Fallback: check DOM for direct video sources
-  if (!videoUrl) {
-    const videoEl = doc.querySelector(
-      'video source[src*="dms.licdn.com"], video source[type="video/mp4"], video[src*="dms.licdn.com"]'
-    );
-    if (videoEl) {
-      videoUrl = videoEl.getAttribute("src");
-    }
-  }
-  if (!videoUrl) {
-    const directVideo = doc.querySelector('video[src]') as HTMLVideoElement | null;
-    if (directVideo?.src && (directVideo.src.includes("licdn.com") || directVideo.src.includes("linkedin"))) {
-      videoUrl = directVideo.src;
-    }
-  }
+  // Video URL capture is handled by the service worker's webRequest listener
+  // (content scripts can't access performance entries from the page's isolated world,
+  // and LinkedIn videos use blob: URLs in the DOM, not direct src attributes).
+  const videoUrl: string | null = null;
 
   return { hook_text: hookText, full_text: fullText, image_urls: imageUrls, video_url: videoUrl };
 }
