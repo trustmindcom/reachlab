@@ -144,13 +144,27 @@ export async function transcribePost(
   const audioPath = path.join(tmpDir, `${postId}.wav`);
 
   try {
-    // Step 1: Download video
-    console.log(`[Transcribe] Downloading video for post ${postId}...`);
-    await downloadVideo(videoUrl, videoPath);
+    const isDash = videoUrl.includes("/playlist/vid/");
 
-    // Step 2: Extract audio
-    console.log(`[Transcribe] Extracting audio...`);
-    await extractAudio(videoPath, audioPath);
+    if (isDash) {
+      // DASH stream: ffmpeg downloads and extracts audio directly from the manifest URL
+      console.log(`[Transcribe] Downloading DASH stream and extracting audio for post ${postId}...`);
+      await execFileAsync("ffmpeg", [
+        "-i", videoUrl,
+        "-ar", "16000",
+        "-ac", "1",
+        "-c:a", "pcm_s16le",
+        "-y",
+        audioPath,
+      ], { timeout: 120000 });
+    } else {
+      // Direct video file: download then extract
+      console.log(`[Transcribe] Downloading video for post ${postId}...`);
+      await downloadVideo(videoUrl, videoPath);
+
+      console.log(`[Transcribe] Extracting audio...`);
+      await extractAudio(videoPath, audioPath);
+    }
 
     // Step 3: Transcribe
     console.log(`[Transcribe] Running whisper...`);

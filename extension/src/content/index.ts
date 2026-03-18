@@ -49,12 +49,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 if (location.href.includes("/feed/update/urn:li:activity:")) {
   const postIdMatch = location.href.match(/activity:(\d+)/);
   if (postIdMatch) {
-    // Wait a moment for video elements to load
+    // Wait for video to start loading so DASH playlist appears in performance entries
     setTimeout(() => {
-      const videoEl = document.querySelector(
-        'video source[src*="dms.licdn.com"], video source[type="video/mp4"], video[src*="dms.licdn.com"]'
-      );
-      const videoUrl = videoEl?.getAttribute("src");
+      let videoUrl: string | null = null;
+      try {
+        const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+        const dashEntry = entries.find(
+          (e) => e.name.includes("dms.licdn.com/playlist/vid/dash/")
+        );
+        if (dashEntry) videoUrl = dashEntry.name;
+      } catch {}
       if (videoUrl && postIdMatch[1]) {
         fetch("http://localhost:3210/api/ingest", {
           method: "POST",
@@ -67,7 +71,7 @@ if (location.href.includes("/feed/update/urn:li:activity:")) {
           }),
         }).catch(() => {});
       }
-    }, 2000);
+    }, 3000);
   }
 }
 

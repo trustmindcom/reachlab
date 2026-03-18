@@ -227,15 +227,27 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
     }
   }
 
-  // Extract video URL — look for video source in the post
+  // Extract video URL — LinkedIn uses DASH streaming, so check performance entries
+  // for the playlist manifest URL, then fall back to DOM elements
   let videoUrl: string | null = null;
-  const videoEl = doc.querySelector(
-    'video source[src*="dms.licdn.com"], video source[type="video/mp4"], video[src*="dms.licdn.com"]'
-  );
-  if (videoEl) {
-    videoUrl = videoEl.getAttribute("src");
+  try {
+    const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+    const dashEntry = entries.find(
+      (e) => e.name.includes("dms.licdn.com/playlist/vid/dash/")
+    );
+    if (dashEntry) {
+      videoUrl = dashEntry.name;
+    }
+  } catch {}
+  // Fallback: check DOM for direct video sources
+  if (!videoUrl) {
+    const videoEl = doc.querySelector(
+      'video source[src*="dms.licdn.com"], video source[type="video/mp4"], video[src*="dms.licdn.com"]'
+    );
+    if (videoEl) {
+      videoUrl = videoEl.getAttribute("src");
+    }
   }
-  // Fallback: check for video element with src attribute directly
   if (!videoUrl) {
     const directVideo = doc.querySelector('video[src]') as HTMLVideoElement | null;
     if (directVideo?.src && (directVideo.src.includes("licdn.com") || directVideo.src.includes("linkedin"))) {
