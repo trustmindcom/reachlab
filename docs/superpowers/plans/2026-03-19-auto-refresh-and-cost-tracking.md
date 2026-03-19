@@ -513,14 +513,237 @@ git commit -m "feat: backfill cost_cents for existing AI runs on startup"
 
 ---
 
+## Chunk 4: Sync Health Monitoring
+
+Detect when LinkedIn changes their page structure so syncs don't silently degrade.
+
+### Task 8: Fix LinkedIn URL change — use `/creator/top-posts`
+
+**Files:**
+- Modify: `extension/src/background/service-worker.ts`
+
+- [ ] **Step 1: Update scrape URL**
+
+In `extension/src/background/service-worker.ts`, change the navigation URLs (around line 196-198) from `analytics/creator/content` to `analytics/creator/top-posts`:
+
+```typescript
+      url: isBackfill
+        ? "https://www.linkedin.com/analytics/creator/top-posts?timeRange=past_365_days&metricType=IMPRESSIONS"
+        : "https://www.linkedin.com/analytics/creator/top-posts?metricType=IMPRESSIONS&timeRange=past_28_days",
+```
+
+Note: The content script at `extension/src/content/index.ts:89` already handles both `top-posts` and `content` URLs, so no change needed there.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add extension/src/background/service-worker.ts
+git commit -m "fix: LinkedIn moved post list to /creator/top-posts/ URL"
+```
+
+### Task 9: Add post count anomaly detection
+
+**Files:**
+- Modify: `extension/src/background/service-worker.ts`
+- Modify: `server/src/db/queries.ts` (or wherever `logScrape` is defined)
+- Modify: `server/src/app.ts`
+
+- [ ] **Step 1: Track expected vs actual post count on the server**
+
+Add a `sync_warnings` column to scrape_log or use the existing `error_details` field. In the `/api/ingest` endpoint in `server/src/app.ts`, after processing posts, compare the incoming post count against the historical average:
+
+```typescript
+    // Sync health check: detect post count anomalies
+    if (payload.posts && payload.posts.length > 0) {
+      const avgRow = db
+        .prepare(
+          `SELECT AVG(posts_count) as avg_count FROM (
+             SELECT posts_count FROM scrape_log
+             WHERE posts_count > 0
+             ORDER BY id DESC LIMIT 10
+           )`
+        )
+        .get() as { avg_count: number | null };
+
+      if (avgRow.avg_count && payload.posts.length < avgRow.avg_count * 0.3) {
+        const warning = `Post count anomaly: got ${payload.posts.length}, expected ~${Math.round(avgRow.avg_count)}. LinkedIn may have changed their page structure.`;
+        console.warn(`[Sync Health] ${warning}`);
+        upsertSetting(db, "sync_warning", JSON.stringify({
+          message: warning,
+          detected_at: new Date().toISOString(),
+          expected: Math.round(avgRow.avg_count),
+          actual: payload.posts.length,
+        }));
+      } else {
+        // Clear warning if count looks normal
+        const existing = getSetting(db, "sync_warning");
+        if (existing) {
+          db.prepare("DELETE FROM settings WHERE key = 'sync_warning'").run();
+        }
+      }
+    }
+```
+
+Note: Import `getSetting` and `upsertSetting` from `./db/ai-queries.js` — they're already used in the app via dynamic imports, but for this sync check, add a static import at the top of `app.ts` or use the existing `db.prepare` pattern inline.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add server/src/app.ts
+git commit -m "feat: detect post count anomalies on sync, store warning in settings"
+```
+
+### Task 10: Add selector health checks in content script
+
+**Files:**
+- Modify: `extension/src/content/index.ts`
+
+- [ ] **Step 1: Enhance error reporting with selector diagnostics**
+
+The `requireSelector` function at line 52-63 already throws when selectors are missing. Enhance the error message to include what selectors ARE present, to help diagnose what LinkedIn changed to:
+
+```typescript
+async function requireSelector(
+  selector: string,
+  pageName: string
+): Promise<void> {
+  const el = await waitForSelector(selector);
+  if (!el) {
+    // Gather diagnostic info about what IS on the page
+    const bodyClasses = document.body.className;
+    const mainSelectors = [
+      ".member-analytics-addon__mini-update-item",
+      ".member-analytics-addon-card__base-card",
+      ".member-analytics-addon-summary__list-item",
+      ".artdeco-card",
+      "[data-test-id]",
+    ];
+    const found = mainSelectors
+      .filter((s) => document.querySelector(s))
+      .join(", ");
+
+    throw new Error(
+      `[${pageName}] Expected selector "${selector}" not found. ` +
+        `LinkedIn may have changed their page structure. ` +
+        `Page has: ${found || "no known selectors"}. ` +
+        `Body classes: ${bodyClasses.slice(0, 200)}`
+    );
+  }
+}
+```
+
+This error propagates back to the service worker and gets logged, making it much easier to diagnose what changed.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add extension/src/content/index.ts
+git commit -m "feat: add selector diagnostics to content script error reporting"
+```
+
+### Task 11: Add staleness detection on the server
+
+**Files:**
+- Modify: `server/src/app.ts`
+- Modify: `server/src/routes/insights.ts` (or `settings.ts`)
+
+- [ ] **Step 1: After ingest, check if newest scraped post is stale**
+
+In the `/api/ingest` handler in `server/src/app.ts`, after upserting posts, compare the newest ingested post's `published_at` against the server's current time. If the newest post is more than 48 hours old but there's clear evidence the user has been posting (e.g., we've seen posts at a regular cadence), flag it:
+
+```typescript
+    // Staleness detection: newest scraped post shouldn't be much older than expected
+    if (payload.posts && payload.posts.length > 0) {
+      const newestPost = payload.posts.reduce((a, b) =>
+        new Date(a.published_at) > new Date(b.published_at) ? a : b
+      );
+      const newestAge = Date.now() - new Date(newestPost.published_at).getTime();
+      const twoDaysMs = 48 * 60 * 60 * 1000;
+
+      // Check average posting frequency from DB
+      const freqRow = db
+        .prepare(
+          `SELECT COUNT(*) as count FROM posts
+           WHERE published_at > datetime('now', '-30 days')`
+        )
+        .get() as { count: number };
+
+      // If user posts frequently (>2/week) but newest scraped post is >48h old, warn
+      if (freqRow.count >= 8 && newestAge > twoDaysMs) {
+        const warning = `Stale sync: newest scraped post is ${Math.round(newestAge / 3600000)}h old, but you typically post ${freqRow.count} times/month. A recent post may be missing.`;
+        console.warn(`[Sync Health] ${warning}`);
+        upsertSetting(db, "sync_stale_warning", JSON.stringify({
+          message: warning,
+          detected_at: new Date().toISOString(),
+          newest_post_age_hours: Math.round(newestAge / 3600000),
+        }));
+      } else {
+        const existing = getSetting(db, "sync_stale_warning");
+        if (existing) {
+          db.prepare("DELETE FROM settings WHERE key = 'sync_stale_warning'").run();
+        }
+      }
+    }
+```
+
+- [ ] **Step 2: Add a sync health endpoint**
+
+In `server/src/routes/settings.ts`, add an endpoint that returns all active warnings:
+
+```typescript
+  app.get("/api/settings/sync-health", async () => {
+    const warning = getSetting(db, "sync_warning");
+    const staleWarning = getSetting(db, "sync_stale_warning");
+    return {
+      warnings: [
+        ...(warning ? [JSON.parse(warning)] : []),
+        ...(staleWarning ? [JSON.parse(staleWarning)] : []),
+      ],
+    };
+  });
+```
+
+- [ ] **Step 3: Surface warnings in the dashboard**
+
+Add a sync health check to the Overview page (`dashboard/src/pages/Overview.tsx`). On mount, fetch `/api/settings/sync-health`. If warnings exist, display a yellow banner at the top:
+
+```tsx
+{syncWarnings.length > 0 && (
+  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm text-yellow-200">
+    <span className="font-medium">Sync issue detected:</span>{" "}
+    {syncWarnings[0].message}
+  </div>
+)}
+```
+
+Add corresponding API client method:
+
+```typescript
+  getSyncHealth: () =>
+    get<{ warnings: Array<{ message: string; detected_at: string }> }>("/settings/sync-health"),
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add server/src/app.ts server/src/routes/settings.ts dashboard/src/api/client.ts dashboard/src/pages/Overview.tsx
+git commit -m "feat: add staleness detection and sync health warnings in dashboard"
+```
+
+---
+
 ## Summary
 
 | Task | What | Files |
 |------|------|-------|
-| 1 | Cost calculation helper | `client.ts` |
+| 1 | Cost calculation helper | `client.ts` (server) |
 | 2 | Split pipeline into tagging + full | `orchestrator.ts`, `ai-queries.ts` |
 | 3 | Two-tier auto-trigger on sync | `app.ts` |
 | 4 | Settings + run history API endpoints | `settings.ts`, `insights.ts` |
 | 5 | Dashboard API client methods | `client.ts` (dashboard) |
 | 6 | Settings page redesign | `Settings.tsx` |
 | 7 | Backfill existing run costs | `insights.ts` |
+| 8 | Fix LinkedIn URL change | `service-worker.ts` |
+| 9 | Post count anomaly detection | `app.ts` |
+| 10 | Selector health checks | `content/index.ts` |
+| 11 | Staleness detection + dashboard warnings | `app.ts`, `settings.ts`, `Overview.tsx` |
