@@ -486,11 +486,11 @@ export const api = {
       return r.json() as Promise<GenCombineResponse>;
     }),
 
-  generateRevise: (generationId: number, action: string, instruction?: string) =>
+  generateRevise: (generationId: number, action: string, instruction?: string, editedDraft?: string) =>
     fetch(`${BASE_URL}/generate/revise`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ generation_id: generationId, action, instruction }),
+      body: JSON.stringify({ generation_id: generationId, action, instruction, edited_draft: editedDraft }),
     }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<GenReviseResponse>;

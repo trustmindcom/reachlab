@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { api, type GenStory } from "../../api/client";
 import StoryCard from "./components/StoryCard";
 
@@ -46,8 +46,11 @@ export default function StorySelection({ gen, setGen, loading, setLoading, onNex
     }
   };
 
-  // Auto-research on first mount if no stories
+  // Auto-research on first mount if no stories (ref guard for StrictMode)
+  const didMount = useRef(false);
   useEffect(() => {
+    if (didMount.current) return;
+    didMount.current = true;
     if (gen.stories.length === 0 && !loading) {
       doResearch(gen.postType);
     }

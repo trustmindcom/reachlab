@@ -90,7 +90,7 @@ export default function Generate() {
           />
         )}
         {subTab === "Rules" && <Rules />}
-        {subTab === "History" && <GenerationHistory onOpen={(id) => {
+        {subTab === "Generation History" && <GenerationHistory onOpen={(id) => {
           // TODO: restore generation from history
           setSubTab("Generate");
         }} />}

@@ -233,10 +233,11 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   // ── Revise ───────────────────────────────────────────────
 
   app.post("/api/generate/revise", async (request, reply) => {
-    const { generation_id, action, instruction } = request.body as {
+    const { generation_id, action, instruction, edited_draft } = request.body as {
       generation_id: number;
       action: "regenerate" | "shorten" | "strengthen_close" | "custom";
       instruction?: string;
+      edited_draft?: string;
     };
 
     const validActions = ["regenerate", "shorten", "strengthen_close", "custom"];
@@ -272,7 +273,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
         messages: [
           {
             role: "user",
-            content: `${actionPrompts[action]}\n\n## Current Draft\n${gen.final_draft}\n\nReturn the revised post as plain text only.`,
+            content: `${actionPrompts[action]}\n\n## Current Draft\n${edited_draft ?? gen.final_draft}\n\nReturn the revised post as plain text only.`,
           },
         ],
       });

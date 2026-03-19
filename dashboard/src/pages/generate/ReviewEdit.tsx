@@ -45,7 +45,7 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
     if (!gen.generationId) return;
     setLoading(true);
     try {
-      const res = await api.generateRevise(gen.generationId, action, customInstruction);
+      const res = await api.generateRevise(gen.generationId, action, customInstruction, localDraft);
       setGen((prev: any) => ({
         ...prev,
         finalDraft: res.final_draft,
@@ -156,12 +156,20 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
 
       {/* Bottom bar */}
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-gen-border-1">
-        <button
-          onClick={onBack}
-          className="text-[13px] text-gen-text-2 hover:text-gen-text-0 transition-colors"
-        >
-          Back to drafts
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="text-[13px] text-gen-text-2 hover:text-gen-text-0 transition-colors"
+          >
+            Back to drafts
+          </button>
+          <button
+            onClick={onReset}
+            className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors"
+          >
+            Start new
+          </button>
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={handleCopy}
