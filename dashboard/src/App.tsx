@@ -6,8 +6,9 @@ import Coach from "./pages/Coach";
 import Timing from "./pages/Timing";
 import Followers from "./pages/Followers";
 import Settings from "./pages/Settings";
+import Generate from "./pages/Generate";
 
-const tabs = ["Overview", "Posts", "Coach", "Timing", "Followers", "Settings"] as const;
+const tabs = ["Overview", "Posts", "Coach", "Generate", "Timing", "Followers", "Settings"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function App() {
@@ -86,6 +87,7 @@ export default function App() {
         {tab === "Overview" && <Overview />}
         {tab === "Posts" && <Posts />}
         {tab === "Coach" && <Coach />}
+        {tab === "Generate" && <Generate />}
         {tab === "Timing" && <Timing />}
         {tab === "Followers" && <Followers />}
         {tab === "Settings" && <Settings />}

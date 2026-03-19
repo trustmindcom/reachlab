@@ -220,6 +220,113 @@ export interface HealthData {
   };
 }
 
+// ── Generate Pipeline Types ─────────────────────────────────
+
+export interface GenStory {
+  headline: string;
+  summary: string;
+  source: string;
+  age: string;
+  tag: string;
+  angles: string[];
+  is_stretch: boolean;
+}
+
+export interface GenDraft {
+  type: "contrarian" | "operator" | "future";
+  hook: string;
+  body: string;
+  closing: string;
+  word_count: number;
+  structure_label: string;
+}
+
+export interface GenQualityCheck {
+  name: string;
+  status: "pass" | "warn";
+  detail: string;
+}
+
+export interface GenQualityGate {
+  passed: boolean;
+  checks: GenQualityCheck[];
+}
+
+export interface GenResearchResponse {
+  research_id: number;
+  stories: GenStory[];
+  article_count: number;
+  source_count: number;
+}
+
+export interface GenDraftsResponse {
+  generation_id: number;
+  drafts: GenDraft[];
+}
+
+export interface GenCombineResponse {
+  final_draft: string;
+  quality_gate: GenQualityGate;
+}
+
+export interface GenReviseResponse {
+  final_draft: string;
+  quality_gate: GenQualityGate;
+}
+
+export interface GenRule {
+  id?: number;
+  rule_text: string;
+  example_text?: string | null;
+  sort_order: number;
+}
+
+export interface GenRulesResponse {
+  categories: {
+    voice_tone: GenRule[];
+    structure_formatting: GenRule[];
+    anti_ai_tropes: { enabled: boolean; rules: GenRule[] };
+  };
+}
+
+export interface GenHistoryItem {
+  id: number;
+  hook_excerpt: string;
+  story_headline: string;
+  drafts_used: number;
+  post_type: string;
+  status: string;
+  created_at: string;
+}
+
+export interface GenHistoryResponse {
+  generations: GenHistoryItem[];
+  total: number;
+}
+
+export interface GenCoachingChange {
+  id: number;
+  type: "new" | "updated" | "retire";
+  title: string;
+  evidence: string;
+  old_text?: string;
+  new_text?: string;
+  insight_id?: number;
+}
+
+export interface GenCoachingSyncResponse {
+  sync_id: number;
+  changes: GenCoachingChange[];
+}
+
+export interface GenCoachingInsight {
+  id: number;
+  title: string;
+  prompt_text: string;
+  evidence: string | null;
+  status: string;
+}
+
 export const api = {
   overview: (params?: { since?: string; until?: string }) => {
     const q = new URLSearchParams();
@@ -346,4 +453,105 @@ export const api = {
   // Sync health
   getSyncHealth: () =>
     get<{ warnings: Array<{ message: string; detected_at: string }> }>("/settings/sync-health"),
+
+  // ── Generate Pipeline ─────────────────────────────────────
+
+  generateResearch: (postType: string) =>
+    fetch(`${BASE_URL}/generate/research`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ post_type: postType }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenResearchResponse>;
+    }),
+
+  generateDrafts: (researchId: number, storyIndex: number, postType: string) =>
+    fetch(`${BASE_URL}/generate/drafts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ research_id: researchId, story_index: storyIndex, post_type: postType }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenDraftsResponse>;
+    }),
+
+  generateCombine: (generationId: number, selectedDrafts: number[], combiningGuidance?: string) =>
+    fetch(`${BASE_URL}/generate/combine`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generation_id: generationId, selected_drafts: selectedDrafts, combining_guidance: combiningGuidance }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenCombineResponse>;
+    }),
+
+  generateRevise: (generationId: number, action: string, instruction?: string) =>
+    fetch(`${BASE_URL}/generate/revise`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generation_id: generationId, action, instruction }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenReviseResponse>;
+    }),
+
+  // ── Generate Rules ────────────────────────────────────────
+
+  generateGetRules: () =>
+    get<GenRulesResponse>("/generate/rules"),
+
+  generateSaveRules: (categories: GenRulesResponse["categories"]) =>
+    fetch(`${BASE_URL}/generate/rules`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categories }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json();
+    }),
+
+  generateResetRules: () =>
+    fetch(`${BASE_URL}/generate/rules/reset`, { method: "POST" }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenRulesResponse>;
+    }),
+
+  // ── Generate History ──────────────────────────────────────
+
+  generateHistory: (status = "all", offset = 0, limit = 20) =>
+    get<GenHistoryResponse>(`/generate/history?status=${status}&offset=${offset}&limit=${limit}`),
+
+  generateHistoryDetail: (id: number) =>
+    get<any>(`/generate/history/${id}`),
+
+  generateDiscard: (id: number) =>
+    fetch(`${BASE_URL}/generate/history/${id}/discard`, { method: "POST" }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json();
+    }),
+
+  // ── Coaching Sync ─────────────────────────────────────────
+
+  generateCoachingAnalyze: () =>
+    fetch(`${BASE_URL}/generate/coaching/analyze`, { method: "POST" }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenCoachingSyncResponse>;
+    }),
+
+  generateCoachingDecide: (changeId: number, action: string, editedText?: string) =>
+    fetch(`${BASE_URL}/generate/coaching/changes/${changeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, edited_text: editedText }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json();
+    }),
+
+  generateCoachingHistory: () =>
+    get<{ syncs: any[] }>("/generate/coaching/history"),
+
+  generateCoachingInsights: () =>
+    get<{ insights: GenCoachingInsight[] }>("/generate/coaching/insights"),
 };
