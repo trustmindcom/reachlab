@@ -12,7 +12,6 @@ import {
   seedDefaultRules,
   getRules,
   getActiveCoachingInsights,
-  insertCoachingInsight,
   type Story,
   type Draft,
 } from "../db/generate-queries.js";

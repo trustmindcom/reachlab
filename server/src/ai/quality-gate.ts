@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./client.js";
 import { AiLogger } from "./logger.js";
-import type { GenerationRule, CoachingInsight, QualityGate, QualityCheck } from "../db/generate-queries.js";
+import type { GenerationRule, CoachingInsight, QualityGate } from "../db/generate-queries.js";
 
 /**
  * Run quality gate assessment on a final draft.
