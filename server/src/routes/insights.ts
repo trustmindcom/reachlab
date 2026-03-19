@@ -18,10 +18,31 @@ import {
   getEngagementQuality,
   getSparklineData,
 } from "../db/ai-queries.js";
-import { createClient } from "../ai/client.js";
+import { createClient, calculateCostCents } from "../ai/client.js";
 import { runPipeline } from "../ai/orchestrator.js";
 
 export function registerInsightsRoutes(app: FastifyInstance, db: Database.Database): void {
+  // Backfill costs for existing runs (runs once, idempotent)
+  const runsToBackfill = db
+    .prepare(
+      "SELECT id FROM ai_runs WHERE status = 'completed' AND (total_cost_cents = 0 OR total_cost_cents IS NULL)"
+    )
+    .all() as { id: number }[];
+
+  if (runsToBackfill.length > 0) {
+    for (const run of runsToBackfill) {
+      const logs = db
+        .prepare("SELECT model, input_tokens, output_tokens FROM ai_logs WHERE run_id = ?")
+        .all(run.id) as Array<{ model: string; input_tokens: number; output_tokens: number }>;
+      if (logs.length === 0) continue; // No logs = genuinely free run, skip
+      const cost = calculateCostCents(logs);
+      if (cost > 0) {
+        db.prepare("UPDATE ai_runs SET total_cost_cents = ? WHERE id = ?").run(cost, run.id);
+      }
+    }
+    console.log(`[Cost Backfill] Checked ${runsToBackfill.length} runs for missing costs`);
+  }
+
   app.get("/api/insights", async () => ({
     recommendations: getRecommendations(db),
     insights: getActiveInsights(db),
