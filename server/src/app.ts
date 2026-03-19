@@ -217,22 +217,54 @@ export function buildApp(dbPath: string) {
       }).catch(() => {});
     }
 
-    // Auto-trigger AI pipeline if conditions met
+    // Auto-trigger AI pipeline (two-tier)
     const aiApiKey = process.env.TRUSTMIND_LLM_API_KEY;
     if (aiApiKey && postsUpserted > 0) {
-      // Dynamic import to avoid issues when AI features are disabled
       Promise.all([
         import("./ai/orchestrator.js"),
         import("./db/ai-queries.js"),
         import("./ai/client.js"),
-      ]).then(([{ runPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun }, { createClient }]) => {
+      ]).then(([{ runTaggingPipeline, runFullPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun, getSetting }, { createClient }]) => {
         if (getRunningRun(db)) return;
         const postCount = getPostCountWithMetrics(db);
         if (postCount < 10) return;
-        const lastRun = getLatestCompletedRun(db);
-        if (lastRun && (postCount - lastRun.post_count) < 3) return;
+
         const client = createClient(aiApiKey);
-        runPipeline(client, db, "sync").catch((err: any) => {
+
+        // Always run cheap tagging pipeline on sync
+        runTaggingPipeline(client, db, "sync_tagging").then(() => {
+          // After tagging, check if full interpretation should run
+          const schedule = getSetting(db, "auto_interpret_schedule") ?? "weekly";
+          if (schedule === "off") return;
+
+          // Only consider full pipeline runs (not tagging-only)
+          const lastFullRun = db.prepare(
+            "SELECT id, post_count, completed_at FROM ai_runs WHERE status = 'completed' AND triggered_by NOT LIKE '%tagging%' ORDER BY id DESC LIMIT 1"
+          ).get() as { id: number; post_count: number; completed_at: string } | undefined;
+
+          const newPosts = lastFullRun ? postCount - lastFullRun.post_count : postCount;
+          if (newPosts < 1) return; // No new posts, skip
+
+          // Check post threshold
+          const postThreshold = parseInt(getSetting(db, "auto_interpret_post_threshold") ?? "5", 10);
+          const postThresholdMet = newPosts >= postThreshold;
+
+          // Check time threshold
+          let timeThresholdMet = !lastFullRun; // Always run if never run before
+          if (lastFullRun && schedule !== "off") {
+            const lastRunTime = new Date(lastFullRun.completed_at + "Z").getTime();
+            const now = Date.now();
+            const msPerDay = 86400000;
+            const interval = schedule === "daily" ? msPerDay : 7 * msPerDay;
+            timeThresholdMet = (now - lastRunTime) >= interval;
+          }
+
+          if (postThresholdMet || timeThresholdMet) {
+            runFullPipeline(client, db, "auto").catch((err: any) => {
+              console.error("[AI Pipeline] Auto-trigger failed:", err.message);
+            });
+          }
+        }).catch((err: any) => {
           console.error("[AI Pipeline] Auto-trigger failed:", err.message);
         });
       }).catch(() => {});
