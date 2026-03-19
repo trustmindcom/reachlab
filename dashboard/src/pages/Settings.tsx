@@ -52,6 +52,10 @@ export default function Settings() {
   const [runsOpen, setRunsOpen] = useState(false);
   const thresholdTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  useEffect(() => {
+    return () => { clearTimeout(thresholdTimer.current); };
+  }, []);
+
   // ── Load data ────────────────────────────────────────────
   useEffect(() => {
     fetch("/api/settings/author-photo", { method: "HEAD" })
