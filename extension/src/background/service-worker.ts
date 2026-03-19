@@ -194,8 +194,8 @@ async function startSync() {
     const tab = await chrome.tabs.create({
       active: false,
       url: isBackfill
-        ? "https://www.linkedin.com/analytics/creator/content?timeRange=past_365_days&metricType=IMPRESSIONS"
-        : "https://www.linkedin.com/analytics/creator/content?metricType=IMPRESSIONS&timeRange=past_28_days",
+        ? "https://www.linkedin.com/analytics/creator/top-posts?timeRange=past_365_days&metricType=IMPRESSIONS"
+        : "https://www.linkedin.com/analytics/creator/top-posts?metricType=IMPRESSIONS&timeRange=past_28_days",
     });
 
     if (!tab.id) throw new Error("Failed to create background tab");
@@ -374,9 +374,18 @@ async function scrapePostContent(
   const postUrl = `https://www.linkedin.com/feed/update/urn:li:activity:${postId}/`;
   await chrome.tabs.update(tabId, { url: postUrl });
   await waitForTabLoad(tabId);
+  // Brief delay to ensure content script is injected on the new page
+  await new Promise((r) => setTimeout(r, 500));
 
   // Phase 1: Scrape BEFORE "see more" click — captures hook_text (truncated view)
-  const hookResult = await sendScrapeCommand(tabId);
+  let hookResult = await sendScrapeCommand(tabId);
+
+  // Retry once if the scrape missed (e.g. content script saw stale page)
+  if (hookResult.type !== "post-content") {
+    await new Promise((r) => setTimeout(r, 2000));
+    hookResult = await sendScrapeCommand(tabId);
+  }
+
   let hookText: string | null = null;
   let imageUrls: string[] = [];
   let videoUrl: string | null = null;
@@ -385,6 +394,11 @@ async function scrapePostContent(
     hookText = hookResult.data.hook_text;
     imageUrls = hookResult.data.image_urls;
     videoUrl = hookResult.data.video_url ?? null;
+  } else {
+    console.warn(
+      `[ReachLab] Post content scrape returned ${hookResult.type} for ${postId}:`,
+      "error" in hookResult ? hookResult.error : "unknown"
+    );
   }
 
   // Phase 2: Click "see more" if present, then re-scrape for full_text
@@ -690,11 +704,17 @@ function waitForTabLoad(tabId: number): Promise<void> {
       reject(new Error("Tab load timeout"));
     }, 30000);
 
+    // Track whether we've seen a loading state first to avoid resolving
+    // on a stale "complete" from the previous page.
+    let sawLoading = false;
+
     function listener(
       updatedTabId: number,
       changeInfo: chrome.tabs.TabChangeInfo
     ) {
-      if (updatedTabId === tabId && changeInfo.status === "complete") {
+      if (updatedTabId !== tabId) return;
+      if (changeInfo.status === "loading") sawLoading = true;
+      if (changeInfo.status === "complete" && sawLoading) {
         clearTimeout(timeout);
         chrome.tabs.onUpdated.removeListener(listener);
         resolve();
