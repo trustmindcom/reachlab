@@ -35,6 +35,7 @@ import { generateDrafts } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
 import { coachCheck } from "../ai/coach-check.js";
 import { analyzeCoaching } from "../ai/coaching-analyzer.js";
+import { discoverTopics } from "../ai/discovery.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -571,5 +572,31 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   app.get("/api/generate/coaching/insights", async () => {
     const insights = getActiveCoachingInsights(db);
     return { insights };
+  });
+
+  // ── Discovery ──────────────────────────────────────────────
+
+  app.post("/api/generate/discover", async (_request, reply) => {
+    const client = getClient();
+    const runId = createRun(db, "generate_discover", 0);
+    const logger = new AiLogger(db, runId);
+
+    try {
+      const result = await discoverTopics(client, db, logger);
+
+      const logs = db
+        .prepare("SELECT model, input_tokens, output_tokens FROM ai_logs WHERE run_id = ?")
+        .all(runId) as Array<{ model: string; input_tokens: number; output_tokens: number }>;
+      completeRun(db, runId, {
+        input_tokens: logs.reduce((s, l) => s + l.input_tokens, 0),
+        output_tokens: logs.reduce((s, l) => s + l.output_tokens, 0),
+        cost_cents: calculateCostCents(logs),
+      });
+
+      return result;
+    } catch (err: any) {
+      failRun(db, runId, err.message);
+      return reply.status(500).send({ error: err.message });
+    }
   });
 }

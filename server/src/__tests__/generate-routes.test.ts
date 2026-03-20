@@ -167,3 +167,10 @@ describe("PATCH /api/generate/coaching/changes/:id", () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe("POST /api/generate/discover", () => {
+  it("endpoint is registered and returns error without API key", async () => {
+    const res = await app.inject({ method: "POST", url: "/api/generate/discover" });
+    expect(res.statusCode).toBe(500);
+  });
+});
