@@ -60,6 +60,12 @@ export interface QualityGate {
   checks: QualityCheck[];
 }
 
+// New coach-check quality shape
+export interface CoachCheckQuality {
+  expertise_needed: Array<{ area: string; question: string }>;
+  alignment: Array<{ dimension: string; summary: string }>;
+}
+
 export interface GenerationRecord {
   id: number;
   research_id: number | null;

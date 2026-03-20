@@ -33,7 +33,7 @@ import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
 import { generateDrafts } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
-import { runQualityGate } from "../ai/quality-gate.js";
+import { coachCheck } from "../ai/coach-check.js";
 import { analyzeCoaching } from "../ai/coaching-analyzer.js";
 
 function getClient(): Anthropic {
@@ -204,29 +204,19 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     try {
       const combineResult = await combineDrafts(client, logger, drafts, selected_drafts, combining_guidance, gen.prompt_snapshot ?? undefined);
 
-      // Run quality gate
+      // Run coach-check
       const rules = getRules(db);
       const insights = getActiveCoachingInsights(db);
-      const qualityGate = await runQualityGate(client, logger, combineResult.final_draft, rules, insights);
-
-      // Save revision if combining happened
-      if (selected_drafts.length > 1) {
-        insertRevision(db, {
-          generation_id,
-          action: "combine",
-          input_draft: selected_drafts.map((i) => `Draft ${i + 1}`).join(" + "),
-          output_draft: combineResult.final_draft,
-          quality_gate_json: JSON.stringify(qualityGate),
-          input_tokens: combineResult.input_tokens,
-          output_tokens: combineResult.output_tokens,
-          cost_cents: calculateCostCents([{ model: MODELS.SONNET, input_tokens: combineResult.input_tokens, output_tokens: combineResult.output_tokens }]),
-        });
-      }
+      const coachResult = await coachCheck(client, logger, combineResult.final_draft, rules, insights);
+      const qualityData = {
+        expertise_needed: coachResult.expertise_needed,
+        alignment: coachResult.alignment,
+      };
 
       const genUpdate: Parameters<typeof updateGeneration>[2] = {
         selected_draft_indices: JSON.stringify(selected_drafts),
-        final_draft: combineResult.final_draft,
-        quality_gate_json: JSON.stringify(qualityGate),
+        final_draft: coachResult.draft,
+        quality_gate_json: JSON.stringify(qualityData),
       };
       if (combining_guidance !== undefined) {
         genUpdate.combining_guidance = combining_guidance;
@@ -242,7 +232,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
         cost_cents: calculateCostCents(logs),
       });
 
-      return { final_draft: combineResult.final_draft, quality_gate: qualityGate };
+      return { final_draft: coachResult.draft, quality: qualityData };
     } catch (err: any) {
       failRun(db, runId, err.message);
       return reply.status(500).send({ error: err.message });
