@@ -25,6 +25,8 @@ import {
   getRecentStoryHeadlines,
   getPostTypeTemplate,
   DEFAULT_RULES,
+  insertGenerationMessage,
+  getGenerationMessages,
 } from "../db/generate-queries.js";
 import { initDatabase } from "../db/index.js";
 
@@ -238,5 +240,43 @@ describe("getRecentStoryHeadlines", () => {
     // The limited query should return fewer headlines
     expect(oneSession.length).toBeLessThan(allHeadlines.length);
     expect(oneSession.length).toBeGreaterThan(0);
+  });
+});
+
+describe("generation_messages queries", () => {
+  it("inserts and retrieves messages", () => {
+    // First insert a research record and generation to satisfy FK
+    const researchId = insertResearch(db, {
+      post_type: "general",
+      stories_json: "[]",
+    });
+    const genId = insertGeneration(db, {
+      research_id: researchId,
+      post_type: "general",
+      selected_story_index: 0,
+      drafts_json: "[]",
+    });
+
+    const msgId = insertGenerationMessage(db, {
+      generation_id: genId,
+      role: "user",
+      content: "Make it shorter",
+    });
+    expect(msgId).toBeGreaterThan(0);
+
+    const assistantId = insertGenerationMessage(db, {
+      generation_id: genId,
+      role: "assistant",
+      content: "Here is the shortened version",
+      draft_snapshot: "shortened draft text",
+      quality_json: '{"expertise_needed":[],"alignment":[]}',
+    });
+    expect(assistantId).toBeGreaterThan(msgId);
+
+    const messages = getGenerationMessages(db, genId);
+    expect(messages).toHaveLength(2);
+    // Ordered DESC so most recent first
+    expect(messages[0].role).toBe("assistant");
+    expect(messages[1].role).toBe("user");
   });
 });

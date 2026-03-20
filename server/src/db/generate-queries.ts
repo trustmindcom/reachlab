@@ -487,3 +487,46 @@ export const DEFAULT_RULES: Array<{ category: string; rule_text: string; example
 export function seedDefaultRules(db: Database.Database): void {
   replaceAllRules(db, DEFAULT_RULES);
 }
+
+// ── Generation Messages (chat history) ───────────────────
+
+export interface GenerationMessage {
+  id: number;
+  generation_id: number;
+  role: string;
+  content: string;
+  draft_snapshot: string | null;
+  quality_json: string | null;
+  created_at: string;
+}
+
+export function insertGenerationMessage(
+  db: Database.Database,
+  data: {
+    generation_id: number;
+    role: string;
+    content: string;
+    draft_snapshot?: string;
+    quality_json?: string;
+  }
+): number {
+  const result = db
+    .prepare(
+      `INSERT INTO generation_messages (generation_id, role, content, draft_snapshot, quality_json)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(data.generation_id, data.role, data.content, data.draft_snapshot ?? null, data.quality_json ?? null);
+  return Number(result.lastInsertRowid);
+}
+
+export function getGenerationMessages(
+  db: Database.Database,
+  generationId: number,
+  limit: number = 20
+): GenerationMessage[] {
+  return db
+    .prepare(
+      `SELECT * FROM generation_messages WHERE generation_id = ? ORDER BY id DESC LIMIT ?`
+    )
+    .all(generationId, limit) as GenerationMessage[];
+}
