@@ -8,7 +8,6 @@ import {
   getGeneration,
   updateGeneration,
   listGenerations,
-  insertRevision,
   getRules,
   replaceAllRules,
   seedDefaultRules,
@@ -24,6 +23,8 @@ import {
   updateCoachingInsight,
   insertTopicLog,
   getAntiAiTropesEnabled,
+  insertGenerationMessage,
+  getGenerationMessages,
   type Story,
   type Draft,
 } from "../db/generate-queries.js";
@@ -228,19 +229,17 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     }
   });
 
-  // ── Revise ───────────────────────────────────────────────
+  // ── Chat (replaces Revise) ───────────────────────────────
 
-  app.post("/api/generate/revise", async (request, reply) => {
-    const { generation_id, action, instruction, edited_draft } = request.body as {
+  app.post("/api/generate/chat", async (request, reply) => {
+    const { generation_id, message, edited_draft } = request.body as {
       generation_id: number;
-      action: "regenerate" | "shorten" | "strengthen_close" | "custom";
-      instruction?: string;
+      message: string;
       edited_draft?: string;
     };
 
-    const validActions = ["regenerate", "shorten", "strengthen_close", "custom"];
-    if (!validActions.includes(action)) {
-      return reply.status(400).send({ error: "action must be one of: regenerate, shorten, strengthen_close, custom" });
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return reply.status(400).send({ error: "message is required" });
     }
 
     const gen = getGeneration(db, generation_id);
@@ -248,43 +247,63 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(404).send({ error: "Generation not found or no final draft" });
     }
 
-    const actionPrompts: Record<string, string> = {
-      regenerate: "Rewrite this LinkedIn post from scratch, keeping the same core idea but finding a fresher angle and stronger hook.",
-      shorten: "Make this LinkedIn post shorter and punchier. Cut anything that doesn't earn its place. Target 20-30% shorter.",
-      strengthen_close: "Rewrite just the closing of this LinkedIn post. Make it a sharper question that invites informed disagreement or practitioner reflection.",
-      custom: instruction ?? "Improve this post.",
-    };
-
     const client = getClient();
-    const runId = createRun(db, "generate_revise", 0);
+    const runId = createRun(db, "generate_chat", 0);
     const logger = new AiLogger(db, runId);
 
     try {
-      // Use the stored prompt snapshot as system context so revisions respect writing rules
-      const systemPrompt = gen.prompt_snapshot ?? "You are a LinkedIn post ghostwriter.";
+      const history = getGenerationMessages(db, generation_id, 20).reverse();
+
+      const rules = getRules(db);
+      const insights = getActiveCoachingInsights(db);
+      const rulesText = rules.filter((r) => r.enabled).map((r) => `- [${r.category}] ${r.rule_text}`).join("\n");
+      const insightsText = insights.map((i) => `- ${i.prompt_text}`).join("\n");
+
+      const systemPrompt = `You are a LinkedIn post revision assistant. Make targeted changes based on user feedback — do not full-rewrite unless asked.
+
+## Writing Rules
+${rulesText}
+
+## Coaching Insights
+${insightsText}
+
+When the user gives framing/perspective feedback, apply it and briefly explain what changed. If the user's feedback is ambiguous, ask one clarifying question before rewriting.
+
+Return JSON only:
+{
+  "draft": "the full revised draft",
+  "explanation": "1-2 sentences explaining what changed and why"
+}`;
+
+      const currentDraft = edited_draft ?? gen.final_draft;
+      const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+      for (const msg of history) {
+        messages.push({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+        });
+      }
+
+      const userContent = `## Current Draft\n${currentDraft}\n\n## Instruction\n${message.trim()}`;
+      messages.push({ role: "user", content: userContent });
 
       const start = Date.now();
       const response = await client.messages.create({
         model: MODELS.SONNET,
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: systemPrompt,
-        messages: [
-          {
-            role: "user",
-            content: `${actionPrompts[action]}\n\n## Current Draft\n${edited_draft ?? gen.final_draft}\n\nReturn the revised post as plain text only.`,
-          },
-        ],
+        messages,
       });
 
       const duration = Date.now() - start;
-      const revisedDraft =
-        response.content[0].type === "text" ? response.content[0].text.trim() : "";
+      const text = response.content[0].type === "text" ? response.content[0].text : "";
 
       logger.log({
-        step: `revise_${action}`,
+        step: "chat_revision",
         model: MODELS.SONNET,
-        input_messages: JSON.stringify([{ role: "user", content: actionPrompts[action] }]),
-        output_text: revisedDraft,
+        input_messages: JSON.stringify(messages.slice(-1)),
+        output_text: text,
         tool_calls: null,
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,
@@ -292,26 +311,45 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
         duration_ms: duration,
       });
 
-      // Re-run quality gate
-      const rules = getRules(db);
-      const insights = getActiveCoachingInsights(db);
-      const qualityGate = await runQualityGate(client, logger, revisedDraft, rules, insights);
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      let revisedDraft = currentDraft;
+      let explanation = "";
 
-      insertRevision(db, {
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          revisedDraft = parsed.draft ?? currentDraft;
+          explanation = parsed.explanation ?? "";
+        } catch {
+          revisedDraft = text.trim();
+        }
+      } else {
+        revisedDraft = text.trim();
+      }
+
+      const coachResult = await coachCheck(client, logger, revisedDraft, rules, insights);
+      const qualityData = {
+        expertise_needed: coachResult.expertise_needed,
+        alignment: coachResult.alignment,
+      };
+
+      insertGenerationMessage(db, {
         generation_id,
-        action,
-        instruction: action === "custom" ? instruction : undefined,
-        input_draft: gen.final_draft,
-        output_draft: revisedDraft,
-        quality_gate_json: JSON.stringify(qualityGate),
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
-        cost_cents: calculateCostCents([{ model: MODELS.SONNET, input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens }]),
+        role: "user",
+        content: userContent,
+      });
+      insertGenerationMessage(db, {
+        generation_id,
+        role: "assistant",
+        content: text,
+        draft_snapshot: coachResult.draft,
+        quality_json: JSON.stringify(qualityData),
       });
 
       updateGeneration(db, generation_id, {
-        final_draft: revisedDraft,
-        quality_gate_json: JSON.stringify(qualityGate),
+        final_draft: coachResult.draft,
+        quality_gate_json: JSON.stringify(qualityData),
       });
 
       const logs = db
@@ -323,11 +361,43 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
         cost_cents: calculateCostCents(logs),
       });
 
-      return { final_draft: revisedDraft, quality_gate: qualityGate };
+      return {
+        draft: coachResult.draft,
+        quality: qualityData,
+        explanation,
+      };
     } catch (err: any) {
       failRun(db, runId, err.message);
       return reply.status(500).send({ error: err.message });
     }
+  });
+
+  app.get("/api/generate/:id/messages", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const genId = parseInt(id, 10);
+    if (isNaN(genId)) return reply.status(400).send({ error: "Invalid id" });
+
+    const messages = getGenerationMessages(db, genId, 20).reverse();
+
+    return messages.map((msg) => {
+      if (msg.role === "user") {
+        const instrMatch = msg.content.match(/## Instruction\n([\s\S]+)$/);
+        return { ...msg, display_content: instrMatch ? instrMatch[1].trim() : msg.content };
+      }
+      if (msg.role === "assistant") {
+        let explanation = msg.content;
+        try {
+          const cleaned = msg.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            explanation = parsed.explanation ?? msg.content;
+          }
+        } catch { /* use raw content */ }
+        return { ...msg, display_content: explanation };
+      }
+      return { ...msg, display_content: msg.content };
+    });
   });
 
   // ── Rules CRUD ───────────────────────────────────────────

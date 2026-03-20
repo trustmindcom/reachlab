@@ -130,14 +130,23 @@ describe("POST /api/generate/combine", () => {
   });
 });
 
-describe("POST /api/generate/revise", () => {
+describe("POST /api/generate/chat", () => {
   it("returns 404 for non-existent generation", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/revise",
-      payload: { generation_id: 999, action: "shorten" },
+      url: "/api/generate/chat",
+      payload: { generation_id: 999, message: "make it shorter" },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it("rejects missing message", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/generate/chat",
+      payload: { generation_id: 1 },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
 
