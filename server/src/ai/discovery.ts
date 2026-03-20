@@ -19,17 +19,23 @@ export interface DiscoveryResult {
   categories: DiscoveryCategory[];
 }
 
-export function buildClusteringPrompt(items: RssItem[]): string {
+export function buildClusteringPrompt(items: RssItem[], authorContext?: string): string {
   const itemList = items
     .map((item, i) => `${i + 1}. ${item.title} — ${item.summary?.substring(0, 200) || ""} [${item.link}]`)
     .join("\n");
 
-  return `You are organizing RSS feed items into topic clusters for a LinkedIn content creator.
+  const contextBlock = authorContext
+    ? `\nAUTHOR CONTEXT — only surface topics relevant to this creator's expertise:\n${authorContext}\n`
+    : "";
 
+  return `You are organizing RSS feed items into topic clusters for a LinkedIn content creator.
+${contextBlock}
 RSS items from the past week:
 ${itemList}
 
-Organize these into 3-5 thematic categories. For each category:
+Filter to only items relevant to the author's expertise and interests described above. Discard general news, politics, and anything outside their domain.
+
+Organize the relevant items into 3-5 thematic categories. For each category:
 - Give it a short, descriptive name (e.g., "AI & Automation", "Cloud Security", "Developer Tools")
 - List 4-6 topics, each a 3-5 word label that captures an interesting angle or debate
 - Each topic should reference a source headline and URL from the list
@@ -72,7 +78,12 @@ export async function discoverTopics(
   logger: AiLogger
 ): Promise<DiscoveryResult> {
   const rssItems = await fetchAllFeeds(db);
-  const prompt = buildClusteringPrompt(rssItems);
+
+  // Pull the author's writing prompt for topic relevance filtering
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'writing_prompt'").get() as { value: string } | undefined;
+  const authorContext = row?.value;
+
+  const prompt = buildClusteringPrompt(rssItems, authorContext);
 
   const start = Date.now();
   const response = await client.messages.create({

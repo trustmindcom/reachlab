@@ -13,4 +13,4 @@ INSERT INTO research_sources (name, feed_url) VALUES
   ('tl;dr sec', 'https://rss.beehiiv.com/feeds/xgTKUmMmUm.xml'),
   ('Import AI', 'https://importai.substack.com/feed'),
   ('AI News', 'https://news.smol.ai/rss.xml'),
-  ('Axios', 'https://api.axios.com/feed/');
+  ('Axios AI', 'https://api.axios.com/feed/technology/');
