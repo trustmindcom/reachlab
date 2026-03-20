@@ -29,7 +29,8 @@ Replace post type tabs and the current "Find me something" flow with a browsable
 - Triggers Sonar Pro deep dive on that topic
 - Returns 3 story cards (same as current manual topic path)
 - Bubbles collapse away, story cards shown with "Back to topics" link
-- Clicking "Back to topics" restores the bubbles (cached, no re-fetch)
+- Clicking "Back to topics" restores the bubbles (cached in component state, no re-fetch)
+- Discovery cache lives for the session — navigating away from the Generate tab and back triggers a fresh discover call
 
 ### 2. Coach-Check Auto-Correction
 
@@ -68,8 +69,10 @@ Replace action-button revision with a chat-based flow.
 
 - **Post type (News/Topic/Insight)** — everywhere. Research, drafting, and UI.
 - **`TypeCache` / per-type caching** — replaced by simple discovery cache
+- **`post_type_templates` table** — no longer read. Drafter uses a single unified prompt instead of per-type templates. The `prompt-assembler.ts` module drops its `postType` parameter.
 - **Old quality gate** (`quality-gate.ts`, pass/warn checks) — replaced by coach-check
 - **Old revision endpoint** (`/api/generate/revise`) — replaced by chat endpoint
+- **`generation_revisions` table** — replaced by `generation_messages`. Existing rows left for history but no new writes.
 - **Auto-research on tab switch** — already removed, now the whole tab concept is gone
 
 ## New Generate Pipeline
@@ -84,7 +87,14 @@ Replace action-button revision with a chat-based flow.
 
 ### New endpoint: `POST /api/generate/discover`
 
-Fetches RSS feeds, sends to Haiku for clustering.
+Fetches RSS feeds via `fetchAllFeeds(db)`, sends headlines to Haiku (`MODELS.HAIKU`) with a clustering prompt.
+
+**Clustering prompt behavior:**
+- Input: all RSS item headlines + summaries from the past week
+- Output: 3-5 categories with ~4-6 topics each (~20 total)
+- Category names are AI-generated based on content clusters (e.g., "AI & Automation", "Cloud Security", "Developer Tools")
+- Each topic is a 3-5 word label summarizing an interesting angle
+- If RSS feeds fail or return no items, return an error (no silent fallback — the user should see "Couldn't load topics, try again")
 
 Request: (no body)
 
@@ -109,6 +119,8 @@ Response:
 - `avoid` stays optional
 - Calls Sonar Pro → Haiku synthesis → 3 story cards
 - The auto path (RSS → rank → parallel Sonar Pro) is removed since discovery handles RSS scanning
+- `searchWithSonarPro()` drops its `postType` parameter — uses a single general search prompt
+- `insertResearch()` passes `post_type: "general"` to satisfy the NOT NULL column (see migration below)
 
 Request:
 ```json
@@ -118,7 +130,9 @@ Request:
 ### Modified endpoint: `POST /api/generate/drafts`
 
 - `post_type` parameter removed from request
-- Drafting prompt no longer varies by post type
+- Drafting prompt uses a single unified template instead of per-type templates from `post_type_templates`
+- `personal_connection` stays in this endpoint's request body (user provides it before generating)
+- `insertGeneration()` passes `post_type: "general"` to satisfy the NOT NULL column
 
 ### Modified endpoint: `POST /api/generate/combine`
 
@@ -160,9 +174,9 @@ Response:
 }
 ```
 
-- Loads full conversation history from `generation_messages`
-- Sends to model with system prompt (rules + insights) + conversation thread
-- Runs coach-check on the revision
+- Loads conversation history from `generation_messages` (capped at last 20 messages to bound token usage)
+- Sends to model (`MODELS.SONNET`) with system prompt (rules + insights) + conversation thread
+- Runs coach-check on the revision (coach-check also uses `MODELS.SONNET`)
 - Saves user message + assistant response to `generation_messages`
 
 ### Removed endpoint: `POST /api/generate/revise`
@@ -172,10 +186,12 @@ Replaced by chat endpoint.
 ### New module: `coach-check.ts`
 
 ```typescript
+type AlignmentDimension = "voice_match" | "ai_tropes" | "hook_strength" | "engagement_close" | "concrete_specifics" | "ending_quality";
+
 interface CoachCheckResult {
   draft: string;
   expertise_needed: Array<{ area: string; question: string }>;
-  alignment: Array<{ dimension: string; summary: string }>;
+  alignment: Array<{ dimension: AlignmentDimension; summary: string }>;
 }
 
 export async function coachCheck(
@@ -192,6 +208,7 @@ export async function coachCheck(
 ### New migration
 
 ```sql
+-- Conversation history for chat-based revision
 CREATE TABLE generation_messages (
   id INTEGER PRIMARY KEY,
   generation_id INTEGER REFERENCES generations(id),
@@ -201,7 +218,10 @@ CREATE TABLE generation_messages (
   quality_json TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
 ```
+
+**`post_type` columns:** `generation_research.post_type` and `generations.post_type` stay NOT NULL. New rows pass `"general"`. Existing rows retain their original values. No schema migration needed — just a code change in the insert calls.
 
 ### `quality_gate_json` column shape change
 
@@ -263,18 +283,23 @@ Keep: `stories`, `researchId`, `articleCount`, `sourceCount`, `selectedStoryInde
 - Post type tabs (everywhere)
 - `PostType` type, `TypeCache` interface
 
+### Modified `GenerationHistory`
+
+- Remove post type column from history table
+- History detail endpoint already returns enriched data (stories, article_count, etc.)
+
 ## Implementation Order
 
 1. Database migration (`generation_messages` table)
 2. `coach-check.ts` module
 3. Wire coach-check into combine endpoint (replace `runQualityGate`)
-4. Discovery endpoint + clustering prompt
-5. Simplify research endpoint (remove post type, require topic)
-6. Simplify drafts endpoint (remove post type)
+4. Simplify research endpoint (remove post type, require topic, update `searchWithSonarPro` to drop postType param)
+5. Simplify drafts endpoint (remove post type, unified prompt template, update `prompt-assembler.ts`)
+6. Discovery endpoint + clustering prompt
 7. Chat endpoint + conversation history
-8. Frontend: `DiscoveryView` component with loading animation
-9. Frontend: Update `GenerationState` (remove post type, add discovery)
+8. Frontend: Update `GenerationState` (remove post type, add discovery fields)
+9. Frontend: `DiscoveryView` component with loading animation
 10. Frontend: Move personal connection to `DraftVariations`
 11. Frontend: Rewrite `ReviewEdit` with chat panel + new quality sections
-12. Frontend: Remove post type references everywhere
-13. End-to-end verification
+12. Frontend: Remove post type references everywhere (history, API client, etc.)
+13. End-to-end verification + update tests
