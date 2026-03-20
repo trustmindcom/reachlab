@@ -467,7 +467,19 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     if (!gen) {
       return reply.status(404).send({ error: "Generation not found" });
     }
-    return gen;
+    // Enrich with research stories
+    let stories: any[] = [];
+    let articleCount = 0;
+    let sourceCount = 0;
+    if (gen.research_id) {
+      const research = getResearch(db, gen.research_id);
+      if (research) {
+        stories = JSON.parse(research.stories_json);
+        articleCount = research.article_count ?? 0;
+        sourceCount = research.source_count ?? 0;
+      }
+    }
+    return { ...gen, stories, article_count: articleCount, source_count: sourceCount };
   });
 
   app.post("/api/generate/history/:id/discard", async (request, reply) => {
