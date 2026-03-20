@@ -226,6 +226,7 @@ export interface GenStory {
   headline: string;
   summary: string;
   source: string;
+  source_url?: string;
   age: string;
   tag: string;
   angles: string[];
@@ -518,11 +519,15 @@ export const api = {
 
   // ── Generate Pipeline ─────────────────────────────────────
 
-  generateResearch: (postType: string) =>
+  generateResearch: (postType: string, topic?: string, avoid?: string[]) =>
     fetch(`${BASE_URL}/generate/research`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ post_type: postType }),
+      body: JSON.stringify({
+        post_type: postType,
+        ...(topic && { topic }),
+        ...(avoid && avoid.length > 0 && { avoid }),
+      }),
     }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<GenResearchResponse>;
