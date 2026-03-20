@@ -242,16 +242,6 @@ export interface GenDraft {
   structure_label: string;
 }
 
-export interface GenQualityCheck {
-  name: string;
-  status: "pass" | "warn";
-  detail: string;
-}
-
-export interface GenQualityGate {
-  passed: boolean;
-  checks: GenQualityCheck[];
-}
 
 export interface GenResearchResponse {
   research_id: number;
@@ -316,10 +306,6 @@ export interface GenCombineResponse {
   quality: GenCoachCheckQuality;
 }
 
-export interface GenReviseResponse {
-  final_draft: string;
-  quality_gate: GenQualityGate;
-}
 
 export interface GenRule {
   id?: number;

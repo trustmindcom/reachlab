@@ -6,7 +6,7 @@ import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
 import { generateDrafts } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
-import { runQualityGate } from "../ai/quality-gate.js";
+
 import { analyzeCoaching } from "../ai/coaching-analyzer.js";
 import {
   seedDefaultRules,
@@ -119,28 +119,6 @@ describe("combiner", () => {
   });
 });
 
-describe("quality-gate", () => {
-  it("returns quality gate checks", async () => {
-    const mockResponse = JSON.stringify({
-      passed: true,
-      checks: [
-        { name: "voice_match", status: "pass", detail: "Sounds authentic" },
-        { name: "ai_tropes", status: "pass", detail: "No AI-isms detected" },
-        { name: "hook_strength", status: "pass", detail: "Strong contrarian open" },
-        { name: "engagement_close", status: "warn", detail: "Closing question is too broad" },
-        { name: "concrete_specifics", status: "pass", detail: "Good use of numbers" },
-        { name: "ending_quality", status: "pass", detail: "Extends the idea well" },
-      ],
-    });
-    const client = makeMockClient(mockResponse);
-    const rules = getRules(db);
-    const insights = getActiveCoachingInsights(db);
-    const result = await runQualityGate(client, logger, "Test draft text", rules, insights);
-    expect(result.checks).toHaveLength(6);
-    // Recalculated: one warn means passed = false
-    expect(result.passed).toBe(false);
-  });
-});
 
 describe("coaching-analyzer", () => {
   it("returns coaching change proposals", async () => {

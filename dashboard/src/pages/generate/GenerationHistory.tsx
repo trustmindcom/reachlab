@@ -90,7 +90,6 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
             <thead>
               <tr className="border-b border-gen-border-1 bg-gen-bg-2">
                 <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium">Post</th>
-                <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium w-[80px]">Type</th>
                 <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium w-[90px]">Status</th>
                 <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium w-[120px]">Date</th>
                 <th className="w-[100px]" />
@@ -104,9 +103,6 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
                     <p className="text-[11px] text-gen-text-3 mt-0.5">
                       {item.story_headline} - {item.drafts_used} draft{item.drafts_used !== 1 ? "s" : ""}
                     </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-[12px] text-gen-text-2 capitalize">{item.post_type}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium border capitalize ${statusBadge(item.status)}`}>
