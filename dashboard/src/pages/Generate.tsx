@@ -1,6 +1,6 @@
 import { useState } from "react";
 import SubTabBar, { type GenerateSubTab } from "./generate/SubTabBar";
-import StorySelection from "./generate/StorySelection";
+import DiscoveryView from "./generate/DiscoveryView";
 import DraftVariations from "./generate/DraftVariations";
 import ReviewEdit from "./generate/ReviewEdit";
 import Rules from "./generate/Rules";
@@ -89,7 +89,7 @@ export default function Generate() {
 
       <div className="mt-6">
         {subTab === "Generate" && step === 1 && (
-          <StorySelection
+          <DiscoveryView
             gen={gen}
             setGen={setGen}
             loading={loading}

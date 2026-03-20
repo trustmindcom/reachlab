@@ -76,6 +76,12 @@ body::before {
   animation: fadeUpDraft 0.3s ease both;
 }
 
+/* Fade-in-up for discovery category stagger */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
