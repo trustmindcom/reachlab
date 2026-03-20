@@ -52,7 +52,11 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   // ── Research ─────────────────────────────────────────────
 
   app.post("/api/generate/research", async (request, reply) => {
-    const { post_type } = request.body as { post_type: string };
+    const { post_type, topic, avoid } = request.body as {
+      post_type: string;
+      topic?: string;
+      avoid?: string[];
+    };
     if (!["news", "topic", "insight"].includes(post_type)) {
       return reply.status(400).send({ error: "post_type must be news, topic, or insight" });
     }
@@ -62,7 +66,10 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await researchStories(client, db, logger, post_type);
+      const result = await researchStories(client, db, logger, post_type, {
+        topic: topic || undefined,
+        avoid: avoid || undefined,
+      });
 
       const researchId = insertResearch(db, {
         post_type,
