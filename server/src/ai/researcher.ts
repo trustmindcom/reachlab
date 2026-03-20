@@ -19,6 +19,14 @@ export interface RankedTopic {
   source_url: string;
 }
 
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
 // ── Pure functions ─────────────────────────────────────────
 
 export function buildRankingPrompt(
@@ -161,9 +169,6 @@ export async function researchStories(
   postType: string,
   options?: { topic?: string; avoid?: string[] }
 ): Promise<ResearchResult> {
-  const recentHeadlines = getRecentStoryHeadlines(db, 30);
-  const avoidList = [...recentHeadlines, ...(options?.avoid ?? [])];
-
   // ── Manual path: topic provided ───────────────────────────
   if (options?.topic) {
     const sonarResult = await searchWithSonarPro(options.topic, postType, logger);
@@ -172,20 +177,21 @@ export async function researchStories(
       logger,
       options.topic,
       sonarResult,
-      postType,
-      avoidList
+      postType
     );
     const finalStories = markStretch(stories.slice(0, 3));
     return {
       stories: finalStories,
       article_count: sonarResult.citations.length,
       source_count: sonarResult.citations.length,
-      sources_metadata: sonarResult.citations.map((url) => ({ name: new URL(url).hostname, url })),
+      sources_metadata: sonarResult.citations.map((url) => ({ name: safeHostname(url), url })),
     };
   }
 
   // ── Auto path: RSS → rank → Sonar Pro → synthesize ───────
   const rssItems = await fetchAllFeeds(db);
+  const recentHeadlines = getRecentStoryHeadlines(db, 30);
+  const avoidList = [...recentHeadlines, ...(options?.avoid ?? [])];
 
   // Rank with Haiku
   const rankingPrompt = buildRankingPrompt(rssItems, postType, avoidList);
@@ -239,7 +245,7 @@ export async function researchStories(
     const fallbackStories: Story[] = rankedTopics.map((t, i) => ({
       headline: t.source_headline,
       summary: `Research into "${t.topic}" was unavailable. This story is based on the RSS headline.`,
-      source: t.source_url ? new URL(t.source_url).hostname : "RSS",
+      source: t.source_url ? safeHostname(t.source_url) : "RSS",
       source_url: t.source_url,
       age: "This week",
       tag: t.topic,
@@ -251,7 +257,7 @@ export async function researchStories(
       stories: fallbackStories,
       article_count: rssItems.length,
       source_count: uniqueSources.length,
-      sources_metadata: uniqueSources.map((url) => ({ name: new URL(url!).hostname, url: url! })),
+      sources_metadata: uniqueSources.map((url) => ({ name: safeHostname(url!), url: url! })),
     };
   }
 
@@ -263,8 +269,7 @@ export async function researchStories(
         logger,
         ranked.topic,
         result,
-        postType,
-        avoidList
+        postType
       );
       // Return just the first card per topic (each topic → 1 card in auto mode)
       return stories[0] ?? null;
@@ -278,11 +283,7 @@ export async function researchStories(
   const allCitations = successful.flatMap((s) => s.result.citations);
   const uniqueUrls = [...new Set(allCitations)];
   const sourcesMeta = uniqueUrls.map((url) => {
-    try {
-      return { name: new URL(url).hostname, url };
-    } catch {
-      return { name: url, url };
-    }
+    return { name: safeHostname(url), url };
   });
 
   return {
@@ -300,8 +301,7 @@ async function synthesizeTopic(
   logger: AiLogger,
   topic: string,
   sonarResult: SonarResult,
-  postType: string,
-  _avoidList: string[]
+  postType: string
 ): Promise<Story[]> {
   const synthPrompt = buildSynthesisPrompt(
     topic,

@@ -37,11 +37,10 @@ export function filterToThisWeek(items: RssItem[]): RssItem[] {
 }
 
 async function fetchFeed(url: string, sourceName: string): Promise<RssItem[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
     const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
     if (!response.ok) {
       console.warn(`[rss-fetcher] ${sourceName}: HTTP ${response.status}`);
       return [];
@@ -52,6 +51,8 @@ async function fetchFeed(url: string, sourceName: string): Promise<RssItem[]> {
   } catch (err: any) {
     console.warn(`[rss-fetcher] ${sourceName}: ${err.message}`);
     return [];
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
