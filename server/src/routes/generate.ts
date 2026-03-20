@@ -60,6 +60,9 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     if (!["news", "topic", "insight"].includes(post_type)) {
       return reply.status(400).send({ error: "post_type must be news, topic, or insight" });
     }
+    // Validate optional inputs at boundary
+    const safeTopic = topic ? topic.slice(0, 500).trim() || undefined : undefined;
+    const safeAvoid = Array.isArray(avoid) ? avoid.slice(0, 50).map((s) => String(s).slice(0, 200)) : undefined;
 
     const client = getClient();
     const runId = createRun(db, "generate_research", 0);
@@ -67,8 +70,8 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
     try {
       const result = await researchStories(client, db, logger, post_type, {
-        topic: topic || undefined,
-        avoid: avoid || undefined,
+        topic: safeTopic,
+        avoid: safeAvoid,
       });
 
       const researchId = insertResearch(db, {

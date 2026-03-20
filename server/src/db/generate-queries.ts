@@ -435,8 +435,12 @@ export function getRecentStoryHeadlines(db: Database.Database, limit: number): s
     .all(limit) as { stories_json: string }[];
   const headlines: string[] = [];
   for (const row of rows) {
-    const stories = JSON.parse(row.stories_json) as Story[];
-    headlines.push(...stories.map((s) => s.headline));
+    try {
+      const stories = JSON.parse(row.stories_json) as Story[];
+      headlines.push(...stories.map((s) => s.headline));
+    } catch {
+      // Skip rows with malformed JSON
+    }
   }
   return headlines;
 }
