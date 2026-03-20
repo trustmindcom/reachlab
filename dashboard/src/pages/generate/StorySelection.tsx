@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { api, type GenStory } from "../../api/client";
 import StoryCard from "./components/StoryCard";
 
@@ -25,10 +26,23 @@ const postTypes: { value: PostType; label: string }[] = [
 ];
 
 export default function StorySelection({ gen, setGen, loading, setLoading, onNext }: StorySelectionProps) {
+  // Auto-research once per day when visiting the Generate tab
+  const didMount = useRef(false);
+  useEffect(() => {
+    if (didMount.current) return;
+    didMount.current = true;
+    if (gen.stories.length > 0 || loading) return;
+    const today = new Date().toDateString();
+    const lastResearch = localStorage.getItem("reachlab_last_research_date");
+    if (lastResearch === today) return;
+    doResearch(gen.postType);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const doResearch = async (postType: PostType) => {
     setLoading(true);
     try {
       const res = await api.generateResearch(postType);
+      localStorage.setItem("reachlab_last_research_date", new Date().toDateString());
       setGen((prev: any) => ({
         ...prev,
         researchId: res.research_id,
@@ -127,7 +141,7 @@ export default function StorySelection({ gen, setGen, loading, setLoading, onNex
       {/* Empty state */}
       {!loading && gen.stories.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-gen-text-3 text-[14px]">
-          <p className="mb-4">Choose a post type above to research stories</p>
+          <p className="mb-4">Already researched today. Click below to research again.</p>
           <button
             onClick={() => doResearch(gen.postType)}
             className="px-4 py-2 rounded-lg bg-gen-accent text-gen-bg-0 text-[13px] font-medium hover:opacity-90 transition-opacity"
