@@ -21,7 +21,7 @@ if (fs.existsSync(envPath)) {
   }
 }
 const DB_PATH = path.join(__dirname, "../../data/linkedin.db");
-const PORT = 3210;
+const PORT = process.env.NODE_ENV === "development" ? 3211 : 3210;
 
 const app = buildApp(DB_PATH);
 

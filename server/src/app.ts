@@ -580,21 +580,23 @@ export function buildApp(dbPath: string) {
     }).catch(() => {});
   });
 
-  // Serve dashboard static files
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const dashboardDir = path.join(__dirname, "../../dashboard/dist");
-  if (fs.existsSync(dashboardDir)) {
-    app.register(fastifyStatic, {
-      root: dashboardDir,
-      prefix: "/",
-    });
-    // SPA fallback — serve index.html for non-API routes
-    app.setNotFoundHandler((request, reply) => {
-      if (request.url.startsWith("/api/")) {
-        return reply.status(404).send({ error: "Not found" });
-      }
-      return reply.sendFile("index.html");
-    });
+  // Serve dashboard static files (production only — in dev, Vite handles this)
+  if (process.env.NODE_ENV !== "development") {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const dashboardDir = path.join(__dirname, "../../dashboard/dist");
+    if (fs.existsSync(dashboardDir)) {
+      app.register(fastifyStatic, {
+        root: dashboardDir,
+        prefix: "/",
+      });
+      // SPA fallback — serve index.html for non-API routes
+      app.setNotFoundHandler((request, reply) => {
+        if (request.url.startsWith("/api/")) {
+          return reply.status(404).send({ error: "Not found" });
+        }
+        return reply.sendFile("index.html");
+      });
+    }
   }
 
   return app;

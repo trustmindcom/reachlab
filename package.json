@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "start": "npm run start -w server",
-    "dev": "run-p dev:server dev:dashboard",
-    "dev:server": "npm run dev -w server",
+    "dev": "NODE_ENV=development run-p dev:server dev:dashboard",
+    "dev:server": "NODE_ENV=development npm run dev -w server",
     "dev:dashboard": "npm run dev -w dashboard",
     "test": "npm test -w server",
     "build:dashboard": "npm run build -w dashboard",
