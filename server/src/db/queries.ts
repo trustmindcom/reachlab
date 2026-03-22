@@ -73,14 +73,15 @@ export function insertPostMetrics(
     video_views?: number | null;
     watch_time_seconds?: number | null;
     avg_watch_time_seconds?: number | null;
+    new_followers?: number | null;
   }
 ): void {
   db.prepare(
     `INSERT INTO post_metrics
      (post_id, impressions, members_reached, reactions, comments, reposts, saves, sends,
-      video_views, watch_time_seconds, avg_watch_time_seconds)
+      video_views, watch_time_seconds, avg_watch_time_seconds, new_followers)
      VALUES (@post_id, @impressions, @members_reached, @reactions, @comments, @reposts,
-             @saves, @sends, @video_views, @watch_time_seconds, @avg_watch_time_seconds)`
+             @saves, @sends, @video_views, @watch_time_seconds, @avg_watch_time_seconds, @new_followers)`
   ).run({
     post_id: metrics.post_id,
     impressions: metrics.impressions ?? null,
@@ -93,7 +94,24 @@ export function insertPostMetrics(
     video_views: metrics.video_views ?? null,
     watch_time_seconds: metrics.watch_time_seconds ?? null,
     avg_watch_time_seconds: metrics.avg_watch_time_seconds ?? null,
+    new_followers: metrics.new_followers ?? null,
   });
+}
+
+export function upsertCommentStats(
+  db: Database.Database,
+  postId: string,
+  authorReplies: number,
+  hasThreads: boolean
+): void {
+  db.prepare(
+    `INSERT INTO post_comment_stats (post_id, author_replies, has_threads, scraped_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(post_id) DO UPDATE SET
+       author_replies = excluded.author_replies,
+       has_threads = excluded.has_threads,
+       scraped_at = excluded.scraped_at`
+  ).run(postId, authorReplies, hasThreads ? 1 : 0);
 }
 
 export function upsertFollowerSnapshot(
@@ -199,6 +217,7 @@ export function queryPosts(db: Database.Database, params: PostsQueryParams) {
     published_at: "p.published_at",
     impressions: "m.impressions",
     engagement_rate: "engagement_rate",
+    weighted_engagement: "weighted_engagement",
     reactions: "m.reactions",
     comments: "m.comments",
   };
@@ -219,11 +238,13 @@ export function queryPosts(db: Database.Database, params: PostsQueryParams) {
   const querySql = `
     SELECT p.id, p.content_preview, p.hook_text, p.full_text, p.image_local_paths,
       p.content_type, p.published_at, p.url,
-      m.impressions, m.reactions, m.comments, m.reposts,
+      m.impressions, m.reactions, m.comments, m.reposts, m.saves, m.sends,
       CASE WHEN m.impressions > 0
         THEN CAST(COALESCE(m.reactions, 0) + COALESCE(m.comments, 0) + COALESCE(m.reposts, 0) AS REAL) / m.impressions
         ELSE NULL
       END AS engagement_rate,
+      COALESCE(m.reactions, 0) + COALESCE(m.comments, 0) * 3 + COALESCE(m.reposts, 0) * 4
+        + COALESCE(m.saves, 0) * 5 + COALESCE(m.sends, 0) * 4 AS weighted_engagement,
       t.post_category,
       (SELECT GROUP_CONCAT(tax.name, ',') FROM ai_post_topics apt JOIN ai_taxonomy tax ON tax.id = apt.taxonomy_id WHERE apt.post_id = p.id) AS topics
     FROM posts p

@@ -15,6 +15,7 @@ export interface PostRow {
   reposts: number;
   saves: number | null;
   sends: number | null;
+  new_followers: number | null;
 }
 
 export interface PostWithER extends PostRow {
@@ -160,7 +161,8 @@ function loadPostsWithMetrics(db: Database.Database): PostWithER[] {
          COALESCE(pm.comments, 0) as comments,
          COALESCE(pm.reposts, 0) as reposts,
          pm.saves,
-         pm.sends
+         pm.sends,
+         pm.new_followers
        FROM posts p
        JOIN post_metrics pm ON pm.post_id = p.id
        JOIN (
@@ -444,19 +446,19 @@ function buildTopBottomSection(posts: PostWithER[], timezone: string): string {
   if (topWER.length === 0) {
     lines.push("No data.");
   } else {
-    for (const p of topWER) lines.push(formatPostLine(p, timezone));
+    for (const p of topWER) lines.push(formatPostLineDetailed(p, timezone));
   }
 
   lines.push("", "## 5. Top 10 Posts (by impressions/reach)");
   if (topImpr.length === 0) {
     lines.push("No data.");
   } else {
-    for (const p of topImpr) lines.push(formatPostLine(p, timezone));
+    for (const p of topImpr) lines.push(formatPostLineDetailed(p, timezone));
   }
 
   if (homeRuns.length > 0) {
     lines.push("", "## 5b. Home Runs (top 10 in BOTH weighted ER and impressions — these are the gold standard)");
-    for (const p of homeRuns) lines.push(formatPostLine(p, timezone));
+    for (const p of homeRuns) lines.push(formatPostLineDetailed(p, timezone));
   }
 
   // Bottom by weighted ER
@@ -465,7 +467,7 @@ function buildTopBottomSection(posts: PostWithER[], timezone: string): string {
   if (bottomWER.length === 0) {
     lines.push("No data.");
   } else {
-    for (const p of bottomWER) lines.push(formatPostLine(p, timezone));
+    for (const p of bottomWER) lines.push(formatPostLineDetailed(p, timezone));
   }
 
   // Bottom by impressions
@@ -475,7 +477,7 @@ function buildTopBottomSection(posts: PostWithER[], timezone: string): string {
   if (bottomImpr.length === 0) {
     lines.push("No data.");
   } else {
-    for (const p of bottomImpr) lines.push(formatPostLine(p, timezone));
+    for (const p of bottomImpr) lines.push(formatPostLineDetailed(p, timezone));
   }
 
   return lines.join("\n");
@@ -669,6 +671,259 @@ function buildWritingPromptSection(writingPrompt: string | null): string {
   return lines.join("\n");
 }
 
+// ── New enrichment sections ─────────────────────────────────
+
+function buildDataAvailablePreamble(db: Database.Database): string {
+  const tagCount = (db.prepare("SELECT COUNT(*) as c FROM ai_tags").get() as { c: number }).c;
+  const topicCount = (db.prepare("SELECT COUNT(DISTINCT taxonomy_id) as c FROM ai_post_topics").get() as { c: number }).c;
+  const imageTagCount = (db.prepare("SELECT COUNT(DISTINCT post_id) as c FROM ai_image_tags").get() as { c: number }).c;
+  const followerDays = (db.prepare("SELECT COUNT(*) as c FROM follower_snapshots").get() as { c: number }).c;
+
+  const lines = ["## 0. Data Available in This Report"];
+  lines.push("This report includes the following enrichment data. Do NOT flag these as data or tool gaps:");
+  if (tagCount > 0) lines.push(`- AI tags (hook_type, tone, format_style, post_category) for ${tagCount} posts`);
+  if (topicCount > 0) lines.push(`- Topic taxonomy mapping (${topicCount} topics) via ai_post_topics`);
+  if (imageTagCount > 0) lines.push(`- Image subtype classification for ${imageTagCount} image posts`);
+  if (followerDays > 0) lines.push(`- Daily follower snapshots (${followerDays} days of data)`);
+  lines.push("- Hook text + closing text included for top/bottom performers");
+  lines.push("- Full post metrics including saves, sends, weighted engagement");
+  return lines.join("\n");
+}
+
+function buildTopicPerformanceSection(db: Database.Database): string {
+  const rows = db.prepare(
+    `SELECT tax.name as topic,
+            pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+     FROM ai_post_topics apt
+     JOIN ai_taxonomy tax ON tax.id = apt.taxonomy_id
+     JOIN post_metrics pm ON pm.post_id = apt.post_id
+     JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+       ON pm.id = latest.max_id
+     WHERE pm.impressions > 0`
+  ).all() as Array<{
+    topic: string; impressions: number; reactions: number;
+    comments: number; reposts: number; saves: number | null; sends: number | null;
+  }>;
+
+  if (rows.length === 0) return "";
+
+  const groups: Record<string, { wers: number[]; impressions: number[]; comments: number[] }> = {};
+  for (const r of rows) {
+    if (!groups[r.topic]) groups[r.topic] = { wers: [], impressions: [], comments: [] };
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer !== null) groups[r.topic].wers.push(wer);
+    groups[r.topic].impressions.push(r.impressions);
+    groups[r.topic].comments.push(r.comments);
+  }
+
+  const lines = ["## 14. Topic Performance"];
+  const sorted = Object.entries(groups)
+    .map(([topic, data]) => ({
+      topic,
+      count: data.wers.length,
+      medWER: median(data.wers),
+      medImpr: median(data.impressions),
+      medComments: median(data.comments),
+    }))
+    .filter((t) => t.medWER !== null)
+    .sort((a, b) => b.medWER! - a.medWER!);
+
+  for (const t of sorted) {
+    const flag = t.count < 3 ? " ⚠ small sample" : "";
+    lines.push(`- ${t.topic} (n=${t.count}): ${pct(t.medWER!)} median weighted ER, ${t.medImpr?.toLocaleString() ?? "N/A"} median impressions, ${t.medComments?.toFixed(0) ?? "N/A"} median comments${flag}`);
+  }
+
+  const totalPosts = sorted.reduce((sum, t) => sum + t.count, 0);
+  const top3Posts = sorted.slice(0, 3).reduce((sum, t) => sum + t.count, 0);
+  if (totalPosts > 0) {
+    lines.push(`\nTopic concentration: top 3 topics cover ${Math.round((top3Posts / totalPosts) * 100)}% of posts`);
+  }
+
+  return lines.join("\n");
+}
+
+function buildHookPerformanceSection(db: Database.Database): string {
+  const rows = db.prepare(
+    `SELECT t.hook_type, t.format_style,
+            pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+     FROM ai_tags t
+     JOIN post_metrics pm ON pm.post_id = t.post_id
+     JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+       ON pm.id = latest.max_id
+     WHERE pm.impressions > 0`
+  ).all() as Array<{
+    hook_type: string | null; format_style: string | null;
+    impressions: number; reactions: number; comments: number;
+    reposts: number; saves: number | null; sends: number | null;
+  }>;
+
+  if (rows.length === 0) return "";
+
+  const hookGroups: Record<string, number[]> = {};
+  const styleGroups: Record<string, number[]> = {};
+
+  for (const r of rows) {
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer === null) continue;
+    if (r.hook_type) {
+      if (!hookGroups[r.hook_type]) hookGroups[r.hook_type] = [];
+      hookGroups[r.hook_type].push(wer);
+    }
+    if (r.format_style) {
+      if (!styleGroups[r.format_style]) styleGroups[r.format_style] = [];
+      styleGroups[r.format_style].push(wer);
+    }
+  }
+
+  const lines = ["## 15. Hook Type & Structure Performance"];
+
+  lines.push("By hook type:");
+  const hookSorted = Object.entries(hookGroups)
+    .map(([type, wers]) => ({ type, count: wers.length, medWER: median(wers) }))
+    .filter((h) => h.medWER !== null)
+    .sort((a, b) => b.medWER! - a.medWER!);
+  for (const h of hookSorted) {
+    const best = h === hookSorted[0] ? " — best performer" : "";
+    const worst = h === hookSorted[hookSorted.length - 1] && hookSorted.length > 2 ? " — weakest" : "";
+    lines.push(`  - ${h.type} (n=${h.count}): ${pct(h.medWER!)} median weighted ER${best}${worst}`);
+  }
+
+  lines.push("By format style:");
+  const styleSorted = Object.entries(styleGroups)
+    .map(([style, wers]) => ({ style, count: wers.length, medWER: median(wers) }))
+    .filter((s) => s.medWER !== null)
+    .sort((a, b) => b.medWER! - a.medWER!);
+  for (const s of styleSorted) {
+    lines.push(`  - ${s.style} (n=${s.count}): ${pct(s.medWER!)} median weighted ER`);
+  }
+
+  return lines.join("\n");
+}
+
+function buildImageSubtypeSection(db: Database.Database): string {
+  const rows = db.prepare(
+    `SELECT ait.format as subtype,
+            pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+     FROM ai_image_tags ait
+     JOIN post_metrics pm ON pm.post_id = ait.post_id
+     JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+       ON pm.id = latest.max_id
+     WHERE pm.impressions > 0
+       AND ait.format IS NOT NULL`
+  ).all() as Array<{
+    subtype: string; impressions: number; reactions: number;
+    comments: number; reposts: number; saves: number | null; sends: number | null;
+  }>;
+
+  if (rows.length === 0) return "";
+
+  const groups: Record<string, number[]> = {};
+  for (const r of rows) {
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer === null) continue;
+    if (!groups[r.subtype]) groups[r.subtype] = [];
+    groups[r.subtype].push(wer);
+  }
+
+  const lines = ["## 16. Image Subtype Performance"];
+  const sorted = Object.entries(groups)
+    .map(([subtype, wers]) => ({ subtype, count: wers.length, medWER: median(wers) }))
+    .filter((s) => s.medWER !== null)
+    .sort((a, b) => b.medWER! - a.medWER!);
+
+  for (const s of sorted) {
+    const flag = s.count < 3 ? " (small sample)" : "";
+    lines.push(`- ${s.subtype} (n=${s.count}): ${pct(s.medWER!)} median weighted ER${flag}`);
+  }
+
+  return lines.join("\n");
+}
+
+function buildFollowerGrowthSection(db: Database.Database): string {
+  const snapshots = db.prepare(
+    `SELECT date, total_followers FROM follower_snapshots
+     ORDER BY date DESC LIMIT 90`
+  ).all() as Array<{ date: string; total_followers: number }>;
+
+  if (snapshots.length === 0) return "";
+
+  const current = snapshots[0];
+  const lines = ["## 17. Follower Growth"];
+  lines.push(`Current: ${current.total_followers.toLocaleString()} (as of ${current.date})`);
+
+  // Find closest snapshot to 30 days ago
+  const now = new Date(current.date);
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyStr = thirtyDaysAgo.toISOString().split("T")[0];
+  const snap30 = snapshots.find((s) => s.date <= thirtyStr);
+  if (snap30) {
+    const delta = current.total_followers - snap30.total_followers;
+    const pctGrowth = ((delta / snap30.total_followers) * 100).toFixed(1);
+    lines.push(`30 days ago: ${snap30.total_followers.toLocaleString()} (+${delta}, +${pctGrowth}%)`);
+  }
+
+  // Find closest snapshot to 90 days ago
+  const ninetyDaysAgo = new Date(now);
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const ninetyStr = ninetyDaysAgo.toISOString().split("T")[0];
+  const snap90 = snapshots.find((s) => s.date <= ninetyStr);
+  if (snap90) {
+    const delta = current.total_followers - snap90.total_followers;
+    const pctGrowth = ((delta / snap90.total_followers) * 100).toFixed(1);
+    lines.push(`90 days ago: ${snap90.total_followers.toLocaleString()} (+${delta}, +${pctGrowth}%)`);
+  }
+
+  // Average new followers per week (last 30 days)
+  if (snap30) {
+    const daysBetween = Math.max(1, Math.round((now.getTime() - new Date(snap30.date).getTime()) / 86400000));
+    const delta = current.total_followers - snap30.total_followers;
+    const perWeek = Math.round((delta / daysBetween) * 7);
+    lines.push(`Avg new followers/week (last 30d): ${perWeek}`);
+  }
+
+  return lines.join("\n");
+}
+
+// ── Detailed post formatter for top/bottom sections ────────
+
+function getPostDetailedPreview(post: {
+  hook_text: string | null;
+  full_text: string | null;
+  content_preview: string | null;
+}): string {
+  const text = post.full_text ?? post.hook_text ?? post.content_preview;
+  if (!text) return "Untitled post";
+
+  // Extract first ~2 sentences as hook
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const hook = sentences.slice(0, 2).join(" ");
+  const hookPart = hook.length > 200 ? hook.slice(0, 197) + "..." : hook;
+
+  // Extract closing sentence
+  const closing = sentences.length > 2 ? sentences[sentences.length - 1] : "";
+  const closingPart = closing.length > 150 ? closing.slice(0, 147) + "..." : closing;
+
+  if (closingPart && closingPart !== hookPart) {
+    return `"${hookPart}" [...] closing: "${closingPart}"`;
+  }
+  return `"${hookPart}"`;
+}
+
+function formatPostLineDetailed(p: PostWithER, tz: string): string {
+  const preview = getPostDetailedPreview(p);
+  const date = formatInTimezone(new Date(p.published_at), tz, {
+    month: "short",
+    day: "numeric",
+  });
+  const werStr = p.wer !== null ? pct(p.wer) : "N/A";
+  const erStr = p.er !== null ? pct(p.er) : "N/A";
+  const saves = p.saves ? `, ${p.saves} saves` : "";
+  const sends = p.sends ? `, ${p.sends} sends` : "";
+  const quad = p.quadrant ? ` ${QUADRANT_LABELS[p.quadrant]}` : "";
+  return `- ${preview} (${date}, ${p.content_type}) — ${p.impressions.toLocaleString()} impressions, ${werStr} weighted ER, ${erStr} standard ER, ${p.reactions} reactions, ${p.comments} comments${saves}${sends}${quad}`;
+}
+
 // ── Main export ────────────────────────────────────────────
 
 export function buildStatsReport(
@@ -684,6 +939,7 @@ export function buildStatsReport(
   const globalIQR = iqr(validERs);
 
   const sections = [
+    buildDataAvailablePreamble(db),
     buildOverviewSection(db, posts, globalMedianER, globalMedianWER, globalIQR, timezone),
     buildRecentVsBaselineSection(posts, timezone),
     buildFormatSection(posts),
@@ -695,6 +951,10 @@ export function buildStatsReport(
     buildFrequencySection(posts),
     buildContentGapsSection(db),
     buildWritingPromptSection(writingPrompt),
+    buildTopicPerformanceSection(db),
+    buildHookPerformanceSection(db),
+    buildImageSubtypeSection(db),
+    buildFollowerGrowthSection(db),
   ];
 
   return sections.join("\n\n---\n\n");

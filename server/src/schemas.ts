@@ -26,6 +26,7 @@ const postMetricsSchema = z.object({
   video_views: z.number().int().nullable().optional(),
   watch_time_seconds: z.number().int().nullable().optional(),
   avg_watch_time_seconds: z.number().int().nullable().optional(),
+  new_followers: z.number().int().nullable().optional(),
 });
 
 const followersSchema = z.object({
