@@ -10,6 +10,7 @@ import {
   insertPostMetrics,
   upsertFollowerSnapshot,
   upsertProfileSnapshot,
+  upsertCommentStats,
   logScrape,
   postExists,
   queryPosts,
@@ -92,6 +93,15 @@ export function buildApp(dbPath: string) {
         for (const post of payload.posts) {
           upsertPost(db, post);
           postsUpserted++;
+          // Persist comment stats if present
+          if (post.author_replies != null || post.has_threads != null) {
+            upsertCommentStats(
+              db,
+              post.id,
+              post.author_replies ?? 0,
+              post.has_threads ?? false
+            );
+          }
         }
         postsStatus = "success";
       } catch (e: any) {
@@ -290,12 +300,15 @@ export function buildApp(dbPath: string) {
 
     // Auto-trigger AI pipeline (two-tier)
     const aiApiKey = process.env.TRUSTMIND_LLM_API_KEY;
-    if (aiApiKey && postsUpserted > 0) {
+    if (aiApiKey) {
       Promise.all([
         import("./ai/orchestrator.js"),
         import("./db/ai-queries.js"),
         import("./ai/client.js"),
-      ]).then(([{ runTaggingPipeline, runFullPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun, getSetting }, { createClient }]) => {
+      ]).then(([{ runTaggingPipeline, runFullPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun, getSetting, getUntaggedPostIds }, { createClient }]) => {
+        // Skip if nothing to do: no new posts upserted AND no untagged posts
+        const untaggedIds = getUntaggedPostIds(db);
+        if (postsUpserted === 0 && untaggedIds.length === 0) return;
         if (getRunningRun(db)) return;
         const postCount = getPostCountWithMetrics(db);
         if (postCount < 10) return;
@@ -368,6 +381,17 @@ export function buildApp(dbPath: string) {
            WHERE scraped_at > datetime('now', '-12 hours')`
         ).all() as { post_id: string }[]).map(r => r.post_id)
       : undefined;
+    // Recent posts that have never had metrics scraped (not on top-posts page)
+    // Scoped to last 14 days — after that, stats rarely increment
+    const needsMetrics = payload.posts
+      ? (db.prepare(
+          `SELECT p.id FROM posts p
+           LEFT JOIN post_metrics m ON m.post_id = p.id
+           WHERE m.id IS NULL
+             AND p.published_at > datetime('now', '-14 days')
+           ORDER BY p.published_at DESC`
+        ).all() as { id: string }[]).map(r => r.id)
+      : undefined;
 
     return {
       ok: true,
@@ -378,6 +402,7 @@ export function buildApp(dbPath: string) {
       ...(needsImages ? { needs_images: needsImages } : {}),
       ...(needsVideoUrl ? { needs_video_url: needsVideoUrl } : {}),
       ...(hasRecentMetrics ? { has_recent_metrics: hasRecentMetrics } : {}),
+      ...(needsMetrics ? { needs_metrics: needsMetrics } : {}),
     };
   });
 
@@ -435,6 +460,20 @@ export function buildApp(dbPath: string) {
          WHERE content_type = 'video'
            AND video_url IS NULL
          ORDER BY published_at DESC`
+      )
+      .all() as { id: string }[];
+    return { post_ids: rows.map((r) => r.id) };
+  });
+
+  // Recent posts that have never had metrics scraped
+  app.get("/api/posts/needs-metrics", async () => {
+    const rows = db
+      .prepare(
+        `SELECT p.id FROM posts p
+         LEFT JOIN post_metrics m ON m.post_id = p.id
+         WHERE m.id IS NULL
+           AND p.published_at > datetime('now', '-14 days')
+         ORDER BY p.published_at DESC`
       )
       .all() as { id: string }[];
     return { post_ids: rows.map((r) => r.id) };

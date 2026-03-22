@@ -127,6 +127,7 @@ export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
     video_views: null,
     watch_time_seconds: null,
     avg_watch_time_seconds: null,
+    new_followers: null,
   };
 
   const cards = doc.querySelectorAll(
@@ -159,6 +160,24 @@ export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
         else if (label === "reposts") result.reposts = value;
         else if (label === "saves") result.saves = value;
         else if (label.includes("sends")) result.sends = value;
+      }
+    } else if (title === "Profile activity") {
+      // Metric row pattern (no CTA items, uses metric-row-list-item)
+      const items = card.querySelectorAll(
+        ".member-analytics-addon-metric-row-list-item"
+      );
+      for (const item of items) {
+        const label = item
+          .querySelector(".member-analytics-addon-metric-row-list-item__title--color")
+          ?.textContent?.trim()
+          ?.toLowerCase();
+        const valueText = item
+          .querySelector(".member-analytics-addon-metric-row-list-item__value")
+          ?.textContent?.trim();
+        if (!label || !valueText) continue;
+
+        const value = parseMetricValue(valueText);
+        if (label.includes("followers gained")) result.new_followers = value;
       }
     } else if (title === "Video performance") {
       // Summary KPI pattern for video metrics
@@ -232,7 +251,48 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
   // and LinkedIn videos use blob: URLs in the DOM, not direct src attributes).
   const videoUrl: string | null = null;
 
-  return { hook_text: hookText, full_text: fullText, image_urls: imageUrls, video_url: videoUrl };
+  // Comment stats: count author replies and check for threaded replies
+  let authorReplies: number | null = null;
+  let hasThreads: boolean | null = null;
+
+  const commentSection = doc.querySelector(".comments-comments-list");
+  if (commentSection) {
+    // Find the post author's name from the page header
+    const authorNameEl = doc.querySelector(
+      ".update-components-actor__title .visually-hidden, " +
+      ".update-components-actor__title span[aria-hidden='true']"
+    );
+    const authorName = authorNameEl?.textContent?.trim()?.toLowerCase() ?? "";
+
+    if (authorName) {
+      const allComments = commentSection.querySelectorAll(
+        ".comments-comment-entity"
+      );
+      let authorReplyCount = 0;
+      let foundThreads = false;
+
+      for (const comment of allComments) {
+        // Check if this comment is by the author
+        const commenterNameEl = comment.querySelector(
+          ".comments-comment-meta__description-title"
+        );
+        const commenterName = commenterNameEl?.textContent?.trim()?.toLowerCase() ?? "";
+        if (commenterName && authorName && commenterName.includes(authorName)) {
+          authorReplyCount++;
+        }
+        // Check for threaded replies (reply entities or reply lists)
+        if (comment.classList.contains("comments-comment-entity--reply") ||
+            comment.querySelector(".comments-replies-list")) {
+          foundThreads = true;
+        }
+      }
+
+      authorReplies = authorReplyCount;
+      hasThreads = foundThreads;
+    }
+  }
+
+  return { hook_text: hookText, full_text: fullText, image_urls: imageUrls, video_url: videoUrl, author_replies: authorReplies, has_threads: hasThreads };
 }
 
 /**

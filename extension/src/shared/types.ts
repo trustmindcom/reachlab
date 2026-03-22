@@ -27,6 +27,7 @@ export const scrapedPostMetricsSchema = z.object({
   video_views: z.number().int().nullable(),
   watch_time_seconds: z.number().int().nullable(),
   avg_watch_time_seconds: z.number().int().nullable(),
+  new_followers: z.number().int().nullable(),
 });
 
 export const scrapedAudienceSchema = z.object({
@@ -47,6 +48,8 @@ export const scrapedPostContentSchema = z.object({
   full_text: z.string().nullable(),
   image_urls: z.array(z.string()),
   video_url: z.string().nullable().optional(),
+  author_replies: z.number().int().nullable().optional(),
+  has_threads: z.boolean().nullable().optional(),
 });
 
 // --- TypeScript interfaces (inferred from schemas) ---

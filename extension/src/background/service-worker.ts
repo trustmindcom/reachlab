@@ -271,7 +271,9 @@ async function startSync() {
       // - Backfill: scrape all posts
       // - Light sync (evening): only the most recent N posts
       // - Full sync (morning): posts <30 days old, skip those with recent metrics
+      // - Always include posts that have never had metrics (not on top-posts page)
       const recentMetricsSet = new Set<string>(ingestResult?.has_recent_metrics ?? []);
+      const needsMetricsIds: string[] = ingestResult?.needs_metrics ?? [];
       let postIdsToScrape: string[];
       if (isBackfill) {
         postIdsToScrape = posts.map((p) => p.id);
@@ -290,6 +292,13 @@ async function startSync() {
               return true;
             })
             .map((p) => p.id);
+      }
+      // Add posts that have never had metrics scraped (e.g. not on top-posts page)
+      const alreadyIncluded = new Set(postIdsToScrape);
+      for (const id of needsMetricsIds) {
+        if (!alreadyIncluded.has(id)) {
+          postIdsToScrape.push(id);
+        }
       }
 
       // Store posts for batch detail scraping
@@ -389,6 +398,8 @@ interface ScrapedContent {
   full_text: string | null;
   image_urls: string[];
   video_url?: string | null;
+  author_replies?: number | null;
+  has_threads?: boolean | null;
 }
 
 /**
@@ -417,11 +428,15 @@ async function scrapePostContent(
   let hookText: string | null = null;
   let imageUrls: string[] = [];
   let videoUrl: string | null = null;
+  let authorReplies: number | null = null;
+  let hasThreads: boolean | null = null;
 
   if (hookResult.type === "post-content") {
     hookText = hookResult.data.hook_text;
     imageUrls = hookResult.data.image_urls;
     videoUrl = hookResult.data.video_url ?? null;
+    authorReplies = hookResult.data.author_replies ?? null;
+    hasThreads = hookResult.data.has_threads ?? null;
   } else {
     console.warn(
       `[ReachLab] Post content scrape returned ${hookResult.type} for ${postId}:`,
@@ -466,13 +481,16 @@ async function scrapePostContent(
       const fullResult = await sendScrapeCommand(tabId);
       if (fullResult.type === "post-content") {
         fullText = fullResult.data.full_text;
+        // Update comment stats from the expanded page (more comments may be visible)
+        authorReplies = fullResult.data.author_replies ?? authorReplies;
+        hasThreads = fullResult.data.has_threads ?? hasThreads;
       }
     }
   } catch {
     // No see more button or script injection failed — continue with hook as full
   }
 
-  return { id: postId, hook_text: hookText, full_text: fullText, image_urls: imageUrls, video_url: videoUrl };
+  return { id: postId, hook_text: hookText, full_text: fullText, image_urls: imageUrls, video_url: videoUrl, author_replies: authorReplies, has_threads: hasThreads };
 }
 
 /**
