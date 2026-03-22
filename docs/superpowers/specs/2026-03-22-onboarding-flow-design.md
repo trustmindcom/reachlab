@@ -103,18 +103,18 @@ If the user skips, they get no posts analyzed and later steps (taxonomy, writing
 - Skip link: "Use defaults" → keeps the default feeds from migration 011
 
 **What happens on the server:**
-- New endpoint: `POST /api/sources/discover` — takes the user's taxonomy topics, uses Claude Agent SDK to:
-  1. Search for relevant blogs, newsletters, and news sources for each topic
-  2. For each candidate URL, verify it exists and try to find an RSS feed
-  3. Return a list of `{ name, url, feed_url?, description }` suggestions
+- New endpoint: `POST /api/sources/discover` — takes the user's taxonomy topics, uses Perplexity Sonar Pro to:
+  1. Search for relevant blogs, newsletters, and news sources for each topic (limited to 10 topics)
+  2. For each candidate URL, attempt RSS feed discovery (reusing existing `discoverFeeds` + `discoverFeedsByGuessing`)
+  3. Return a list of `{ name, url, feed_url, description }` suggestions
 - User selections are saved via existing `POST /api/sources` endpoint
 
-**Claude Agent SDK integration:**
-- Server-side agent that receives topic list
-- Uses web search tools to find relevant sources
-- Validates URLs are live
-- Discovers RSS feeds where available (reuse existing `discoverFeeds` + `discoverFeedsByGuessing`)
-- Falls back to marking sources as `source_type: 'website'` (for future scraping support)
+**Source discovery implementation:**
+- Uses Perplexity Sonar Pro for web search (same API as research pipeline)
+- Parses JSON array of source suggestions from the response
+- Runs RSS feed discovery in parallel for all suggested sources
+- Sources without RSS feeds are still returned (with `feed_url: null`) but not saved to the database since `research_sources.feed_url` is NOT NULL
+- Future: Claude Agent SDK for more sophisticated browsing/verification
 
 ### Step 5: Done
 
@@ -142,10 +142,12 @@ dashboard/src/pages/onboarding/
 
 ## Server Changes
 
-1. **New endpoint:** `GET /api/settings/:key` — returns `{ value }` or `404` (generic settings getter)
-2. **New endpoint:** `POST /api/settings` with `{ key, value }` — upserts a setting
-3. **New endpoint:** `POST /api/sources/discover` — Claude Agent SDK source discovery
-4. **Migration 013:** No schema changes needed. Just uses existing `settings` table.
+1. **New endpoint:** `GET /api/settings/kv/:key` — returns `{ value }` or `404` (generic settings getter, namespaced under `/kv/` to avoid conflicts with existing specific settings endpoints)
+2. **New endpoint:** `POST /api/settings/kv` with `{ key, value }` — upserts a setting
+3. **New endpoint:** `POST /api/sources/discover` — Perplexity-powered source discovery with RSS feed detection
+4. **No schema changes needed.** Uses existing `settings` table for `onboarding_complete` flag.
+
+Note: Analysis polling uses existing `GET /api/insights/runs` endpoint. Writing prompt uses `GET /api/settings/writing-prompt`. Taxonomy uses `GET /api/insights/taxonomy`.
 
 ## Design Tokens
 
