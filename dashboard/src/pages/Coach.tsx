@@ -226,10 +226,12 @@ function ActionsTab({
       )}
 
       {/* Recommendations */}
-      {active.length === 0 && !promptSuggestions && !progress && (
-        <div className="bg-surface-1 border border-border rounded-lg p-8 text-center animate-fade-up">
-          <p className="text-base text-text-muted">
-            No recommendations yet. Click <strong>Refresh AI</strong> to generate insights from your posts.
+      {active.length === 0 && !promptSuggestions && (
+        <div className="bg-surface-1 border border-border rounded-lg p-6 text-center animate-fade-up">
+          <p className="text-sm text-text-muted">
+            {progress
+              ? "Check back after your next AI refresh for personalized recommendations."
+              : <>No recommendations yet. Click <strong>Refresh AI</strong> to generate insights from your posts.</>}
           </p>
         </div>
       )}
@@ -687,6 +689,7 @@ function DeepDiveTab({
   topics,
   hooks,
   imageSubtypes,
+  timingSlots,
 }: {
   categories: CategoryPerformance[];
   engagement: EngagementQuality | null;
@@ -694,11 +697,13 @@ function DeepDiveTab({
   topics: TopicPerformance[];
   hooks: { by_hook_type: HookPerformance[]; by_format_style: HookPerformance[] };
   imageSubtypes: ImageSubtypePerformance[];
+  timingSlots: TimingSlot[];
 }) {
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [engagementOpen, setEngagementOpen] = useState(true);
   const [topicsOpen, setTopicsOpen] = useState(true);
   const [hooksOpen, setHooksOpen] = useState(true);
+  const [imageSubtypesOpen, setImageSubtypesOpen] = useState(true);
 
   const categoryStatusBadge = (status: CategoryPerformance["status"]) => {
     switch (status) {
@@ -891,11 +896,126 @@ function DeepDiveTab({
       {/* Image Subtype Performance (conditional) */}
       {imageSubtypes.length > 0 && (
         <div className="animate-fade-up" style={{ animationDelay: "300ms" }}>
-          <h3 className="text-[13px] font-semibold text-text-secondary mb-3">Image Subtype Performance</h3>
-          <PerformanceTable
-            rows={imageSubtypes.map((s) => ({ name: s.format, post_count: s.post_count, median_wer: s.median_wer, median_impressions: s.median_impressions, median_comments: s.median_comments }))}
-            nameLabel="Format"
-          />
+          <button onClick={() => setImageSubtypesOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
+            <span className={`text-[10px] text-text-muted transition-transform ${imageSubtypesOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+              Image Subtype Performance
+            </h3>
+          </button>
+          {imageSubtypesOpen && (
+            <PerformanceTable
+              rows={imageSubtypes.map((s) => ({ name: s.format, post_count: s.post_count, median_wer: s.median_wer, median_impressions: s.median_impressions, median_comments: s.median_comments }))}
+              nameLabel="Format"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Timing Grid */}
+      {timingSlots.length > 0 && <TimingGrid slots={timingSlots} />}
+    </div>
+  );
+}
+
+// ── Timing Grid ──────────────────────────────────────────────
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const TIME_WINDOWS = [
+  { label: "Early\n6-9a", start: 6, end: 9 },
+  { label: "Morning\n9-12p", start: 9, end: 12 },
+  { label: "Lunch\n12-2p", start: 12, end: 14 },
+  { label: "Afternoon\n2-5p", start: 14, end: 17 },
+  { label: "Evening\n5-8p", start: 17, end: 20 },
+  { label: "Night\n8-11p", start: 20, end: 23 },
+];
+
+function TimingGrid({ slots }: { slots: TimingSlot[] }) {
+  const [timingOpen, setTimingOpen] = useState(true);
+
+  // Aggregate slots into day x time-window buckets
+  const grid: Record<string, { totalER: number; totalPosts: number }> = {};
+  for (const s of slots) {
+    for (const w of TIME_WINDOWS) {
+      if (s.hour >= w.start && s.hour < w.end && s.avg_engagement_rate != null) {
+        const key = `${s.day}-${w.start}`;
+        if (!grid[key]) grid[key] = { totalER: 0, totalPosts: 0 };
+        grid[key].totalER += s.avg_engagement_rate * s.post_count;
+        grid[key].totalPosts += s.post_count;
+      }
+    }
+  }
+
+  // Compute weighted average ER for each cell
+  const cells: Record<string, { er: number; posts: number }> = {};
+  let maxER = 0;
+  for (const [key, val] of Object.entries(grid)) {
+    const er = val.totalPosts > 0 ? val.totalER / val.totalPosts : 0;
+    cells[key] = { er, posts: val.totalPosts };
+    if (er > maxER) maxER = er;
+  }
+
+  return (
+    <div className="animate-fade-up" style={{ animationDelay: "360ms" }}>
+      <button onClick={() => setTimingOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
+        <span className={`text-[10px] text-text-muted transition-transform ${timingOpen ? "rotate-90" : ""}`}>&#9654;</span>
+        <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+          Best Times to Post
+        </h3>
+        <span className="text-[11px] text-text-muted">When does your audience engage most?</span>
+      </button>
+      {timingOpen && (
+        <div className="bg-surface-1 border border-border rounded-lg p-4 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr>
+                <th className="text-left px-2 py-1.5 font-medium text-[10px] text-text-muted"></th>
+                {TIME_WINDOWS.map((w) => (
+                  <th key={w.start} className="text-center px-2 py-1.5 font-medium text-[10px] text-text-muted whitespace-pre-line">{w.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {DAY_LABELS.map((day, dayIdx) => (
+                <tr key={day}>
+                  <td className="px-2 py-1.5 font-medium text-text-secondary text-[11px]">{day}</td>
+                  {TIME_WINDOWS.map((w) => {
+                    const cell = cells[`${dayIdx}-${w.start}`];
+                    const intensity = cell && maxER > 0 ? cell.er / maxER : 0;
+                    return (
+                      <td key={w.start} className="px-1 py-1">
+                        <div
+                          className="rounded px-2 py-2 text-center font-mono"
+                          style={{
+                            backgroundColor: intensity > 0
+                              ? `rgba(var(--color-accent-rgb, 99, 102, 241), ${(intensity * 0.4 + 0.05).toFixed(2)})`
+                              : "transparent",
+                            color: intensity > 0.5 ? "white" : "var(--color-text-secondary)",
+                          }}
+                          title={cell ? `${(cell.er * 100).toFixed(1)}% ER (${cell.posts} posts)` : "No data"}
+                        >
+                          {cell ? `${(cell.er * 100).toFixed(1)}%` : "--"}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex items-center gap-2 mt-2 text-[10px] text-text-muted">
+            <span>Low</span>
+            <div className="flex gap-0.5">
+              {[0.1, 0.3, 0.5, 0.7, 0.9].map((v) => (
+                <div
+                  key={v}
+                  className="w-4 h-3 rounded-sm"
+                  style={{ backgroundColor: `rgba(var(--color-accent-rgb, 99, 102, 241), ${(v * 0.4 + 0.05).toFixed(2)})` }}
+                />
+              ))}
+            </div>
+            <span>High</span>
+            <span className="ml-2">engagement rate</span>
+          </div>
         </div>
       )}
     </div>
@@ -1102,6 +1222,7 @@ export default function Coach() {
           topics={topics}
           hooks={hooks}
           imageSubtypes={imageSubtypes}
+          timingSlots={timingSlots}
         />
       )}
     </div>
