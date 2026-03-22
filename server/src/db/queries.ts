@@ -432,3 +432,13 @@ export function queryHealth(db: Database.Database) {
     },
   };
 }
+
+export function getPostIdsNeedingMetrics(db: Database.Database): string[] {
+  return (db.prepare(
+    `SELECT p.id FROM posts p
+     LEFT JOIN post_metrics m ON m.post_id = p.id
+     WHERE m.id IS NULL
+       AND p.published_at > datetime('now', '-14 days')
+     ORDER BY p.published_at DESC`
+  ).all() as { id: string }[]).map(r => r.id);
+}

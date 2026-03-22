@@ -277,7 +277,7 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
           ".comments-comment-meta__description-title"
         );
         const commenterName = commenterNameEl?.textContent?.trim()?.toLowerCase() ?? "";
-        if (commenterName && authorName && commenterName.includes(authorName)) {
+        if (commenterName && authorName && commenterName === authorName) {
           authorReplyCount++;
         }
         // Check for threaded replies (reply entities or reply lists)

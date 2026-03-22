@@ -20,6 +20,7 @@ import {
   queryFollowers,
   queryProfile,
   queryHealth,
+  getPostIdsNeedingMetrics,
 } from "./db/queries.js";
 import { ingestPayloadSchema } from "./schemas.js";
 import multipart from "@fastify/multipart";
@@ -384,13 +385,7 @@ export function buildApp(dbPath: string) {
     // Recent posts that have never had metrics scraped (not on top-posts page)
     // Scoped to last 14 days — after that, stats rarely increment
     const needsMetrics = payload.posts
-      ? (db.prepare(
-          `SELECT p.id FROM posts p
-           LEFT JOIN post_metrics m ON m.post_id = p.id
-           WHERE m.id IS NULL
-             AND p.published_at > datetime('now', '-14 days')
-           ORDER BY p.published_at DESC`
-        ).all() as { id: string }[]).map(r => r.id)
+      ? getPostIdsNeedingMetrics(db)
       : undefined;
 
     return {
@@ -465,18 +460,9 @@ export function buildApp(dbPath: string) {
     return { post_ids: rows.map((r) => r.id) };
   });
 
-  // Recent posts that have never had metrics scraped
+  // Recent posts that have never had metrics scraped (debugging/future use)
   app.get("/api/posts/needs-metrics", async () => {
-    const rows = db
-      .prepare(
-        `SELECT p.id FROM posts p
-         LEFT JOIN post_metrics m ON m.post_id = p.id
-         WHERE m.id IS NULL
-           AND p.published_at > datetime('now', '-14 days')
-         ORDER BY p.published_at DESC`
-      )
-      .all() as { id: string }[];
-    return { post_ids: rows.map((r) => r.id) };
+    return { post_ids: getPostIdsNeedingMetrics(db) };
   });
 
   // Top-performing posts (excluding announcements)
