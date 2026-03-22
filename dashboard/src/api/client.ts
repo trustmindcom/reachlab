@@ -214,6 +214,30 @@ export interface RecommendationsWithCooldown {
   resolved: Recommendation[];
 }
 
+export interface TopicPerformance {
+  topic: string;
+  post_count: number;
+  median_wer: number;
+  median_impressions: number;
+  median_comments: number;
+}
+
+export interface HookPerformance {
+  name: string;
+  post_count: number;
+  median_wer: number;
+  median_impressions: number;
+  median_comments: number;
+}
+
+export interface ImageSubtypePerformance {
+  format: string;
+  post_count: number;
+  median_wer: number;
+  median_impressions: number;
+  median_comments: number;
+}
+
 export interface HealthData {
   last_sync_at: string | null;
   sources: {
@@ -492,6 +516,19 @@ export const api = {
 
   deepDiveSparkline: (days = 90) =>
     get<{ points: SparklinePoint[] }>(`/insights/deep-dive/sparkline?days=${days}`),
+
+  deepDiveTopics: (days?: number) =>
+    get<{ topics: TopicPerformance[] }>(`/insights/deep-dive/topics${days ? `?days=${days}` : ""}`),
+
+  deepDiveHooks: (days?: number) =>
+    get<{ by_hook_type: HookPerformance[]; by_format_style: HookPerformance[] }>(
+      `/insights/deep-dive/hooks${days ? `?days=${days}` : ""}`
+    ),
+
+  deepDiveImageSubtypes: (days?: number) =>
+    get<{ subtypes: ImageSubtypePerformance[] }>(
+      `/insights/deep-dive/image-subtypes${days ? `?days=${days}` : ""}`
+    ),
 
   // Analysis gaps
   insightsGaps: () =>

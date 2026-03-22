@@ -12,6 +12,9 @@ import {
   type EngagementQuality,
   type TimingSlot,
   type SparklinePoint,
+  type TopicPerformance,
+  type HookPerformance,
+  type ImageSubtypePerformance,
 } from "../api/client";
 
 type CoachTab = "actions" | "insights" | "deep-dive";
@@ -114,6 +117,9 @@ function ActionsTab({
   onResolve,
   onFeedback,
   onAcceptSuggestion,
+  progress,
+  sparklinePoints,
+  insights,
 }: {
   active: Recommendation[];
   resolved: Recommendation[];
@@ -121,6 +127,9 @@ function ActionsTab({
   onResolve: (id: number, type: "accepted" | "dismissed") => void;
   onFeedback: (id: number, rating: string) => void;
   onAcceptSuggestion: (index: number, suggestion: PromptSuggestion) => void;
+  progress: ProgressData | null;
+  sparklinePoints: SparklinePoint[];
+  insights: Insight[];
 }) {
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<number>>(new Set());
   const [rejectedSuggestions, setRejectedSuggestions] = useState<Set<number>>(new Set());
@@ -149,18 +158,81 @@ function ActionsTab({
     }
   }
 
-  if (active.length === 0 && !promptSuggestions) {
-    return (
-      <div className="bg-surface-1 border border-border rounded-lg p-8 text-center animate-fade-up">
-        <p className="text-base text-text-muted">
-          No recommendations yet. Click <strong>Refresh AI</strong> to generate insights from your posts.
-        </p>
-      </div>
-    );
-  }
+  // Surfaced insights: first 3 confirmed or new-signal insights
+  const surfacedInsights = insights
+    .filter((i) => i.status === "confirmed" || i.status === "new_signal")
+    .slice(0, 3);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      {progress && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-fade-up">
+          {[
+            { label: "Median ER", current: progress.current.median_er, prev: progress.previous.median_er, fmt: (v: number | null) => v != null ? v.toFixed(1) + "%" : "--", sparkData: sparklinePoints.map((p) => p.er) },
+            { label: "Median Impressions", current: progress.current.median_impressions, prev: progress.previous.median_impressions, fmt: (v: number | null) => fmtNum(v), sparkData: sparklinePoints.map((p) => p.impressions) },
+            { label: "Posts", current: progress.current.total_posts, prev: progress.previous.total_posts, fmt: (v: number | null) => fmtNum(v), sparkData: [] as number[] },
+            { label: "Avg Comments", current: progress.current.avg_comments, prev: progress.previous.avg_comments, fmt: (v: number | null) => v != null ? v.toFixed(1) : "--", sparkData: sparklinePoints.map((p) => p.comments) },
+          ].map((m) => (
+            <div key={m.label} className="bg-surface-1 border border-border rounded-lg p-4">
+              <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">{m.label}</div>
+              <div className="flex items-end justify-between gap-2">
+                <div>
+                  <div className="text-xl font-semibold font-mono tracking-tight">{m.fmt(m.current)}</div>
+                  {deltaLabel(m.current, m.prev) && (
+                    <div className={`text-sm font-mono mt-0.5 ${deltaClass(m.current, m.prev)}`}>
+                      {deltaLabel(m.current, m.prev)} vs prev 30d
+                    </div>
+                  )}
+                </div>
+                {m.sparkData.length >= 2 && (
+                  <Sparkline
+                    data={m.sparkData}
+                    color={
+                      m.current != null && m.prev != null && m.prev > 0
+                        ? ((m.current - m.prev) / Math.abs(m.prev)) * 100 > 5
+                          ? "var(--color-positive)"
+                          : ((m.current - m.prev) / Math.abs(m.prev)) * 100 < -5
+                          ? "var(--color-negative)"
+                          : "var(--color-accent)"
+                        : "var(--color-accent)"
+                    }
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Surfaced Insights */}
+      {surfacedInsights.length > 0 && (
+        <div className="animate-fade-up" style={{ animationDelay: "40ms" }}>
+          <h3 className="text-[11px] font-semibold text-text-muted uppercase tracking-widest mb-2">Key Findings</h3>
+          <div className="space-y-2">
+            {surfacedInsights.map((insight) => (
+              <div key={insight.id} className="bg-surface-1 border border-border rounded-lg px-4 py-3 flex items-start gap-3">
+                <span className={`mt-0.5 text-xs ${insight.status === "confirmed" ? "text-positive" : "text-accent"}`}>
+                  {insight.status === "confirmed" ? "\u2713" : "\u2022"}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm text-text-primary">{insight.claim}</p>
+                  <p className="text-xs text-text-muted mt-0.5">{insight.evidence}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {active.length === 0 && !promptSuggestions && !progress && (
+        <div className="bg-surface-1 border border-border rounded-lg p-8 text-center animate-fade-up">
+          <p className="text-base text-text-muted">
+            No recommendations yet. Click <strong>Refresh AI</strong> to generate insights from your posts.
+          </p>
+        </div>
+      )}
       {active.map((rec, i) => {
         const p = getPriorityLabel(rec.priority);
         const c = getConfidenceLabel(rec.confidence);
@@ -609,19 +681,24 @@ function InsightsTab({
 // ── Deep Dive Tab ───────────────────────────────────────────
 
 function DeepDiveTab({
-  progress,
   categories,
   engagement,
   sparklinePoints,
+  topics,
+  hooks,
+  imageSubtypes,
 }: {
-  progress: ProgressData | null;
   categories: CategoryPerformance[];
   engagement: EngagementQuality | null;
   sparklinePoints: SparklinePoint[];
+  topics: TopicPerformance[];
+  hooks: { by_hook_type: HookPerformance[]; by_format_style: HookPerformance[] };
+  imageSubtypes: ImageSubtypePerformance[];
 }) {
-  const [progressOpen, setProgressOpen] = useState(true);
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [engagementOpen, setEngagementOpen] = useState(true);
+  const [topicsOpen, setTopicsOpen] = useState(true);
+  const [hooksOpen, setHooksOpen] = useState(true);
 
   const categoryStatusBadge = (status: CategoryPerformance["status"]) => {
     switch (status) {
@@ -638,58 +715,6 @@ function DeepDiveTab({
 
   return (
     <div className="space-y-7">
-      {/* Progress */}
-      <div className="animate-fade-up">
-        <button onClick={() => setProgressOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
-          <span className={`text-[10px] text-text-muted transition-transform ${progressOpen ? "rotate-90" : ""}`}>&#9654;</span>
-          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
-            Progress
-          </h3>
-          <span className="text-[11px] text-text-muted">Am I getting better?</span>
-        </button>
-        {progressOpen && progress && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: "Median ER", current: progress.current.median_er, prev: progress.previous.median_er, fmt: (v: number | null) => v != null ? v.toFixed(1) + "%" : "--", sparkData: sparklinePoints.map((p) => p.er) },
-              { label: "Median Impressions", current: progress.current.median_impressions, prev: progress.previous.median_impressions, fmt: (v: number | null) => fmtNum(v), sparkData: sparklinePoints.map((p) => p.impressions) },
-              { label: "Posts", current: progress.current.total_posts, prev: progress.previous.total_posts, fmt: (v: number | null) => fmtNum(v), sparkData: [] as number[] },
-              { label: "Avg Comments", current: progress.current.avg_comments, prev: progress.previous.avg_comments, fmt: (v: number | null) => v != null ? v.toFixed(1) : "--", sparkData: sparklinePoints.map((p) => p.comments) },
-            ].map((m) => (
-              <div key={m.label} className="bg-surface-1 border border-border rounded-lg p-4">
-                <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">{m.label}</div>
-                <div className="flex items-end justify-between gap-2">
-                  <div>
-                    <div className="text-xl font-semibold font-mono tracking-tight">{m.fmt(m.current)}</div>
-                    {deltaLabel(m.current, m.prev) && (
-                      <div className={`text-sm font-mono mt-0.5 ${deltaClass(m.current, m.prev)}`}>
-                        {deltaLabel(m.current, m.prev)} vs prev 30d
-                      </div>
-                    )}
-                  </div>
-                  {m.sparkData.length >= 2 && (
-                    <Sparkline
-                      data={m.sparkData}
-                      color={
-                        m.current != null && m.prev != null && m.prev > 0
-                          ? ((m.current - m.prev) / Math.abs(m.prev)) * 100 > 5
-                            ? "var(--color-positive)"
-                            : ((m.current - m.prev) / Math.abs(m.prev)) * 100 < -5
-                            ? "var(--color-negative)"
-                            : "var(--color-accent)"
-                          : "var(--color-accent)"
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {progressOpen && !progress && (
-          <p className="text-base text-text-muted">Not enough data yet.</p>
-        )}
-      </div>
-
       {/* Content Opportunities */}
       <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
         <button onClick={() => setCategoriesOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
@@ -808,6 +833,114 @@ function DeepDiveTab({
           <p className="text-base text-text-muted">Not enough engagement data yet.</p>
         )}
       </div>
+
+      {/* Topic Performance */}
+      {topics.length > 0 && (
+        <div className="animate-fade-up" style={{ animationDelay: "180ms" }}>
+          <button onClick={() => setTopicsOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
+            <span className={`text-[10px] text-text-muted transition-transform ${topicsOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+              Topic Performance
+            </h3>
+            <span className="text-[11px] text-text-muted">Which topics resonate most?</span>
+          </button>
+          {topicsOpen && (
+            <PerformanceTable
+              rows={topics.map((t) => ({ name: t.topic, post_count: t.post_count, median_wer: t.median_wer, median_impressions: t.median_impressions, median_comments: t.median_comments }))}
+              nameLabel="Topic"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Hook Type Performance */}
+      {(hooks.by_hook_type.length > 0 || hooks.by_format_style.length > 0) && (
+        <div className="animate-fade-up" style={{ animationDelay: "240ms" }}>
+          <button onClick={() => setHooksOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
+            <span className={`text-[10px] text-text-muted transition-transform ${hooksOpen ? "rotate-90" : ""}`}>&#9654;</span>
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+              Hook &amp; Format Performance
+            </h3>
+            <span className="text-[11px] text-text-muted">What openings and formats work best?</span>
+          </button>
+          {hooksOpen && (
+            <div className="space-y-4">
+              {hooks.by_hook_type.length > 0 && (
+                <div>
+                  <div className="text-[11px] text-text-muted font-medium mb-2">By Hook Type</div>
+                  <PerformanceTable
+                    rows={hooks.by_hook_type.map((h) => ({ name: h.name, post_count: h.post_count, median_wer: h.median_wer, median_impressions: h.median_impressions, median_comments: h.median_comments }))}
+                    nameLabel="Hook Type"
+                  />
+                </div>
+              )}
+              {hooks.by_format_style.length > 0 && (
+                <div>
+                  <div className="text-[11px] text-text-muted font-medium mb-2">By Format Style</div>
+                  <PerformanceTable
+                    rows={hooks.by_format_style.map((h) => ({ name: h.name, post_count: h.post_count, median_wer: h.median_wer, median_impressions: h.median_impressions, median_comments: h.median_comments }))}
+                    nameLabel="Format"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Image Subtype Performance (conditional) */}
+      {imageSubtypes.length > 0 && (
+        <div className="animate-fade-up" style={{ animationDelay: "300ms" }}>
+          <h3 className="text-[13px] font-semibold text-text-secondary mb-3">Image Subtype Performance</h3>
+          <PerformanceTable
+            rows={imageSubtypes.map((s) => ({ name: s.format, post_count: s.post_count, median_wer: s.median_wer, median_impressions: s.median_impressions, median_comments: s.median_comments }))}
+            nameLabel="Format"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shared Performance Table ─────────────────────────────────
+
+function PerformanceTable({
+  rows,
+  nameLabel,
+}: {
+  rows: { name: string; post_count: number; median_wer: number; median_impressions: number; median_comments: number }[];
+  nameLabel: string;
+}) {
+  const sorted = [...rows].sort((a, b) => b.median_wer - a.median_wer);
+  const bestWer = sorted[0]?.median_wer ?? 0;
+
+  return (
+    <div className="bg-surface-1 border border-border rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-text-muted uppercase tracking-widest">
+            <th className="text-left px-4 py-2.5 font-medium text-[10px]">{nameLabel}</th>
+            <th className="text-right px-4 py-2.5 font-medium text-[10px]">Posts</th>
+            <th className="text-right px-4 py-2.5 font-medium text-[10px]">Median WER</th>
+            <th className="text-right px-4 py-2.5 font-medium text-[10px]">Median<br />Impressions</th>
+            <th className="text-right px-4 py-2.5 font-medium text-[10px]">Median<br />Comments</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((row) => (
+            <tr
+              key={row.name}
+              className={`border-b border-border/50 hover:bg-surface-2/50 transition-colors ${row.median_wer === bestWer ? "bg-positive/5" : ""}`}
+            >
+              <td className="px-4 py-2.5 text-text-primary font-medium">{formatCategory(row.name)}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{row.post_count}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{row.median_wer.toFixed(1)}%</td>
+              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{fmtNum(row.median_impressions)}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{row.median_comments.toFixed(1)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -829,11 +962,14 @@ export default function Coach() {
   const [gaps, setGaps] = useState<AnalysisGap[]>([]);
   const [timingSlots, setTimingSlots] = useState<TimingSlot[]>([]);
 
-  // Deep Dive data
+  // Deep Dive / Breakdowns data
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [categories, setCategories] = useState<CategoryPerformance[]>([]);
   const [engagement, setEngagement] = useState<EngagementQuality | null>(null);
   const [sparklinePoints, setSparklinePoints] = useState<SparklinePoint[]>([]);
+  const [topics, setTopics] = useState<TopicPerformance[]>([]);
+  const [hooks, setHooks] = useState<{ by_hook_type: HookPerformance[]; by_format_style: HookPerformance[] }>({ by_hook_type: [], by_format_style: [] });
+  const [imageSubtypes, setImageSubtypes] = useState<ImageSubtypePerformance[]>([]);
 
   const loadAll = () => {
     // Actions
@@ -849,11 +985,14 @@ export default function Coach() {
     api.insightsGaps().then((r) => setGaps(r.gaps)).catch(() => {});
     api.timing().then((r) => setTimingSlots(r.slots)).catch(() => {});
 
-    // Deep Dive
+    // Deep Dive / Breakdowns
     api.deepDiveProgress().then(setProgress).catch(() => {});
     api.deepDiveCategories().then((r) => setCategories(r.categories)).catch(() => {});
     api.deepDiveEngagement().then((r) => setEngagement(r.engagement)).catch(() => {});
     api.deepDiveSparkline(90).then((r) => setSparklinePoints(r.points)).catch(() => {});
+    api.deepDiveTopics().then((r) => setTopics(r.topics)).catch(() => {});
+    api.deepDiveHooks().then(setHooks).catch(() => {});
+    api.deepDiveImageSubtypes().then((r) => setImageSubtypes(r.subtypes)).catch(() => {});
   };
 
   useEffect(loadAll, []);
@@ -892,9 +1031,9 @@ export default function Coach() {
   };
 
   const tabs: { key: CoachTab; label: string; count?: number }[] = [
-    { key: "actions", label: "Actions", count: activeRecs.length || undefined },
+    { key: "actions", label: "Overview", count: activeRecs.length || undefined },
     { key: "insights", label: "Insights" },
-    { key: "deep-dive", label: "Deep Dive" },
+    { key: "deep-dive", label: "Breakdowns" },
   ];
 
   return (
@@ -942,6 +1081,9 @@ export default function Coach() {
           onResolve={handleResolve}
           onFeedback={handleFeedback}
           onAcceptSuggestion={handleAcceptSuggestion}
+          progress={progress}
+          sparklinePoints={sparklinePoints}
+          insights={insights}
         />
       )}
       {tab === "insights" && (
@@ -954,10 +1096,12 @@ export default function Coach() {
       )}
       {tab === "deep-dive" && (
         <DeepDiveTab
-          progress={progress}
           categories={categories}
           engagement={engagement}
           sparklinePoints={sparklinePoints}
+          topics={topics}
+          hooks={hooks}
+          imageSubtypes={imageSubtypes}
         />
       )}
     </div>
