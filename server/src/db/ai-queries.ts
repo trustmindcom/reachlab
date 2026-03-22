@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { computeWeightedER, median } from "../ai/stats-report.js";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -1000,4 +1001,165 @@ export function getRecentFeedbackWithReasons(
       return { headline: row.headline, feedback: row.feedback, reason: null };
     }
   });
+}
+
+// ── deep dive: topic performance ─────────────────────────
+
+export interface TopicPerformance {
+  topic: string;
+  post_count: number;
+  median_wer: number;
+  median_impressions: number;
+  median_comments: number;
+}
+
+export function getTopicPerformance(db: Database.Database, days?: number): TopicPerformance[] {
+  const rows = db.prepare(
+    `SELECT tax.name as topic,
+            pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+     FROM ai_post_topics apt
+     JOIN ai_taxonomy tax ON tax.id = apt.taxonomy_id
+     JOIN posts p ON p.id = apt.post_id
+     JOIN post_metrics pm ON pm.post_id = apt.post_id
+     JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+       ON pm.id = latest.max_id
+     WHERE pm.impressions > 0
+       ${days ? `AND p.published_at > datetime('now', '-' || ? || ' days')` : ""}`
+  ).all(...(days ? [days] : [])) as Array<{
+    topic: string; impressions: number; reactions: number;
+    comments: number; reposts: number; saves: number | null; sends: number | null;
+  }>;
+
+  const groups: Record<string, { wers: number[]; impressions: number[]; comments: number[] }> = {};
+  for (const r of rows) {
+    if (!groups[r.topic]) groups[r.topic] = { wers: [], impressions: [], comments: [] };
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer !== null) groups[r.topic].wers.push(wer);
+    groups[r.topic].impressions.push(r.impressions);
+    groups[r.topic].comments.push(r.comments);
+  }
+
+  return Object.entries(groups)
+    .map(([topic, data]) => ({
+      topic,
+      post_count: data.wers.length,
+      median_wer: Math.round((median(data.wers) ?? 0) * 100) / 100,
+      median_impressions: Math.round(median(data.impressions) ?? 0),
+      median_comments: Math.round(median(data.comments) ?? 0),
+    }))
+    .sort((a, b) => b.median_wer - a.median_wer);
+}
+
+// ── deep dive: hook type performance ─────────────────────
+
+export interface HookPerformance {
+  name: string;
+  post_count: number;
+  median_wer: number;
+  median_impressions: number;
+  median_comments: number;
+}
+
+export function getHookPerformance(db: Database.Database, days?: number): {
+  by_hook_type: HookPerformance[];
+  by_format_style: HookPerformance[];
+} {
+  const rows = db.prepare(
+    `SELECT t.hook_type, t.format_style,
+            pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+     FROM ai_tags t
+     JOIN posts p ON p.id = t.post_id
+     JOIN post_metrics pm ON pm.post_id = t.post_id
+     JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+       ON pm.id = latest.max_id
+     WHERE pm.impressions > 0
+       ${days ? `AND p.published_at > datetime('now', '-' || ? || ' days')` : ""}`
+  ).all(...(days ? [days] : [])) as Array<{
+    hook_type: string | null; format_style: string | null;
+    impressions: number; reactions: number; comments: number;
+    reposts: number; saves: number | null; sends: number | null;
+  }>;
+
+  const hookGroups: Record<string, { wers: number[]; impressions: number[]; comments: number[] }> = {};
+  const styleGroups: Record<string, { wers: number[]; impressions: number[]; comments: number[] }> = {};
+
+  for (const r of rows) {
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer === null) continue;
+    if (r.hook_type) {
+      if (!hookGroups[r.hook_type]) hookGroups[r.hook_type] = { wers: [], impressions: [], comments: [] };
+      hookGroups[r.hook_type].wers.push(wer);
+      hookGroups[r.hook_type].impressions.push(r.impressions);
+      hookGroups[r.hook_type].comments.push(r.comments);
+    }
+    if (r.format_style) {
+      if (!styleGroups[r.format_style]) styleGroups[r.format_style] = { wers: [], impressions: [], comments: [] };
+      styleGroups[r.format_style].wers.push(wer);
+      styleGroups[r.format_style].impressions.push(r.impressions);
+      styleGroups[r.format_style].comments.push(r.comments);
+    }
+  }
+
+  const toList = (groups: Record<string, { wers: number[]; impressions: number[]; comments: number[] }>): HookPerformance[] =>
+    Object.entries(groups)
+      .map(([name, data]) => ({
+        name,
+        post_count: data.wers.length,
+        median_wer: Math.round((median(data.wers) ?? 0) * 100) / 100,
+        median_impressions: Math.round(median(data.impressions) ?? 0),
+        median_comments: Math.round(median(data.comments) ?? 0),
+      }))
+      .sort((a, b) => b.median_wer - a.median_wer);
+
+  return { by_hook_type: toList(hookGroups), by_format_style: toList(styleGroups) };
+}
+
+// ── deep dive: image subtype performance ─────────────────
+
+export interface ImageSubtypePerformance {
+  format: string;
+  post_count: number;
+  median_wer: number;
+  median_impressions: number;
+  median_comments: number;
+}
+
+export function getImageSubtypePerformance(db: Database.Database, days?: number): ImageSubtypePerformance[] {
+  const rows = db.prepare(
+    `SELECT ait.format,
+            pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
+     FROM ai_image_tags ait
+     JOIN posts p ON p.id = ait.post_id
+     JOIN post_metrics pm ON pm.post_id = ait.post_id
+     JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
+       ON pm.id = latest.max_id
+     WHERE pm.impressions > 0
+       AND ait.format IS NOT NULL
+       ${days ? `AND p.published_at > datetime('now', '-' || ? || ' days')` : ""}`
+  ).all(...(days ? [days] : [])) as Array<{
+    format: string; impressions: number; reactions: number;
+    comments: number; reposts: number; saves: number | null; sends: number | null;
+  }>;
+
+  if (rows.length === 0) return [];
+
+  const groups: Record<string, { wers: number[]; impressions: number[]; comments: number[] }> = {};
+  for (const r of rows) {
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer === null) continue;
+    if (!groups[r.format]) groups[r.format] = { wers: [], impressions: [], comments: [] };
+    groups[r.format].wers.push(wer);
+    groups[r.format].impressions.push(r.impressions);
+    groups[r.format].comments.push(r.comments);
+  }
+
+  return Object.entries(groups)
+    .map(([format, data]) => ({
+      format,
+      post_count: data.wers.length,
+      median_wer: Math.round((median(data.wers) ?? 0) * 100) / 100,
+      median_impressions: Math.round(median(data.impressions) ?? 0),
+      median_comments: Math.round(median(data.comments) ?? 0),
+    }))
+    .sort((a, b) => b.median_wer - a.median_wer);
 }

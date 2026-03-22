@@ -17,6 +17,9 @@ import {
   getCategoryPerformance,
   getEngagementQuality,
   getSparklineData,
+  getTopicPerformance,
+  getHookPerformance,
+  getImageSubtypePerformance,
 } from "../db/ai-queries.js";
 import { createClient, calculateCostCents } from "../ai/client.js";
 import { runPipeline } from "../ai/orchestrator.js";
@@ -182,6 +185,27 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     const q = request.query as { days?: string };
     const days = parseInt(q.days ?? "90", 10) || 90;
     return { points: getSparklineData(db, days) };
+  });
+
+  // Deep Dive: topic performance
+  app.get("/api/insights/deep-dive/topics", async (request) => {
+    const q = request.query as { days?: string };
+    const days = q.days ? parseInt(q.days, 10) || undefined : undefined;
+    return { topics: getTopicPerformance(db, days) };
+  });
+
+  // Deep Dive: hook type performance
+  app.get("/api/insights/deep-dive/hooks", async (request) => {
+    const q = request.query as { days?: string };
+    const days = q.days ? parseInt(q.days, 10) || undefined : undefined;
+    return getHookPerformance(db, days);
+  });
+
+  // Deep Dive: image subtype performance
+  app.get("/api/insights/deep-dive/image-subtypes", async (request) => {
+    const q = request.query as { days?: string };
+    const days = q.days ? parseInt(q.days, 10) || undefined : undefined;
+    return { subtypes: getImageSubtypePerformance(db, days) };
   });
 
   // ── Run history with costs ────────────────────────────────
