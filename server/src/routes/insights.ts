@@ -156,8 +156,8 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     return { logs: db.prepare("SELECT * FROM ai_logs WHERE run_id = ? ORDER BY id").all(Number(runId)) };
   });
 
-  app.get("/api/insights/gaps", async () => ({
-    gaps: getLatestAnalysisGaps(db),
+  app.get("/api/insights/gaps", async (request) => ({
+    gaps: getLatestAnalysisGaps(db, getPersonaId(request)),
   }));
 
   app.get("/api/insights/prompt-suggestions", async (request) => {

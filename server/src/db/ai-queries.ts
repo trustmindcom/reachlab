@@ -343,6 +343,20 @@ export function insertRecommendation(
   return Number(result.lastInsertRowid);
 }
 
+export function getUnresolvedRecommendationHeadlines(
+  db: Database.Database,
+  personaId: number
+): string[] {
+  const rows = db
+    .prepare(
+      `SELECT r.headline FROM recommendations r
+       JOIN ai_runs ar ON ar.id = r.run_id
+       WHERE ar.persona_id = ? AND r.resolved_at IS NULL`
+    )
+    .all(personaId) as { headline: string }[];
+  return rows.map((r) => r.headline);
+}
+
 export function getRecommendations(
   db: Database.Database,
   personaId: number,
@@ -452,11 +466,17 @@ export function getChangelog(db: Database.Database, personaId: number): {
 
   const retired = db
     .prepare(
-      `SELECT * FROM insights
-       WHERE status = 'retired' AND run_id = (SELECT MAX(run_id) FROM insights WHERE status = 'retired')
-       ORDER BY confidence DESC`
+      `SELECT i.* FROM insights i
+       JOIN ai_runs ar ON ar.id = i.run_id
+       WHERE i.status = 'retired' AND ar.persona_id = ?
+         AND i.run_id = (
+           SELECT MAX(i2.run_id) FROM insights i2
+           JOIN ai_runs ar2 ON ar2.id = i2.run_id
+           WHERE i2.status = 'retired' AND ar2.persona_id = ?
+         )
+       ORDER BY i.confidence DESC`
     )
-    .all();
+    .all(personaId, personaId);
 
   return { confirmed, new_signal, reversed, retired };
 }
@@ -616,12 +636,15 @@ export function upsertAnalysisGap(db: Database.Database, input: AnalysisGapInput
   ).run(input);
 }
 
-export function getLatestAnalysisGaps(db: Database.Database): AnalysisGapRow[] {
+export function getLatestAnalysisGaps(db: Database.Database, personaId: number): AnalysisGapRow[] {
   return db
     .prepare(
-      "SELECT * FROM ai_analysis_gaps ORDER BY times_flagged DESC, last_seen_at DESC"
+      `SELECT ag.* FROM ai_analysis_gaps ag
+       LEFT JOIN ai_runs ar ON ar.id = ag.run_id
+       WHERE ar.persona_id = ? OR ag.run_id IS NULL
+       ORDER BY ag.times_flagged DESC, ag.last_seen_at DESC`
     )
-    .all() as AnalysisGapRow[];
+    .all(personaId) as AnalysisGapRow[];
 }
 
 // ── prompt suggestions (stored in ai_overview) ─────────────

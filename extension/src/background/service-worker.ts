@@ -51,8 +51,10 @@ chrome.webRequest.onCompleted.addListener(
       if (!match) return;
       const postId = match[1];
       const videoUrl = details.url;
-      // Fire-and-forget POST to server
-      fetch(`${SERVER_URL}/api/ingest`, {
+      // Fire-and-forget POST to server (use persona 1 as default since
+      // we have no persona context in passive webRequest listeners;
+      // post IDs are globally unique so the server can resolve the post)
+      fetch(`${SERVER_URL}/api/personas/1/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

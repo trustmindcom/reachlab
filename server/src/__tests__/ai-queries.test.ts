@@ -846,7 +846,7 @@ describe("AI queries", () => {
         description: "49 posts have no text content",
         impact: "Cannot analyze writing style or topic",
       });
-      const gaps = getLatestAnalysisGaps(db);
+      const gaps = getLatestAnalysisGaps(db, 1);
       const gap = gaps.find((g) => g.stable_key === "missing_post_content");
       expect(gap).toBeDefined();
       expect(gap!.times_flagged).toBe(1);
@@ -867,7 +867,7 @@ describe("AI queries", () => {
         description: "Updated description",
         impact: "Updated impact",
       });
-      const gaps = getLatestAnalysisGaps(db);
+      const gaps = getLatestAnalysisGaps(db, 1);
       const gap = gaps.find((g) => g.stable_key === "missing_post_content");
       expect(gap!.times_flagged).toBe(2);
       expect(gap!.description).toBe("Updated description");
