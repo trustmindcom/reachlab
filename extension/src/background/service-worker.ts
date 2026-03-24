@@ -341,7 +341,13 @@ async function syncCompanyPersona(persona: SyncPersona) {
     const postsResult = await sendScrapeCommand(tabId);
     if (postsResult.type === "company-posts") {
       await postToServer({
-        post_content: postsResult.data,
+        posts: postsResult.data.map((p: any) => ({
+          id: p.id,
+          hook_text: p.hook_text,
+          full_text: p.full_text,
+          image_urls: p.image_urls,
+          video_url: p.video_url,
+        })),
       });
     }
 

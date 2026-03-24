@@ -27,7 +27,10 @@ import { runPipeline } from "../ai/orchestrator.js";
 
 function getPersonaId(request: any): number {
   const params = request.params as any;
-  return params.personaId ? Number(params.personaId) : 1;
+  if (params.personaId) return Number(params.personaId);
+  const query = request.query as any;
+  if (query.personaId) return Number(query.personaId);
+  return 1;
 }
 
 export function registerInsightsRoutes(app: FastifyInstance, db: Database.Database): void {

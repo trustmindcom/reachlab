@@ -49,7 +49,10 @@ function getClient(): Anthropic {
 
 function getPersonaId(request: any): number {
   const params = request.params as any;
-  return params.personaId ? Number(params.personaId) : 1;
+  if (params.personaId) return Number(params.personaId);
+  const query = request.query as any;
+  if (query.personaId) return Number(query.personaId);
+  return 1;
 }
 
 export function registerGenerateRoutes(app: FastifyInstance, db: Database.Database): void {
@@ -496,6 +499,7 @@ Return JSON only:
 
   // Add a single rule (used by retro flow)
   app.post("/api/generate/rules/add", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const body = request.body as { category: string; rule_text: string };
     if (!body.category || !body.rule_text) {
       return reply.status(400).send({ error: "category and rule_text required" });
@@ -504,13 +508,13 @@ Return JSON only:
     if (!validCategories.includes(body.category)) {
       return reply.status(400).send({ error: "Invalid category" });
     }
-    // Get max sort_order for this category
+    // Get max sort_order for this category within this persona
     const max = db.prepare(
-      "SELECT COALESCE(MAX(sort_order), -1) as m FROM generation_rules WHERE category = ?"
-    ).get(body.category) as { m: number };
+      "SELECT COALESCE(MAX(sort_order), -1) as m FROM generation_rules WHERE category = ? AND persona_id = ?"
+    ).get(body.category, personaId) as { m: number };
     db.prepare(
-      "INSERT INTO generation_rules (category, rule_text, sort_order, enabled) VALUES (?, ?, ?, 1)"
-    ).run(body.category, body.rule_text, max.m + 1);
+      "INSERT INTO generation_rules (category, rule_text, sort_order, enabled, persona_id) VALUES (?, ?, ?, 1, ?)"
+    ).run(body.category, body.rule_text, max.m + 1, personaId);
     return { ok: true };
   });
 
@@ -830,14 +834,16 @@ Return JSON only:
 
   // ── Sources management ─────────────────────────────────
 
-  app.get("/api/sources", async () => {
+  app.get("/api/sources", async (request) => {
+    const personaId = getPersonaId(request);
     const sources = db
-      .prepare("SELECT id, name, feed_url, enabled, created_at FROM research_sources ORDER BY name")
-      .all() as RssSource[];
+      .prepare("SELECT id, name, feed_url, enabled, created_at FROM research_sources WHERE persona_id = ? ORDER BY name")
+      .all(personaId) as RssSource[];
     return { sources };
   });
 
   app.post("/api/sources", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const { url } = request.body as { url: string };
     if (!url || typeof url !== "string" || !url.trim()) {
       return reply.status(400).send({ error: "url is required" });
@@ -855,17 +861,17 @@ Return JSON only:
     // Use the first discovered feed
     const feed = feeds[0];
 
-    // Check for duplicate
+    // Check for duplicate within this persona
     const existing = db
-      .prepare("SELECT id FROM research_sources WHERE feed_url = ?")
-      .get(feed.feed_url);
+      .prepare("SELECT id FROM research_sources WHERE feed_url = ? AND persona_id = ?")
+      .get(feed.feed_url, personaId);
     if (existing) {
       return reply.status(409).send({ error: "This source is already added." });
     }
 
     const result = db
-      .prepare("INSERT INTO research_sources (name, feed_url) VALUES (?, ?)")
-      .run(feed.title, feed.feed_url);
+      .prepare("INSERT INTO research_sources (name, feed_url, persona_id) VALUES (?, ?, ?)")
+      .run(feed.title, feed.feed_url, personaId);
 
     return {
       source: {
@@ -878,27 +884,29 @@ Return JSON only:
   });
 
   app.patch("/api/sources/:id", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const { id } = request.params as { id: string };
     const { enabled, name } = request.body as { enabled?: boolean; name?: string };
 
-    const source = db.prepare("SELECT id FROM research_sources WHERE id = ?").get(Number(id));
+    const source = db.prepare("SELECT id FROM research_sources WHERE id = ? AND persona_id = ?").get(Number(id), personaId);
     if (!source) {
       return reply.status(404).send({ error: "Source not found" });
     }
 
     if (typeof enabled === "boolean") {
-      db.prepare("UPDATE research_sources SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, Number(id));
+      db.prepare("UPDATE research_sources SET enabled = ? WHERE id = ? AND persona_id = ?").run(enabled ? 1 : 0, Number(id), personaId);
     }
     if (typeof name === "string" && name.trim()) {
-      db.prepare("UPDATE research_sources SET name = ? WHERE id = ?").run(name.trim(), Number(id));
+      db.prepare("UPDATE research_sources SET name = ? WHERE id = ? AND persona_id = ?").run(name.trim(), Number(id), personaId);
     }
 
     return { ok: true };
   });
 
   app.delete("/api/sources/:id", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const { id } = request.params as { id: string };
-    const result = db.prepare("DELETE FROM research_sources WHERE id = ?").run(Number(id));
+    const result = db.prepare("DELETE FROM research_sources WHERE id = ? AND persona_id = ?").run(Number(id), personaId);
     if (result.changes === 0) {
       return reply.status(404).send({ error: "Source not found" });
     }
