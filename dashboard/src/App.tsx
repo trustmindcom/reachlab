@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, type HealthData } from "./api/client";
+import { PersonaProvider } from "./context/PersonaContext";
+import PersonaSwitcher from "./components/PersonaSwitcher";
 import Overview from "./pages/Overview";
 import Posts from "./pages/Posts";
 import Coach from "./pages/Coach";
@@ -86,6 +88,7 @@ export default function App() {
   }
 
   return (
+    <PersonaProvider>
     <div className="min-h-screen">
       {/* Alert banner */}
       {hasErrors && health && (
@@ -125,11 +128,14 @@ export default function App() {
             ))}
           </nav>
         </div>
-        {health?.last_sync_at && (
-          <span className="text-xs text-text-muted font-mono">
-            Last sync: {new Date(health.last_sync_at).toLocaleString()}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <PersonaSwitcher />
+          {health?.last_sync_at && (
+            <span className="text-xs text-text-muted font-mono">
+              Last sync: {new Date(health.last_sync_at).toLocaleString()}
+            </span>
+          )}
+        </div>
       </header>
 
       {/* Content */}
@@ -143,5 +149,6 @@ export default function App() {
         {tab === "Settings" && <Settings />}
       </main>
     </div>
+    </PersonaProvider>
   );
 }
