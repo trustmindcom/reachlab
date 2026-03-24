@@ -36,22 +36,14 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
   app.post("/api/author-profile/interview/session", async (request, reply) => {
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
-      return reply.status(500).send({ error: "OPENAI_API_KEY is not configured" });
+      return reply.status(422).send({ error: "OPENAI_API_KEY is not configured. Add OPENAI_API_KEY=sk-... to your server/.env file and restart the server." });
     }
 
     const existingProfile = getAuthorProfile(db);
 
     // Build the interviewer system prompt
     const { buildInterviewerPrompt } = await import("../ai/interviewer-prompt.js");
-    const instructions = buildInterviewerPrompt(existingProfile?.profile_text);
-
-    // Get pre-interview info from request body
-    const { name, role, company, bio } = (request.body as any) ?? {};
-
-    let personalizedInstructions = instructions;
-    if (name || role || company) {
-      personalizedInstructions += `\n\n## Pre-Interview Info\nName: ${name ?? "Unknown"}\nRole: ${role ?? "Unknown"}\nCompany: ${company ?? "Unknown"}\nBio: ${bio ?? "Not provided"}`;
-    }
+    const personalizedInstructions = buildInterviewerPrompt(existingProfile?.profile_text);
 
     // Request ephemeral token from OpenAI
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {

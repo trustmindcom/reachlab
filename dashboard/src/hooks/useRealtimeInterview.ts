@@ -14,7 +14,7 @@ interface UseRealtimeInterviewReturn {
   elapsed: number;
   transcript: TranscriptEntry[];
   error: string | null;
-  start: (preInfo?: { name?: string; role?: string; company?: string; bio?: string }) => Promise<void>;
+  start: () => Promise<void>;
   stop: () => void;
 }
 
@@ -51,7 +51,7 @@ export function useRealtimeInterview(): UseRealtimeInterviewReturn {
     }
   }, []);
 
-  const start = useCallback(async (preInfo?: { name?: string; role?: string; company?: string; bio?: string }) => {
+  const start = useCallback(async () => {
     setError(null);
     setTranscript([]);
     setElapsed(0);
@@ -70,7 +70,7 @@ export function useRealtimeInterview(): UseRealtimeInterviewReturn {
       streamRef.current = stream;
 
       // Get ephemeral token from our server
-      const session = await api.createInterviewSession(preInfo);
+      const session = await api.createInterviewSession();
 
       // Set up WebRTC
       const pc = new RTCPeerConnection();

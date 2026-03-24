@@ -10,10 +10,6 @@ interface VoiceInterviewProps {
 export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) {
   const { status, elapsed, transcript, error, start, stop } = useRealtimeInterview();
   const [phase, setPhase] = useState<"pre" | "active" | "extracting" | "review">("pre");
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [company, setCompany] = useState("");
-  const [bio, setBio] = useState("");
   const [extractedText, setExtractedText] = useState("");
   const [extractError, setExtractError] = useState<string | null>(null);
   const [noApiKey, setNoApiKey] = useState(false);
@@ -27,7 +23,7 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
   const handleStart = async () => {
     setExtractError(null);
     try {
-      await start({ name, role, company, bio });
+      await start();
       setPhase("active");
     } catch (err: any) {
       if (err.message?.includes("OPENAI_API_KEY") || err.message?.includes("500")) {
@@ -75,7 +71,10 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
       <div className="max-w-lg mx-auto text-center">
         <h2 className="text-[20px] font-semibold text-text-primary mb-2">Voice interview unavailable</h2>
         <p className="text-[13px] text-text-secondary mb-6">
-          This feature requires an OpenAI API key. You can configure it in your environment and do the interview later from Settings.
+          This feature requires an OpenAI API key. Add <code className="text-[12px] bg-surface-2 px-1.5 py-0.5 rounded">OPENAI_API_KEY=sk-...</code> to your <code className="text-[12px] bg-surface-2 px-1.5 py-0.5 rounded">server/.env</code> file and restart the server.
+        </p>
+        <p className="text-[13px] text-text-secondary mb-6">
+          You can do the interview later from Settings.
         </p>
         <button
           onClick={onSkip}
@@ -89,9 +88,9 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
 
   return (
     <div className="max-w-lg mx-auto">
-      <h2 className="text-[20px] font-semibold text-text-primary mb-2">Tell us about yourself</h2>
+      <h2 className="text-[20px] font-semibold text-text-primary mb-2">Voice interview</h2>
       <p className="text-[13px] text-text-secondary mb-6">
-        A 5-minute voice conversation to capture what makes your perspective distinctive. This helps the AI write in your voice.
+        A 5-minute voice conversation to capture what makes your perspective distinctive. The AI will ask about your name, role, and what you do — then dig into how you think.
       </p>
 
       {(error || extractError) && (
@@ -102,23 +101,14 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
 
       {phase === "pre" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: "Name", value: name, set: setName, placeholder: "Your name" },
-              { label: "Role", value: role, set: setRole, placeholder: "e.g. Engineering Manager" },
-              { label: "Company", value: company, set: setCompany, placeholder: "Where you work" },
-              { label: "Brief bio", value: bio, set: setBio, placeholder: "One sentence about what you do" },
-            ].map(({ label, value, set, placeholder }) => (
-              <div key={label}>
-                <label className="text-[11px] text-text-muted block mb-1">{label}</label>
-                <input
-                  value={value}
-                  onChange={(e) => set(e.target.value)}
-                  placeholder={placeholder}
-                  className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-accent"
-                />
-              </div>
-            ))}
+          <div className="bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-secondary space-y-2">
+            <p>The interview will:</p>
+            <ul className="list-disc list-inside text-[12px] space-y-1 text-text-muted">
+              <li>Ask your name, role, and what you do</li>
+              <li>Explore what makes your perspective unique</li>
+              <li>Dig into your mental models and contrarian views</li>
+              <li>Take about 5 minutes</li>
+            </ul>
           </div>
           <button
             onClick={handleStart}

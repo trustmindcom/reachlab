@@ -10,10 +10,6 @@ interface InterviewModalProps {
 export default function InterviewModal({ onClose, onComplete }: InterviewModalProps) {
   const { status, elapsed, transcript, error, start, stop } = useRealtimeInterview();
   const [phase, setPhase] = useState<"pre" | "active" | "extracting" | "review">("pre");
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [company, setCompany] = useState("");
-  const [bio, setBio] = useState("");
   const [extractedText, setExtractedText] = useState("");
   const [extractedJson, setExtractedJson] = useState<Record<string, any>>({});
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -25,7 +21,7 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
   };
 
   const handleStart = async () => {
-    await start({ name, role, company, bio });
+    await start();
     setPhase("active");
   };
 
@@ -83,7 +79,7 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
             <div className="space-y-4">
               <p className="text-sm text-text-secondary">
                 A 5-minute voice conversation to capture what makes your professional perspective distinctive.
-                The AI will ask about your mental models, contrarian beliefs, and hard-won lessons.
+                The AI will start by asking your name and role, then dig into your mental models, contrarian beliefs, and hard-won lessons.
               </p>
 
               {(error || extractError) && (
@@ -91,41 +87,6 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
                   {error || extractError}
                 </div>
               )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-text-muted block mb-1">Name</label>
-                  <input
-                    value={name} onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                    placeholder="Your name"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-text-muted block mb-1">Role</label>
-                  <input
-                    value={role} onChange={(e) => setRole(e.target.value)}
-                    className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                    placeholder="e.g. Engineering Manager"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-text-muted block mb-1">Company</label>
-                  <input
-                    value={company} onChange={(e) => setCompany(e.target.value)}
-                    className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                    placeholder="Where you work"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-text-muted block mb-1">Brief bio</label>
-                  <input
-                    value={bio} onChange={(e) => setBio(e.target.value)}
-                    className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                    placeholder="One sentence about what you do"
-                  />
-                </div>
-              </div>
 
               <div className="bg-surface-2 rounded-lg p-4 text-xs text-text-muted space-y-1">
                 <p className="font-medium text-text-secondary">Topics we'll cover:</p>

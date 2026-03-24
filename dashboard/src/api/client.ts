@@ -583,13 +583,16 @@ export const api = {
       body: JSON.stringify({ profile_text, profile_json }),
     }).then((r) => r.json() as Promise<{ ok: boolean }>),
 
-  createInterviewSession: (preInfo?: { name?: string; role?: string; company?: string; bio?: string }) =>
+  createInterviewSession: () =>
     fetch(`${BASE_URL}/author-profile/interview/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(preInfo ?? {}),
-    }).then((r) => {
-      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      body: JSON.stringify({}),
+    }).then(async (r) => {
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `API error: ${r.status}`);
+      }
       return r.json() as Promise<InterviewSessionResponse>;
     }),
 
