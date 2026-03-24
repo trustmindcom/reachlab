@@ -57,11 +57,17 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
           type: "realtime",
           model: "gpt-realtime",
           instructions: personalizedInstructions,
+          output_modalities: ["audio"],
           audio: {
-            output: { voice: "ash" },
-          },
-          turn_detection: {
-            type: "semantic_vad",
+            input: {
+              turn_detection: {
+                type: "server_vad",
+                silence_duration_ms: 500,
+              },
+            },
+            output: {
+              voice: "ash",
+            },
           },
         },
       }),
@@ -69,11 +75,13 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
 
     if (!response.ok) {
       const err = await response.text();
+      console.error("[Interview] OpenAI session creation failed:", err);
       return reply.status(500).send({ error: `OpenAI session creation failed: ${err}` });
     }
 
     const data = await response.json();
-    return { client_secret: data.value, model: "gpt-realtime" };
+    console.log("[Interview] Session created successfully");
+    return { client_secret: data.client_secret?.value ?? data.value, model: "gpt-realtime" };
   });
 
   // Extract profile from interview transcript
