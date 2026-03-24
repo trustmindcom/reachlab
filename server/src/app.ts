@@ -59,13 +59,13 @@ export function buildApp(dbPath: string) {
 
   // Sync state — stored server-side so extension reinstalls don't trigger full re-scrape
   app.get("/api/sync-state", async () => {
-    const row = db.prepare("SELECT value FROM settings WHERE key = 'last_sync_at'").get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'last_sync_at:1'").get() as { value: string } | undefined;
     return { last_sync_at: row?.value ? Number(row.value) : null };
   });
 
   app.put("/api/sync-state", async (request) => {
     const body = request.body as { last_sync_at: number };
-    db.prepare("INSERT INTO settings (key, value) VALUES ('last_sync_at', ?) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP")
+    db.prepare("INSERT INTO settings (key, value) VALUES ('last_sync_at:1', ?) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP")
       .run(String(body.last_sync_at), String(body.last_sync_at));
     return { ok: true };
   });

@@ -120,9 +120,9 @@ export function upsertFollowerSnapshot(
 ): void {
   const today = new Date().toISOString().split("T")[0];
   db.prepare(
-    `INSERT INTO follower_snapshots (date, total_followers)
-     VALUES (?, ?)
-     ON CONFLICT(date) DO UPDATE SET total_followers = ?`
+    `INSERT INTO follower_snapshots (date, persona_id, total_followers)
+     VALUES (?, 1, ?)
+     ON CONFLICT(date, persona_id) DO UPDATE SET total_followers = ?`
   ).run(today, totalFollowers, totalFollowers);
 }
 
@@ -136,9 +136,9 @@ export function upsertProfileSnapshot(
 ): void {
   const today = new Date().toISOString().split("T")[0];
   db.prepare(
-    `INSERT INTO profile_snapshots (date, profile_views, search_appearances, all_appearances)
-     VALUES (@date, @profile_views, @search_appearances, @all_appearances)
-     ON CONFLICT(date) DO UPDATE SET
+    `INSERT INTO profile_snapshots (date, persona_id, profile_views, search_appearances, all_appearances)
+     VALUES (@date, 1, @profile_views, @search_appearances, @all_appearances)
+     ON CONFLICT(date, persona_id) DO UPDATE SET
        profile_views = COALESCE(@profile_views, profile_views),
        search_appearances = COALESCE(@search_appearances, search_appearances),
        all_appearances = COALESCE(@all_appearances, all_appearances)`

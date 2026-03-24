@@ -95,6 +95,9 @@ INSERT INTO author_profile_new (id, persona_id, profile_text, profile_json, inte
 SELECT id, 1, profile_text, profile_json, interview_count, created_at, updated_at
 FROM author_profile;
 
+-- Ensure persona 1 always has an author_profile row (covers fresh installs with empty table)
+INSERT OR IGNORE INTO author_profile_new (persona_id) VALUES (1);
+
 DROP TABLE IF EXISTS author_profile;
 ALTER TABLE author_profile_new RENAME TO author_profile;
 
