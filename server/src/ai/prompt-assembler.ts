@@ -65,7 +65,7 @@ function formatCoachingLayer(insights: CoachingInsight[]): string {
 
 function formatProfileLayer(profileText: string): string {
   if (!profileText || profileText.trim().length === 0) return "";
-  return `## Author Profile\n\n${profileText}`;
+  return `## Author Voice & Identity\n\n${profileText}`;
 }
 
 export function assemblePrompt(

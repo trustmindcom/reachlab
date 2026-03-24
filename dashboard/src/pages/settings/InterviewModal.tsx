@@ -72,11 +72,12 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
   };
 
   const layerLabels: Record<string, { label: string; color: string }> = {
+    writing_topics: { label: "Writing Topics", color: "text-blue-400" },
+    audience: { label: "Audience", color: "text-green-400" },
+    strong_opinions: { label: "Strong Opinions", color: "text-red-400" },
     mental_models: { label: "Mental Models", color: "text-purple-400" },
-    contrarian_convictions: { label: "Contrarian Convictions", color: "text-red-400" },
-    scar_tissue: { label: "Scar Tissue", color: "text-yellow-400" },
-    disproportionate_caring: { label: "Disproportionate Caring", color: "text-green-400" },
-    vantage_point: { label: "Vantage Point", color: "text-blue-400" },
+    signature_stories: { label: "Signature Stories", color: "text-yellow-400" },
+    anti_examples: { label: "Anti-Examples", color: "text-orange-400" },
     persuasion_style: { label: "Persuasion Style", color: "text-indigo-400" },
   };
 

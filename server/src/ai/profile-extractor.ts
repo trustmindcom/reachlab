@@ -4,11 +4,12 @@ import { MODELS } from "./client.js";
 export interface ExtractedProfile {
   profile_text: string;
   profile_json: {
+    writing_topics: string[];
+    audience: string;
+    strong_opinions: string[];
     mental_models: string[];
-    contrarian_convictions: string[];
-    scar_tissue: string[];
-    disproportionate_caring: string[];
-    vantage_point: string;
+    signature_stories: string[];
+    anti_examples: string[];
     persuasion_style: string;
   };
 }
@@ -25,11 +26,11 @@ export async function extractProfile(
   const response = await client.messages.create({
     model: MODELS.SONNET,
     max_tokens: 2000,
-    system: `You are a profile extraction expert. Given an interview transcript, extract what makes this person's professional perspective distinctive. Focus on their LENS — how they see the world — not biographical facts or individual stories.`,
+    system: `You are a profile extraction expert for a LinkedIn ghostwriting tool. Given an interview transcript, extract what makes this person's writing perspective distinctive. Focus on their opinions, audience, topics, and voice — not biographical facts.`,
     messages: [
       {
         role: "user",
-        content: `Extract a professional profile from this interview transcript.
+        content: `Extract a writing profile from this interview transcript.
 
 ## Transcript
 ${transcript}
@@ -38,15 +39,23 @@ ${transcript}
 
 Return JSON with two fields:
 
-1. "profile_text" — A compact paragraph (~150-200 words) written in third person that captures who this person is professionally and what makes their perspective distinctive. This will be injected into an AI writing prompt, so it should emphasize: what they can credibly speak about, their strong opinions, their recurring observations, and how they naturally communicate. Do NOT include biographical details unless they inform perspective.
+1. "profile_text" — A compact paragraph (~200-250 words) written in second person ("you") as instructions to an AI ghostwriter. It should tell the ghostwriter:
+   - What topics this person writes about and who their audience is
+   - Their strongest opinions and contrarian beliefs (use their actual words when possible)
+   - How they naturally communicate (storyteller, opinionator, data-driven, framework-builder)
+   - What they NEVER want to sound like (anti-examples)
+   - Any signature stories or experiences they reference repeatedly
+
+   This paragraph will be injected into every draft prompt, so make it actionable. Example tone: "You are writing for [Name], a [role] who writes about [topics] for [audience]. They believe strongly that [opinion]. They never want to sound like [anti-example]. When explaining ideas, they tend to [style]."
 
 2. "profile_json" — A structured object with these fields:
+   - "writing_topics": array of strings — the specific topics they want to own on LinkedIn
+   - "audience": string — who they're writing for and what that audience cares about
+   - "strong_opinions": array of strings — beliefs they hold that most peers would disagree with, stated as "I believe X, but most people think Y"
    - "mental_models": array of strings — the 2-3 frameworks/lenses they apply repeatedly
-   - "contrarian_convictions": array of strings — beliefs they hold that most peers would disagree with
-   - "scar_tissue": array of strings — recurring patterns of failure they've observed across multiple instances
-   - "disproportionate_caring": array of strings — things they care about that most people in their role ignore
-   - "vantage_point": string — where they sit professionally and what that lets them see
-   - "persuasion_style": string — how they naturally argue (storyteller, opinionator, data-presenter, or framework-builder) and their default metaphor domain
+   - "signature_stories": array of strings — concrete experiences they referenced that could anchor future posts
+   - "anti_examples": array of strings — styles, tones, or patterns they explicitly want to avoid
+   - "persuasion_style": string — how they naturally argue (storyteller, opinionator, data-presenter, or framework-builder)
 
 Return valid JSON only. No markdown fences.`,
       },
