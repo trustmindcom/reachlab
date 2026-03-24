@@ -177,16 +177,26 @@ async function scrapeCurrent(): Promise<ContentMessage> {
   }
 
   // Company analytics page
-  if (url.match(/\/company\/\d+\/admin\/analytics\/updates/)) {
+  if (url.match(/\/company\/[^/]+\/admin\/analytics\/updates/)) {
+    await requireSelector(
+      ".org-update-engagement-table__table-body--high-height",
+      "company-analytics"
+    );
     const raw = scrapeCompanyAnalytics(document);
     const data = validate(z.array(scrapedCompanyPostSchema), raw, "company-analytics");
     return { type: "company-analytics", data };
   }
 
   // Company page posts
-  if (url.match(/\/company\/\d+\/admin\/page-posts\/published/)) {
+  if (url.match(/\/company\/[^/]+\/admin\/page-posts\/published/)) {
+    await requireSelector(".feed-shared-update-v2", "company-posts");
     const raw = scrapeCompanyPosts(document);
-    return { type: "company-posts", data: raw };
+    const data = validate(
+      z.array(scrapedPostContentSchema.extend({ id: z.string() })),
+      raw,
+      "company-posts"
+    );
+    return { type: "company-posts", data };
   }
 
   return {
