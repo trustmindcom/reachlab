@@ -101,67 +101,70 @@ export interface CoachingChange {
 
 // ── Rules ──────────────────────────────────────────────────
 
-export function getRules(db: Database.Database): GenerationRule[] {
+export function getRules(db: Database.Database, personaId: number): GenerationRule[] {
   return db
-    .prepare("SELECT * FROM generation_rules ORDER BY category, sort_order")
-    .all() as GenerationRule[];
+    .prepare("SELECT * FROM generation_rules WHERE persona_id = ? ORDER BY category, sort_order")
+    .all(personaId) as GenerationRule[];
 }
 
 export function getRulesByCategory(
   db: Database.Database,
+  personaId: number,
   category: string
 ): GenerationRule[] {
   return db
-    .prepare("SELECT * FROM generation_rules WHERE category = ? ORDER BY sort_order")
-    .all(category) as GenerationRule[];
+    .prepare("SELECT * FROM generation_rules WHERE persona_id = ? AND category = ? ORDER BY sort_order")
+    .all(personaId, category) as GenerationRule[];
 }
 
 export function replaceAllRules(
   db: Database.Database,
+  personaId: number,
   rules: Array<{ category: string; rule_text: string; example_text?: string; sort_order: number; enabled?: number }>
 ): void {
   const tx = db.transaction(() => {
-    db.prepare("DELETE FROM generation_rules").run();
+    db.prepare("DELETE FROM generation_rules WHERE persona_id = ?").run(personaId);
     const insert = db.prepare(
-      "INSERT INTO generation_rules (category, rule_text, example_text, sort_order, enabled) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO generation_rules (persona_id, category, rule_text, example_text, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?)"
     );
     for (const rule of rules) {
-      insert.run(rule.category, rule.rule_text, rule.example_text ?? null, rule.sort_order, rule.enabled ?? 1);
+      insert.run(personaId, rule.category, rule.rule_text, rule.example_text ?? null, rule.sort_order, rule.enabled ?? 1);
     }
   });
   tx();
 }
 
-export function getAntiAiTropesEnabled(db: Database.Database): boolean {
+export function getAntiAiTropesEnabled(db: Database.Database, personaId: number): boolean {
   const row = db
-    .prepare("SELECT enabled FROM generation_rules WHERE category = 'anti_ai_tropes' LIMIT 1")
-    .get() as { enabled: number } | undefined;
+    .prepare("SELECT enabled FROM generation_rules WHERE persona_id = ? AND category = 'anti_ai_tropes' LIMIT 1")
+    .get(personaId) as { enabled: number } | undefined;
   return row ? row.enabled === 1 : true;
 }
 
 // ── Coaching Insights ──────────────────────────────────────
 
-export function getActiveCoachingInsights(db: Database.Database): CoachingInsight[] {
+export function getActiveCoachingInsights(db: Database.Database, personaId: number): CoachingInsight[] {
   return db
-    .prepare("SELECT * FROM coaching_insights WHERE status = 'active' ORDER BY created_at")
-    .all() as CoachingInsight[];
+    .prepare("SELECT * FROM coaching_insights WHERE persona_id = ? AND status = 'active' ORDER BY created_at")
+    .all(personaId) as CoachingInsight[];
 }
 
-export function getAllCoachingInsights(db: Database.Database): CoachingInsight[] {
+export function getAllCoachingInsights(db: Database.Database, personaId: number): CoachingInsight[] {
   return db
-    .prepare("SELECT * FROM coaching_insights ORDER BY created_at DESC")
-    .all() as CoachingInsight[];
+    .prepare("SELECT * FROM coaching_insights WHERE persona_id = ? ORDER BY created_at DESC")
+    .all(personaId) as CoachingInsight[];
 }
 
 export function insertCoachingInsight(
   db: Database.Database,
+  personaId: number,
   insight: { title: string; prompt_text: string; evidence?: string; source_sync_id?: number }
 ): number {
   const result = db
     .prepare(
-      "INSERT INTO coaching_insights (title, prompt_text, evidence, source_sync_id) VALUES (?, ?, ?, ?)"
+      "INSERT INTO coaching_insights (persona_id, title, prompt_text, evidence, source_sync_id) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(insight.title, insight.prompt_text, insight.evidence ?? null, insight.source_sync_id ?? null);
+    .run(personaId, insight.title, insight.prompt_text, insight.evidence ?? null, insight.source_sync_id ?? null);
   return Number(result.lastInsertRowid);
 }
 
@@ -203,13 +206,14 @@ export function getPostTypeTemplate(
 
 export function insertResearch(
   db: Database.Database,
+  personaId: number,
   data: { post_type: string; stories_json: string; sources_json?: string; article_count?: number; source_count?: number }
 ): number {
   const result = db
     .prepare(
-      "INSERT INTO generation_research (post_type, stories_json, sources_json, article_count, source_count) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO generation_research (persona_id, post_type, stories_json, sources_json, article_count, source_count) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(data.post_type, data.stories_json, data.sources_json ?? null, data.article_count ?? null, data.source_count ?? null);
+    .run(personaId, data.post_type, data.stories_json, data.sources_json ?? null, data.article_count ?? null, data.source_count ?? null);
   return Number(result.lastInsertRowid);
 }
 
@@ -226,6 +230,7 @@ export function getResearch(
 
 export function insertGeneration(
   db: Database.Database,
+  personaId: number,
   data: {
     research_id: number;
     post_type: string;
@@ -237,10 +242,10 @@ export function insertGeneration(
 ): number {
   const result = db
     .prepare(
-      `INSERT INTO generations (research_id, post_type, selected_story_index, drafts_json, prompt_snapshot, personal_connection)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO generations (persona_id, research_id, post_type, selected_story_index, drafts_json, prompt_snapshot, personal_connection)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(data.research_id, data.post_type, data.selected_story_index, data.drafts_json, data.prompt_snapshot ?? null, data.personal_connection ?? null);
+    .run(personaId, data.research_id, data.post_type, data.selected_story_index, data.drafts_json, data.prompt_snapshot ?? null, data.personal_connection ?? null);
   return Number(result.lastInsertRowid);
 }
 
@@ -288,10 +293,13 @@ export function updateGeneration(
 
 export function listGenerations(
   db: Database.Database,
+  personaId: number,
   opts: { status?: string; offset?: number; limit?: number }
 ): { generations: GenerationRecord[]; total: number } {
-  const where = opts.status && opts.status !== "all" ? "WHERE status = ?" : "";
-  const params: any[] = opts.status && opts.status !== "all" ? [opts.status] : [];
+  const where = opts.status && opts.status !== "all"
+    ? "WHERE persona_id = ? AND status = ?"
+    : "WHERE persona_id = ?";
+  const params: any[] = opts.status && opts.status !== "all" ? [personaId, opts.status] : [personaId];
 
   const total = (
     db.prepare(`SELECT COUNT(*) as count FROM generations ${where}`).get(...params) as { count: number }
@@ -304,6 +312,26 @@ export function listGenerations(
     .all(...params, limit, offset) as GenerationRecord[];
 
   return { generations: rows, total };
+}
+
+// ── Auto-Retro Matching ───────────────────────────────────
+
+export function getUnmatchedGenerations(
+  db: Database.Database,
+  personaId: number,
+  daysBack: number = 90
+): Array<{ id: number; final_draft: string; created_at: string }> {
+  return db
+    .prepare(
+      `SELECT id, final_draft, created_at FROM generations
+       WHERE persona_id = ?
+         AND final_draft IS NOT NULL
+         AND matched_post_id IS NULL
+         AND status IN ('draft', 'copied')
+         AND created_at > datetime('now', '-' || ? || ' days')
+       ORDER BY created_at DESC`
+    )
+    .all(personaId, daysBack) as any[];
 }
 
 // ── Revisions ──────────────────────────────────────────────
@@ -346,11 +374,12 @@ export function insertRevision(
 
 export function insertCoachingSync(
   db: Database.Database,
+  personaId: number,
   changes_json: string
 ): number {
   const result = db
-    .prepare("INSERT INTO coaching_syncs (changes_json) VALUES (?)")
-    .run(changes_json);
+    .prepare("INSERT INTO coaching_syncs (persona_id, changes_json) VALUES (?, ?)")
+    .run(personaId, changes_json);
   return Number(result.lastInsertRowid);
 }
 
@@ -417,11 +446,12 @@ export function getCoachingChangeLog(
 }
 
 export function getCoachingSyncHistory(
-  db: Database.Database
+  db: Database.Database,
+  personaId: number
 ): Array<{ id: number; accepted_count: number; skipped_count: number; status: string; created_at: string; completed_at: string | null }> {
   return db
-    .prepare("SELECT id, accepted_count, skipped_count, status, created_at, completed_at FROM coaching_syncs ORDER BY id DESC LIMIT 20")
-    .all() as any[];
+    .prepare("SELECT id, accepted_count, skipped_count, status, created_at, completed_at FROM coaching_syncs WHERE persona_id = ? ORDER BY id DESC LIMIT 20")
+    .all(personaId) as any[];
 }
 
 // ── Topic Log ──────────────────────────────────────────────
@@ -435,10 +465,10 @@ export function insertTopicLog(
   ).run(data.generation_id, data.topic_category ?? null, data.was_stretch ? 1 : 0);
 }
 
-export function getRecentStoryHeadlines(db: Database.Database, limit: number): string[] {
+export function getRecentStoryHeadlines(db: Database.Database, personaId: number, limit: number): string[] {
   const rows = db
-    .prepare("SELECT stories_json FROM generation_research ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as { stories_json: string }[];
+    .prepare("SELECT stories_json FROM generation_research WHERE persona_id = ? ORDER BY created_at DESC LIMIT ?")
+    .all(personaId, limit) as { stories_json: string }[];
   const headlines: string[] = [];
   for (const row of rows) {
     try {
@@ -453,11 +483,18 @@ export function getRecentStoryHeadlines(db: Database.Database, limit: number): s
 
 export function getRecentTopics(
   db: Database.Database,
+  personaId: number,
   limit: number = 10
 ): Array<{ topic_category: string; was_stretch: number; created_at: string }> {
   return db
-    .prepare("SELECT topic_category, was_stretch, created_at FROM generation_topic_log ORDER BY created_at DESC LIMIT ?")
-    .all(limit) as any[];
+    .prepare(
+      `SELECT tl.topic_category, tl.was_stretch, tl.created_at
+       FROM generation_topic_log tl
+       JOIN generations g ON g.id = tl.generation_id
+       WHERE g.persona_id = ?
+       ORDER BY tl.created_at DESC LIMIT ?`
+    )
+    .all(personaId, limit) as any[];
 }
 
 // ── Default Rules ──────────────────────────────────────────
@@ -490,8 +527,8 @@ export const DEFAULT_RULES: Array<{ category: string; rule_text: string; example
   { category: "anti_ai_tropes", rule_text: "No emoji-heavy formatting or numbered listicles disguised as thought leadership", sort_order: 10 },
 ];
 
-export function seedDefaultRules(db: Database.Database): void {
-  replaceAllRules(db, DEFAULT_RULES);
+export function seedDefaultRules(db: Database.Database, personaId: number): void {
+  replaceAllRules(db, personaId, DEFAULT_RULES);
 }
 
 // ── Generation Messages (chat history) ───────────────────

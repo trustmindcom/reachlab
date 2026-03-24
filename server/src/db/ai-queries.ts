@@ -85,14 +85,15 @@ export interface ImageTag {
 
 export function createRun(
   db: Database.Database,
+  personaId: number,
   triggered_by: string,
   post_count: number
 ): number {
   const result = db
     .prepare(
-      `INSERT INTO ai_runs (triggered_by, post_count) VALUES (?, ?)`
+      `INSERT INTO ai_runs (persona_id, triggered_by, post_count) VALUES (?, ?, ?)`
     )
-    .run(triggered_by, post_count);
+    .run(personaId, triggered_by, post_count);
   return Number(result.lastInsertRowid);
 }
 
@@ -127,24 +128,26 @@ export function failRun(
 }
 
 export function getRunningRun(
-  db: Database.Database
+  db: Database.Database,
+  personaId: number
 ): { id: number; started_at: string } | null {
   return (
     (db
-      .prepare("SELECT id, started_at FROM ai_runs WHERE status = 'running' LIMIT 1")
-      .get() as { id: number; started_at: string } | undefined) ?? null
+      .prepare("SELECT id, started_at FROM ai_runs WHERE status = 'running' AND persona_id = ? LIMIT 1")
+      .get(personaId) as { id: number; started_at: string } | undefined) ?? null
   );
 }
 
 export function getLatestCompletedRun(
-  db: Database.Database
+  db: Database.Database,
+  personaId: number
 ): { id: number; status: string; post_count: number; completed_at: string } | null {
   return (
     (db
       .prepare(
-        "SELECT ar.id, ar.status, ar.post_count, ar.completed_at FROM ai_runs ar JOIN ai_overview ao ON ao.run_id = ar.id WHERE ar.status = 'completed' ORDER BY ar.id DESC LIMIT 1"
+        "SELECT ar.id, ar.status, ar.post_count, ar.completed_at FROM ai_runs ar JOIN ai_overview ao ON ao.run_id = ar.id WHERE ar.status = 'completed' AND ar.persona_id = ? ORDER BY ar.id DESC LIMIT 1"
       )
-      .get() as
+      .get(personaId) as
       | { id: number; status: string; post_count: number; completed_at: string }
       | undefined) ?? null
   );
@@ -265,15 +268,16 @@ export function getAiTags(
   return result;
 }
 
-export function getUntaggedPostIds(db: Database.Database): string[] {
+export function getUntaggedPostIds(db: Database.Database, personaId: number): string[] {
   const rows = db
     .prepare(
       `SELECT p.id FROM posts p
        LEFT JOIN ai_tags t ON t.post_id = p.id
        WHERE t.post_id IS NULL
+         AND p.persona_id = ?
        ORDER BY p.id`
     )
-    .all() as { id: string }[];
+    .all(personaId) as { id: string }[];
   return rows.map((r) => r.id);
 }
 
@@ -295,12 +299,15 @@ export function insertInsight(
   return Number(result.lastInsertRowid);
 }
 
-export function getActiveInsights(db: Database.Database): any[] {
+export function getActiveInsights(db: Database.Database, personaId: number): any[] {
   return db
     .prepare(
-      `SELECT * FROM insights WHERE status = 'active' ORDER BY confidence DESC`
+      `SELECT i.* FROM insights i
+       JOIN ai_runs ar ON ar.id = i.run_id
+       WHERE i.status = 'active' AND ar.persona_id = ?
+       ORDER BY i.confidence DESC`
     )
-    .all();
+    .all(personaId);
 }
 
 export function retireInsight(db: Database.Database, insightId: number): void {
@@ -338,6 +345,7 @@ export function insertRecommendation(
 
 export function getRecommendations(
   db: Database.Database,
+  personaId: number,
   runId?: number
 ): any[] {
   if (runId != null) {
@@ -348,7 +356,7 @@ export function getRecommendations(
       .all(runId);
   }
   // Default: latest completed run
-  const latest = getLatestCompletedRun(db);
+  const latest = getLatestCompletedRun(db, personaId);
   if (!latest) return [];
   return db
     .prepare(
@@ -384,8 +392,8 @@ export function upsertOverview(
   })();
 }
 
-export function getLatestOverview(db: Database.Database): any | null {
-  const latest = getLatestCompletedRun(db);
+export function getLatestOverview(db: Database.Database, personaId: number): any | null {
+  const latest = getLatestCompletedRun(db, personaId);
   if (!latest) return null;
   return (
     db
@@ -408,13 +416,13 @@ export function insertAiLog(
 
 // ── helpers ────────────────────────────────────────────────
 
-export function getChangelog(db: Database.Database): {
+export function getChangelog(db: Database.Database, personaId: number): {
   confirmed: any[];
   new_signal: any[];
   reversed: any[];
   retired: any[];
 } {
-  const latestRun = getLatestCompletedRun(db);
+  const latestRun = getLatestCompletedRun(db, personaId);
 
   if (!latestRun) return { confirmed: [], new_signal: [], reversed: [], retired: [] };
 
@@ -453,13 +461,15 @@ export function getChangelog(db: Database.Database): {
   return { confirmed, new_signal, reversed, retired };
 }
 
-export function getPostCountWithMetrics(db: Database.Database): number {
+export function getPostCountWithMetrics(db: Database.Database, personaId: number): number {
   const row = db
     .prepare(
       `SELECT COUNT(DISTINCT pm.post_id) as count
-       FROM post_metrics pm`
+       FROM post_metrics pm
+       JOIN posts p ON p.id = pm.post_id
+       WHERE p.persona_id = ?`
     )
-    .get() as { count: number };
+    .get(personaId) as { count: number };
   return row.count;
 }
 
@@ -496,31 +506,35 @@ export function getImageTags(
 }
 
 export function getUnclassifiedImagePosts(
-  db: Database.Database
+  db: Database.Database,
+  personaId: number
 ): { id: string; image_local_paths: string; hook_text: string | null }[] {
   return db
     .prepare(
       `SELECT p.id, p.image_local_paths, p.hook_text
        FROM posts p
        WHERE p.image_local_paths IS NOT NULL
+         AND p.persona_id = ?
          AND NOT EXISTS (SELECT 1 FROM ai_image_tags t WHERE t.post_id = p.id)
        ORDER BY p.published_at DESC`
     )
-    .all() as { id: string; image_local_paths: string; hook_text: string | null }[];
+    .all(personaId) as { id: string; image_local_paths: string; hook_text: string | null }[];
 }
 
 export function getPostCountSinceRun(
   db: Database.Database,
+  personaId: number,
   runId: number
 ): number {
   const row = db
     .prepare(
       `SELECT COUNT(*) as count FROM posts p
-       WHERE p.published_at > (
-         SELECT completed_at FROM ai_runs WHERE id = ?
-       )`
+       WHERE p.persona_id = ?
+         AND p.published_at > (
+           SELECT completed_at FROM ai_runs WHERE id = ?
+         )`
     )
-    .get(runId) as { count: number };
+    .get(personaId, runId) as { count: number };
   return row.count;
 }
 
@@ -552,18 +566,19 @@ export interface WritingPromptHistoryRow {
 
 export function saveWritingPromptHistory(
   db: Database.Database,
+  personaId: number,
   input: { prompt_text: string; source: string; evidence: string | null }
 ): void {
   db.prepare(
-    `INSERT INTO writing_prompt_history (prompt_text, source, suggestion_evidence)
-     VALUES (?, ?, ?)`
-  ).run(input.prompt_text, input.source, input.evidence);
+    `INSERT INTO writing_prompt_history (persona_id, prompt_text, source, suggestion_evidence)
+     VALUES (?, ?, ?, ?)`
+  ).run(personaId, input.prompt_text, input.source, input.evidence);
 }
 
-export function getWritingPromptHistory(db: Database.Database): WritingPromptHistoryRow[] {
+export function getWritingPromptHistory(db: Database.Database, personaId: number): WritingPromptHistoryRow[] {
   return db
-    .prepare("SELECT * FROM writing_prompt_history ORDER BY id DESC")
-    .all() as WritingPromptHistoryRow[];
+    .prepare("SELECT * FROM writing_prompt_history WHERE persona_id = ? ORDER BY id DESC")
+    .all(personaId) as WritingPromptHistoryRow[];
 }
 
 // ── ai_analysis_gaps ───────────────────────────────────────
@@ -623,8 +638,8 @@ export interface PromptSuggestions {
   suggestions: PromptSuggestion[];
 }
 
-export function getLatestPromptSuggestions(db: Database.Database): PromptSuggestions | null {
-  const latest = getLatestCompletedRun(db);
+export function getLatestPromptSuggestions(db: Database.Database, personaId: number): PromptSuggestions | null {
+  const latest = getLatestCompletedRun(db, personaId);
   if (!latest) return null;
   const row = db
     .prepare("SELECT prompt_suggestions_json FROM ai_overview WHERE run_id = ? LIMIT 1")
@@ -651,9 +666,10 @@ export function resolveRecommendation(
 
 export function getRecommendationsWithCooldown(
   db: Database.Database,
+  personaId: number,
   runId?: number
 ): { active: any[]; resolved: any[] } {
-  const latest = runId ?? getLatestCompletedRun(db)?.id;
+  const latest = runId ?? getLatestCompletedRun(db, personaId)?.id;
   if (!latest) return { active: [], resolved: [] };
 
   const allRecs = db
@@ -661,17 +677,20 @@ export function getRecommendationsWithCooldown(
     .all(latest);
 
   // Get recently resolved stable_keys with their cooldown windows
+  // Scope to persona through ai_runs
   const recentlyResolved = db
     .prepare(
-      `SELECT stable_key, resolved_type, resolved_at, headline
-       FROM recommendations
-       WHERE resolved_at IS NOT NULL
+      `SELECT r.stable_key, r.resolved_type, r.resolved_at, r.headline
+       FROM recommendations r
+       JOIN ai_runs ar ON ar.id = r.run_id
+       WHERE ar.persona_id = ?
+         AND r.resolved_at IS NOT NULL
          AND (
-           (resolved_type = 'accepted' AND resolved_at > datetime('now', '-6 months'))
-           OR (resolved_type = 'dismissed' AND resolved_at > datetime('now', '-3 months'))
+           (r.resolved_type = 'accepted' AND r.resolved_at > datetime('now', '-6 months'))
+           OR (r.resolved_type = 'dismissed' AND r.resolved_at > datetime('now', '-3 months'))
          )`
     )
-    .all() as { stable_key: string | null; resolved_type: string; resolved_at: string; headline: string }[];
+    .all(personaId) as { stable_key: string | null; resolved_type: string; resolved_at: string; headline: string }[];
 
   const cooldownKeys = new Set(
     recentlyResolved.map((r) => r.stable_key ?? r.headline)
@@ -696,11 +715,13 @@ export function getRecommendationsWithCooldown(
   // Also include recently resolved from any run for the resolved section
   const resolvedFromOtherRuns = db
     .prepare(
-      `SELECT * FROM recommendations
-       WHERE resolved_at IS NOT NULL AND run_id != ?
-       ORDER BY resolved_at DESC LIMIT 10`
+      `SELECT r.* FROM recommendations r
+       JOIN ai_runs ar ON ar.id = r.run_id
+       WHERE ar.persona_id = ?
+         AND r.resolved_at IS NOT NULL AND r.run_id != ?
+       ORDER BY r.resolved_at DESC LIMIT 10`
     )
-    .all(latest) as any[];
+    .all(personaId, latest) as any[];
 
   const resolvedIds = new Set(resolved.map((r: any) => r.id));
   for (const r of resolvedFromOtherRuns) {
@@ -721,6 +742,7 @@ export interface MetricsSummary {
 
 export function getProgressMetrics(
   db: Database.Database,
+  personaId: number,
   days: number = 30
 ): { current: MetricsSummary; previous: MetricsSummary } {
   const computeSummary = (sinceDays: number, untilDays: number): MetricsSummary => {
@@ -729,11 +751,12 @@ export function getProgressMetrics(
         `SELECT pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
          FROM posts p
          JOIN post_metrics pm ON pm.post_id = p.id
-         WHERE p.published_at > datetime('now', ? || ' days')
+         WHERE p.persona_id = ?
+           AND p.published_at > datetime('now', ? || ' days')
            AND p.published_at <= datetime('now', ? || ' days')
            AND pm.impressions > 0`
       )
-      .all(String(-sinceDays), String(-untilDays)) as {
+      .all(personaId, String(-sinceDays), String(-untilDays)) as {
       impressions: number;
       reactions: number;
       comments: number;
@@ -783,17 +806,19 @@ export interface CategoryPerformance {
   status: "underexplored_high" | "reliable" | "declining" | "normal";
 }
 
-export function getCategoryPerformance(db: Database.Database): CategoryPerformance[] {
+export function getCategoryPerformance(db: Database.Database, personaId: number): CategoryPerformance[] {
   const rows = db
     .prepare(
       `SELECT t.post_category as category,
               pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
        FROM ai_tags t
+       JOIN posts p ON p.id = t.post_id
        JOIN post_metrics pm ON pm.post_id = t.post_id
        WHERE t.post_category IS NOT NULL
+         AND p.persona_id = ?
          AND pm.impressions > 0`
     )
-    .all() as {
+    .all(personaId) as {
     category: string;
     impressions: number;
     reactions: number;
@@ -870,14 +895,16 @@ export interface EngagementQuality {
   total_posts: number;
 }
 
-export function getEngagementQuality(db: Database.Database): EngagementQuality {
+export function getEngagementQuality(db: Database.Database, personaId: number): EngagementQuality {
   const rows = db
     .prepare(
       `SELECT pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
        FROM post_metrics pm
-       WHERE pm.impressions > 0`
+       JOIN posts p ON p.id = pm.post_id
+       WHERE p.persona_id = ?
+         AND pm.impressions > 0`
     )
-    .all() as {
+    .all(personaId) as {
     impressions: number;
     reactions: number;
     comments: number;
@@ -945,6 +972,7 @@ export interface SparklinePoint {
 
 export function getSparklineData(
   db: Database.Database,
+  personaId: number,
   days: number = 90
 ): SparklinePoint[] {
   const rows = db
@@ -952,11 +980,12 @@ export function getSparklineData(
       `SELECT p.published_at, pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
        FROM posts p
        JOIN post_metrics pm ON pm.post_id = p.id
-       WHERE p.published_at > datetime('now', ? || ' days')
+       WHERE p.persona_id = ?
+         AND p.published_at > datetime('now', ? || ' days')
          AND pm.impressions > 0
        ORDER BY p.published_at ASC`
     )
-    .all(String(-days)) as {
+    .all(personaId, String(-days)) as {
     published_at: string;
     impressions: number;
     reactions: number;
@@ -978,16 +1007,19 @@ export function getSparklineData(
 }
 
 export function getRecentFeedbackWithReasons(
-  db: Database.Database
+  db: Database.Database,
+  personaId: number
 ): { headline: string; feedback: string; reason: string | null }[] {
   const rows = db
     .prepare(
-      `SELECT headline, feedback FROM recommendations
-       WHERE feedback IS NOT NULL
-       ORDER BY feedback_at DESC
+      `SELECT r.headline, r.feedback FROM recommendations r
+       JOIN ai_runs ar ON ar.id = r.run_id
+       WHERE ar.persona_id = ?
+         AND r.feedback IS NOT NULL
+       ORDER BY r.feedback_at DESC
        LIMIT 20`
     )
-    .all() as { headline: string; feedback: string }[];
+    .all(personaId) as { headline: string; feedback: string }[];
 
   return rows.map((row) => {
     try {
@@ -1013,7 +1045,10 @@ export interface TopicPerformance {
   median_comments: number;
 }
 
-export function getTopicPerformance(db: Database.Database, days?: number): TopicPerformance[] {
+export function getTopicPerformance(db: Database.Database, personaId: number, days?: number): TopicPerformance[] {
+  const params: any[] = [personaId];
+  if (days) params.push(days);
+
   const rows = db.prepare(
     `SELECT tax.name as topic,
             pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
@@ -1023,9 +1058,10 @@ export function getTopicPerformance(db: Database.Database, days?: number): Topic
      JOIN post_metrics pm ON pm.post_id = apt.post_id
      JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
        ON pm.id = latest.max_id
-     WHERE pm.impressions > 0
+     WHERE p.persona_id = ?
+       AND pm.impressions > 0
        ${days ? `AND p.published_at > datetime('now', '-' || ? || ' days')` : ""}`
-  ).all(...(days ? [days] : [])) as Array<{
+  ).all(...params) as Array<{
     topic: string; impressions: number; reactions: number;
     comments: number; reposts: number; saves: number | null; sends: number | null;
   }>;
@@ -1060,10 +1096,13 @@ export interface HookPerformance {
   median_comments: number;
 }
 
-export function getHookPerformance(db: Database.Database, days?: number): {
+export function getHookPerformance(db: Database.Database, personaId: number, days?: number): {
   by_hook_type: HookPerformance[];
   by_format_style: HookPerformance[];
 } {
+  const params: any[] = [personaId];
+  if (days) params.push(days);
+
   const rows = db.prepare(
     `SELECT t.hook_type, t.format_style,
             pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
@@ -1072,9 +1111,10 @@ export function getHookPerformance(db: Database.Database, days?: number): {
      JOIN post_metrics pm ON pm.post_id = t.post_id
      JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
        ON pm.id = latest.max_id
-     WHERE pm.impressions > 0
+     WHERE p.persona_id = ?
+       AND pm.impressions > 0
        ${days ? `AND p.published_at > datetime('now', '-' || ? || ' days')` : ""}`
-  ).all(...(days ? [days] : [])) as Array<{
+  ).all(...params) as Array<{
     hook_type: string | null; format_style: string | null;
     impressions: number; reactions: number; comments: number;
     reposts: number; saves: number | null; sends: number | null;
@@ -1124,7 +1164,10 @@ export interface ImageSubtypePerformance {
   median_comments: number;
 }
 
-export function getImageSubtypePerformance(db: Database.Database, days?: number): ImageSubtypePerformance[] {
+export function getImageSubtypePerformance(db: Database.Database, personaId: number, days?: number): ImageSubtypePerformance[] {
+  const params: any[] = [personaId];
+  if (days) params.push(days);
+
   const rows = db.prepare(
     `SELECT ait.format,
             pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
@@ -1133,10 +1176,11 @@ export function getImageSubtypePerformance(db: Database.Database, days?: number)
      JOIN post_metrics pm ON pm.post_id = ait.post_id
      JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
        ON pm.id = latest.max_id
-     WHERE pm.impressions > 0
+     WHERE p.persona_id = ?
+       AND pm.impressions > 0
        AND ait.format IS NOT NULL
        ${days ? `AND p.published_at > datetime('now', '-' || ? || ' days')` : ""}`
-  ).all(...(days ? [days] : [])) as Array<{
+  ).all(...params) as Array<{
     format: string; impressions: number; reactions: number;
     comments: number; reposts: number; saves: number | null; sends: number | null;
   }>;

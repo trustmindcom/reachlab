@@ -31,6 +31,7 @@ import {
 import { initDatabase } from "../db/index.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-generate-queries.db");
+const PERSONA_ID = 1;
 
 let db: ReturnType<typeof initDatabase>;
 
@@ -49,17 +50,17 @@ afterAll(() => {
 
 describe("generation_rules", () => {
   it("seeds default rules", () => {
-    seedDefaultRules(db);
-    const rules = getRules(db);
+    seedDefaultRules(db, PERSONA_ID);
+    const rules = getRules(db, PERSONA_ID);
     expect(rules.length).toBe(DEFAULT_RULES.length);
     expect(rules[0].category).toBe("anti_ai_tropes");
   });
 
   it("replaces all rules", () => {
-    replaceAllRules(db, [
+    replaceAllRules(db, PERSONA_ID, [
       { category: "voice_tone", rule_text: "Test rule", sort_order: 0 },
     ]);
-    const rules = getRules(db);
+    const rules = getRules(db, PERSONA_ID);
     expect(rules.length).toBe(1);
     expect(rules[0].rule_text).toBe("Test rule");
   });
@@ -67,22 +68,22 @@ describe("generation_rules", () => {
 
 describe("coaching_insights", () => {
   it("inserts and retrieves active insights", () => {
-    const id = insertCoachingInsight(db, {
+    const id = insertCoachingInsight(db, PERSONA_ID, {
       title: "Hook patterns",
       prompt_text: "Use contrarian hooks for higher engagement",
       evidence: "Top 5 posts all use contrarian hooks",
     });
     expect(id).toBeGreaterThan(0);
 
-    const insights = getActiveCoachingInsights(db);
+    const insights = getActiveCoachingInsights(db, PERSONA_ID);
     expect(insights.length).toBe(1);
     expect(insights[0].title).toBe("Hook patterns");
   });
 
   it("updates insight status", () => {
-    const insights = getActiveCoachingInsights(db);
+    const insights = getActiveCoachingInsights(db, PERSONA_ID);
     updateCoachingInsight(db, insights[0].id, { status: "retired", retired_at: new Date().toISOString() });
-    const active = getActiveCoachingInsights(db);
+    const active = getActiveCoachingInsights(db, PERSONA_ID);
     expect(active.length).toBe(0);
   });
 });
@@ -102,7 +103,7 @@ describe("post_type_templates", () => {
 
 describe("generation_research", () => {
   it("inserts and retrieves research", () => {
-    const id = insertResearch(db, {
+    const id = insertResearch(db, PERSONA_ID, {
       post_type: "news",
       stories_json: JSON.stringify([{ headline: "Test" }]),
       article_count: 5,
@@ -119,11 +120,11 @@ describe("generations", () => {
   let genId: number;
 
   it("inserts a generation", () => {
-    const researchId = insertResearch(db, {
+    const researchId = insertResearch(db, PERSONA_ID, {
       post_type: "topic",
       stories_json: JSON.stringify([]),
     });
-    genId = insertGeneration(db, {
+    genId = insertGeneration(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "topic",
       selected_story_index: 0,
@@ -143,21 +144,21 @@ describe("generations", () => {
   });
 
   it("lists generations with pagination", () => {
-    const result = listGenerations(db, { limit: 10 });
+    const result = listGenerations(db, PERSONA_ID, { limit: 10 });
     expect(result.total).toBeGreaterThan(0);
     expect(result.generations.length).toBeGreaterThan(0);
   });
 
   it("filters generations by status", () => {
-    const result = listGenerations(db, { status: "copied" });
+    const result = listGenerations(db, PERSONA_ID, { status: "copied" });
     expect(result.generations.every((g) => g.status === "copied")).toBe(true);
   });
 });
 
 describe("generation_revisions", () => {
   it("inserts a revision", () => {
-    const researchId = insertResearch(db, { post_type: "news", stories_json: "[]" });
-    const genId = insertGeneration(db, {
+    const researchId = insertResearch(db, PERSONA_ID, { post_type: "news", stories_json: "[]" });
+    const genId = insertGeneration(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "news",
       selected_story_index: 0,
@@ -175,7 +176,7 @@ describe("generation_revisions", () => {
 
 describe("coaching_syncs", () => {
   it("inserts and retrieves a sync", () => {
-    const syncId = insertCoachingSync(db, JSON.stringify([{ type: "new" }]));
+    const syncId = insertCoachingSync(db, PERSONA_ID, JSON.stringify([{ type: "new" }]));
     const sync = getCoachingSync(db, syncId);
     expect(sync).toBeDefined();
     expect(sync!.status).toBe("pending");
@@ -184,7 +185,7 @@ describe("coaching_syncs", () => {
 
 describe("coaching_change_log", () => {
   it("inserts changes and updates decisions", () => {
-    const syncId = insertCoachingSync(db, "[]");
+    const syncId = insertCoachingSync(db, PERSONA_ID, "[]");
     const changeId = insertCoachingChangeLog(db, {
       sync_id: syncId,
       change_type: "new",
@@ -200,8 +201,8 @@ describe("coaching_change_log", () => {
 
 describe("generation_topic_log", () => {
   it("tracks topic selections", () => {
-    const researchId = insertResearch(db, { post_type: "news", stories_json: "[]" });
-    const genId = insertGeneration(db, {
+    const researchId = insertResearch(db, PERSONA_ID, { post_type: "news", stories_json: "[]" });
+    const genId = insertGeneration(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "news",
       selected_story_index: 0,
@@ -209,7 +210,7 @@ describe("generation_topic_log", () => {
     });
     insertTopicLog(db, { generation_id: genId, topic_category: "AI", was_stretch: false });
     insertTopicLog(db, { generation_id: genId, topic_category: "Finance", was_stretch: true });
-    const topics = getRecentTopics(db, 5);
+    const topics = getRecentTopics(db, PERSONA_ID, 5);
     expect(topics.length).toBe(2);
     expect(topics[0].topic_category).toBe("Finance");
   });
@@ -217,7 +218,7 @@ describe("generation_topic_log", () => {
 
 describe("getRecentStoryHeadlines", () => {
   it("returns headlines from recent research sessions", () => {
-    insertResearch(db, {
+    insertResearch(db, PERSONA_ID, {
       post_type: "news",
       stories_json: JSON.stringify([
         { headline: "Headline Alpha", summary: "s", source: "src", age: "today", tag: "t", angles: [], is_stretch: false },
@@ -227,16 +228,16 @@ describe("getRecentStoryHeadlines", () => {
       source_count: 1,
     });
 
-    const headlines = getRecentStoryHeadlines(db, 30);
+    const headlines = getRecentStoryHeadlines(db, PERSONA_ID, 30);
     expect(headlines).toContain("Headline Alpha");
     expect(headlines).toContain("Headline Beta");
   });
 
   it("limits the number of research sessions queried", () => {
     // Get all headlines (limit=30 gets all sessions)
-    const allHeadlines = getRecentStoryHeadlines(db, 30);
+    const allHeadlines = getRecentStoryHeadlines(db, PERSONA_ID, 30);
     // Get only from the most recent session (limit=1)
-    const oneSession = getRecentStoryHeadlines(db, 1);
+    const oneSession = getRecentStoryHeadlines(db, PERSONA_ID, 1);
     // The limited query should return fewer headlines
     expect(oneSession.length).toBeLessThan(allHeadlines.length);
     expect(oneSession.length).toBeGreaterThan(0);
@@ -246,11 +247,11 @@ describe("getRecentStoryHeadlines", () => {
 describe("generation_messages queries", () => {
   it("inserts and retrieves messages", () => {
     // First insert a research record and generation to satisfy FK
-    const researchId = insertResearch(db, {
+    const researchId = insertResearch(db, PERSONA_ID, {
       post_type: "general",
       stories_json: "[]",
     });
-    const genId = insertGeneration(db, {
+    const genId = insertGeneration(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,

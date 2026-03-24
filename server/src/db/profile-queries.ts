@@ -17,15 +17,16 @@ export interface ProfileInterview {
   created_at: string;
 }
 
-export function getAuthorProfile(db: Database.Database): AuthorProfile | undefined {
-  return db.prepare("SELECT * FROM author_profile WHERE id = 1").get() as AuthorProfile | undefined;
+export function getAuthorProfile(db: Database.Database, personaId: number): AuthorProfile | undefined {
+  return db.prepare("SELECT * FROM author_profile WHERE persona_id = ?").get(personaId) as AuthorProfile | undefined;
 }
 
 export function upsertAuthorProfile(
   db: Database.Database,
+  personaId: number,
   data: { profile_text: string; profile_json?: string }
 ): void {
-  const existing = getAuthorProfile(db);
+  const existing = getAuthorProfile(db, personaId);
   if (existing) {
     const sets = ["profile_text = ?", "updated_at = CURRENT_TIMESTAMP"];
     const params: any[] = [data.profile_text];
@@ -33,32 +34,33 @@ export function upsertAuthorProfile(
       sets.push("profile_json = ?");
       params.push(data.profile_json);
     }
-    params.push(1);
-    db.prepare(`UPDATE author_profile SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+    params.push(personaId);
+    db.prepare(`UPDATE author_profile SET ${sets.join(", ")} WHERE persona_id = ?`).run(...params);
   } else {
     db.prepare(
-      "INSERT INTO author_profile (id, profile_text, profile_json) VALUES (1, ?, ?)"
-    ).run(data.profile_text, data.profile_json ?? "{}");
+      "INSERT INTO author_profile (persona_id, profile_text, profile_json) VALUES (?, ?, ?)"
+    ).run(personaId, data.profile_text, data.profile_json ?? "{}");
   }
 }
 
-export function incrementInterviewCount(db: Database.Database): void {
-  const existing = getAuthorProfile(db);
+export function incrementInterviewCount(db: Database.Database, personaId: number): void {
+  const existing = getAuthorProfile(db, personaId);
   if (existing) {
-    db.prepare("UPDATE author_profile SET interview_count = interview_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = 1").run();
+    db.prepare("UPDATE author_profile SET interview_count = interview_count + 1, updated_at = CURRENT_TIMESTAMP WHERE persona_id = ?").run(personaId);
   }
 }
 
 export function insertProfileInterview(
   db: Database.Database,
+  personaId: number,
   data: { transcript_json: string; extracted_profile?: string; duration_seconds?: number }
 ): number {
   const result = db.prepare(
-    "INSERT INTO profile_interviews (transcript_json, extracted_profile, duration_seconds) VALUES (?, ?, ?)"
-  ).run(data.transcript_json, data.extracted_profile ?? null, data.duration_seconds ?? null);
+    "INSERT INTO profile_interviews (persona_id, transcript_json, extracted_profile, duration_seconds) VALUES (?, ?, ?, ?)"
+  ).run(personaId, data.transcript_json, data.extracted_profile ?? null, data.duration_seconds ?? null);
   return Number(result.lastInsertRowid);
 }
 
-export function getProfileInterviews(db: Database.Database): ProfileInterview[] {
-  return db.prepare("SELECT * FROM profile_interviews ORDER BY created_at DESC LIMIT 20").all() as ProfileInterview[];
+export function getProfileInterviews(db: Database.Database, personaId: number): ProfileInterview[] {
+  return db.prepare("SELECT * FROM profile_interviews WHERE persona_id = ? ORDER BY created_at DESC LIMIT 20").all(personaId) as ProfileInterview[];
 }
