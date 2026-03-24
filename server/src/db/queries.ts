@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 
 export function upsertPost(
   db: Database.Database,
+  personaId: number,
   post: {
     id: string;
     content_preview?: string | null;
@@ -43,10 +44,11 @@ export function upsertPost(
     });
   } else {
     db.prepare(
-      `INSERT INTO posts (id, content_preview, content_type, published_at, url, full_text, hook_text, image_urls, video_url)
-       VALUES (@id, @content_preview, @content_type, @published_at, @url, @full_text, @hook_text, @image_urls, @video_url)`
+      `INSERT INTO posts (id, persona_id, content_preview, content_type, published_at, url, full_text, hook_text, image_urls, video_url)
+       VALUES (@id, @persona_id, @content_preview, @content_type, @published_at, @url, @full_text, @hook_text, @image_urls, @video_url)`
     ).run({
       id: post.id,
+      persona_id: personaId,
       content_preview: post.content_preview ?? null,
       content_type: post.content_type ?? null,
       published_at: post.published_at ?? null,
@@ -74,14 +76,20 @@ export function insertPostMetrics(
     watch_time_seconds?: number | null;
     avg_watch_time_seconds?: number | null;
     new_followers?: number | null;
+    clicks?: number | null;
+    click_through_rate?: number | null;
+    follows?: number | null;
+    engagement_rate?: number | null;
   }
 ): void {
   db.prepare(
     `INSERT INTO post_metrics
      (post_id, impressions, members_reached, reactions, comments, reposts, saves, sends,
-      video_views, watch_time_seconds, avg_watch_time_seconds, new_followers)
+      video_views, watch_time_seconds, avg_watch_time_seconds, new_followers,
+      clicks, click_through_rate, follows, engagement_rate)
      VALUES (@post_id, @impressions, @members_reached, @reactions, @comments, @reposts,
-             @saves, @sends, @video_views, @watch_time_seconds, @avg_watch_time_seconds, @new_followers)`
+             @saves, @sends, @video_views, @watch_time_seconds, @avg_watch_time_seconds, @new_followers,
+             @clicks, @click_through_rate, @follows, @engagement_rate)`
   ).run({
     post_id: metrics.post_id,
     impressions: metrics.impressions ?? null,
@@ -95,6 +103,10 @@ export function insertPostMetrics(
     watch_time_seconds: metrics.watch_time_seconds ?? null,
     avg_watch_time_seconds: metrics.avg_watch_time_seconds ?? null,
     new_followers: metrics.new_followers ?? null,
+    clicks: metrics.clicks ?? null,
+    click_through_rate: metrics.click_through_rate ?? null,
+    follows: metrics.follows ?? null,
+    engagement_rate: metrics.engagement_rate ?? null,
   });
 }
 
@@ -116,18 +128,20 @@ export function upsertCommentStats(
 
 export function upsertFollowerSnapshot(
   db: Database.Database,
+  personaId: number,
   totalFollowers: number
 ): void {
   const today = new Date().toISOString().split("T")[0];
   db.prepare(
     `INSERT INTO follower_snapshots (date, persona_id, total_followers)
-     VALUES (?, 1, ?)
+     VALUES (?, ?, ?)
      ON CONFLICT(date, persona_id) DO UPDATE SET total_followers = ?`
-  ).run(today, totalFollowers, totalFollowers);
+  ).run(today, personaId, totalFollowers, totalFollowers);
 }
 
 export function upsertProfileSnapshot(
   db: Database.Database,
+  personaId: number,
   profile: {
     profile_views?: number | null;
     search_appearances?: number | null;
@@ -137,13 +151,14 @@ export function upsertProfileSnapshot(
   const today = new Date().toISOString().split("T")[0];
   db.prepare(
     `INSERT INTO profile_snapshots (date, persona_id, profile_views, search_appearances, all_appearances)
-     VALUES (@date, 1, @profile_views, @search_appearances, @all_appearances)
+     VALUES (@date, @persona_id, @profile_views, @search_appearances, @all_appearances)
      ON CONFLICT(date, persona_id) DO UPDATE SET
        profile_views = COALESCE(@profile_views, profile_views),
        search_appearances = COALESCE(@search_appearances, search_appearances),
        all_appearances = COALESCE(@all_appearances, all_appearances)`
   ).run({
     date: today,
+    persona_id: personaId,
     profile_views: profile.profile_views ?? null,
     search_appearances: profile.search_appearances ?? null,
     all_appearances: profile.all_appearances ?? null,
@@ -152,6 +167,7 @@ export function upsertProfileSnapshot(
 
 export function logScrape(
   db: Database.Database,
+  personaId: number,
   log: {
     posts_status: string;
     followers_status: string;
@@ -161,9 +177,10 @@ export function logScrape(
   }
 ): void {
   db.prepare(
-    `INSERT INTO scrape_log (completed_at, posts_status, followers_status, profile_status, posts_count, error_details)
-     VALUES (CURRENT_TIMESTAMP, @posts_status, @followers_status, @profile_status, @posts_count, @error_details)`
+    `INSERT INTO scrape_log (persona_id, completed_at, posts_status, followers_status, profile_status, posts_count, error_details)
+     VALUES (@persona_id, CURRENT_TIMESTAMP, @posts_status, @followers_status, @profile_status, @posts_count, @error_details)`
   ).run({
+    persona_id: personaId,
     posts_status: log.posts_status,
     followers_status: log.followers_status,
     profile_status: log.profile_status,
@@ -190,9 +207,9 @@ export interface PostsQueryParams {
   limit?: number;
 }
 
-export function queryPosts(db: Database.Database, params: PostsQueryParams) {
-  const conditions: string[] = [];
-  const values: any[] = [];
+export function queryPosts(db: Database.Database, personaId: number, params: PostsQueryParams) {
+  const conditions: string[] = ["p.persona_id = ?"];
+  const values: any[] = [personaId];
 
   if (params.content_type) {
     conditions.push("p.content_type = ?");
@@ -211,7 +228,7 @@ export function queryPosts(db: Database.Database, params: PostsQueryParams) {
     values.push(params.min_impressions);
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
 
   const allowedSortColumns: Record<string, string> = {
     published_at: "p.published_at",
@@ -277,10 +294,11 @@ export function queryMetrics(db: Database.Database, postId: string) {
 
 export function queryOverview(
   db: Database.Database,
+  personaId: number,
   params?: { since?: string; until?: string }
 ) {
-  const conditions: string[] = [];
-  const values: any[] = [];
+  const conditions: string[] = ["p.persona_id = ?"];
+  const values: any[] = [personaId];
 
   if (params?.since) {
     conditions.push("p.published_at >= ?");
@@ -291,7 +309,7 @@ export function queryOverview(
     values.push(params.until);
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
 
   const metrics = db
     .prepare(
@@ -313,15 +331,15 @@ export function queryOverview(
 
   const followers = db
     .prepare(
-      "SELECT total_followers FROM follower_snapshots ORDER BY date DESC LIMIT 1"
+      "SELECT total_followers FROM follower_snapshots WHERE persona_id = ? ORDER BY date DESC LIMIT 1"
     )
-    .get() as any;
+    .get(personaId) as any;
 
   const profile = db
     .prepare(
-      "SELECT profile_views FROM profile_snapshots ORDER BY date DESC LIMIT 1"
+      "SELECT profile_views FROM profile_snapshots WHERE persona_id = ? ORDER BY date DESC LIMIT 1"
     )
-    .get() as any;
+    .get(personaId) as any;
 
   return {
     total_impressions: metrics?.total_impressions ?? 0,
@@ -332,7 +350,7 @@ export function queryOverview(
   };
 }
 
-export function queryTiming(db: Database.Database) {
+export function queryTiming(db: Database.Database, personaId: number) {
   return db
     .prepare(
       `SELECT
@@ -348,40 +366,42 @@ export function queryTiming(db: Database.Database) {
       FROM posts p
       LEFT JOIN post_metrics m ON m.post_id = p.id
         AND m.id = (SELECT MAX(id) FROM post_metrics WHERE post_id = p.id)
-      WHERE p.published_at IS NOT NULL
+      WHERE p.published_at IS NOT NULL AND p.persona_id = ?
       GROUP BY day, hour
       ORDER BY day, hour`
     )
-    .all();
+    .all(personaId);
 }
 
-export function queryFollowers(db: Database.Database) {
+export function queryFollowers(db: Database.Database, personaId: number) {
   return db
     .prepare(
       `SELECT date, total_followers,
         total_followers - LAG(total_followers) OVER (ORDER BY date) AS new_followers
       FROM follower_snapshots
+      WHERE persona_id = ?
       ORDER BY date ASC`
     )
-    .all();
+    .all(personaId);
 }
 
-export function queryProfile(db: Database.Database) {
+export function queryProfile(db: Database.Database, personaId: number) {
   return db
     .prepare(
       `SELECT date, profile_views, search_appearances, all_appearances
       FROM profile_snapshots
+      WHERE persona_id = ?
       ORDER BY date ASC`
     )
-    .all();
+    .all(personaId);
 }
 
-export function queryHealth(db: Database.Database) {
+export function queryHealth(db: Database.Database, personaId: number) {
   const lastLog = db
     .prepare(
-      "SELECT * FROM scrape_log ORDER BY id DESC LIMIT 1"
+      "SELECT * FROM scrape_log WHERE persona_id = ? ORDER BY id DESC LIMIT 1"
     )
-    .get() as any;
+    .get(personaId) as any;
 
   if (!lastLog) {
     return {
@@ -397,9 +417,9 @@ export function queryHealth(db: Database.Database) {
   const getLastSuccess = (field: string) => {
     const row = db
       .prepare(
-        `SELECT completed_at FROM scrape_log WHERE ${field} = 'success' ORDER BY id DESC LIMIT 1`
+        `SELECT completed_at FROM scrape_log WHERE persona_id = ? AND ${field} = 'success' ORDER BY id DESC LIMIT 1`
       )
-      .get() as any;
+      .get(personaId) as any;
     return row?.completed_at ?? null;
   };
 
@@ -433,12 +453,13 @@ export function queryHealth(db: Database.Database) {
   };
 }
 
-export function getPostIdsNeedingMetrics(db: Database.Database): string[] {
+export function getPostIdsNeedingMetrics(db: Database.Database, personaId: number): string[] {
   return (db.prepare(
     `SELECT p.id FROM posts p
      LEFT JOIN post_metrics m ON m.post_id = p.id
      WHERE m.id IS NULL
        AND p.published_at > datetime('now', '-14 days')
+       AND p.persona_id = ?
      ORDER BY p.published_at DESC`
-  ).all() as { id: string }[]).map(r => r.id);
+  ).all(personaId) as { id: string }[]).map(r => r.id);
 }

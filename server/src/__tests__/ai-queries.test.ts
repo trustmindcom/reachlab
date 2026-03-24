@@ -50,7 +50,7 @@ const TEST_DB_PATH = path.join(
 let db: Database.Database;
 
 function seedPost(id: string, publishedAt?: string) {
-  upsertPost(db, {
+  upsertPost(db, 1, {
     id,
     content_type: "text",
     published_at: publishedAt ?? "2025-01-01T12:00:00Z",
@@ -625,12 +625,12 @@ describe("AI queries", () => {
         cost_cents: 0.01,
       });
       // The run was completed "now", so a post published in the future counts
-      upsertPost(db, {
+      upsertPost(db, 1, {
         id: "future-post",
         content_type: "text",
         published_at: "2099-01-01T00:00:00Z",
       });
-      upsertPost(db, {
+      upsertPost(db, 1, {
         id: "old-post",
         content_type: "text",
         published_at: "2020-01-01T00:00:00Z",

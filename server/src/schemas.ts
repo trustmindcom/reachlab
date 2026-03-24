@@ -29,6 +29,10 @@ const postMetricsSchema = z.object({
   watch_time_seconds: z.number().int().nullable().optional(),
   avg_watch_time_seconds: z.number().int().nullable().optional(),
   new_followers: z.number().int().nullable().optional(),
+  clicks: z.number().int().nullable().optional(),
+  click_through_rate: z.number().nullable().optional(),
+  follows: z.number().int().nullable().optional(),
+  engagement_rate: z.number().nullable().optional(),
 });
 
 const followersSchema = z.object({
