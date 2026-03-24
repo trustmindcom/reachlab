@@ -1,7 +1,12 @@
-const BASE_URL = "/api";
+import { getActivePersonaId } from "../context/PersonaContext";
+
+function getBaseUrl(): string {
+  const personaId = getActivePersonaId();
+  return `/api/personas/${personaId}`;
+}
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
+  const res = await fetch(`${getBaseUrl()}${path}`);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -458,7 +463,7 @@ export const api = {
     ),
   insightsTaxonomy: () => get<{ taxonomy: TaxonomyItem[] }>("/insights/taxonomy"),
   insightsRefresh: (force = false) =>
-    fetch(`${BASE_URL}/insights/refresh`, {
+    fetch(`${getBaseUrl()}/insights/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ force }),
@@ -466,27 +471,27 @@ export const api = {
   insightsStatus: () =>
     get<AnalysisStatus>("/insights/status"),
   recommendationFeedback: (id: number, rating: string, reason?: string) =>
-    fetch(`${BASE_URL}/insights/recommendations/${id}/feedback`, {
+    fetch(`${getBaseUrl()}/insights/recommendations/${id}/feedback`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ feedback: { rating, reason: reason || null } }),
     }).then((r) => r.json()),
   authorPhoto: () =>
-    fetch(`${BASE_URL}/settings/author-photo`).then((r) =>
+    fetch(`${getBaseUrl()}/settings/author-photo`).then((r) =>
       r.ok ? r.blob().then((b) => URL.createObjectURL(b)) : null
     ),
   uploadAuthorPhoto: (file: File) =>
-    fetch(`${BASE_URL}/settings/author-photo`, {
+    fetch(`${getBaseUrl()}/settings/author-photo`, {
       method: "POST",
       body: file,
       headers: { "Content-Type": file.type },
     }).then((r) => r.json()),
   deleteAuthorPhoto: () =>
-    fetch(`${BASE_URL}/settings/author-photo`, { method: "DELETE" }).then((r) => r.json()),
+    fetch(`${getBaseUrl()}/settings/author-photo`, { method: "DELETE" }).then((r) => r.json()),
 
   // Timezone
   setTimezone: (timezone: string) =>
-    fetch(`${BASE_URL}/settings/timezone`, {
+    fetch(`${getBaseUrl()}/settings/timezone`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ timezone }),
@@ -497,7 +502,7 @@ export const api = {
     get<{ text: string | null }>("/settings/writing-prompt"),
 
   saveWritingPrompt: (text: string, source: "manual_edit" | "ai_suggestion", evidence?: string) =>
-    fetch(`${BASE_URL}/settings/writing-prompt`, {
+    fetch(`${getBaseUrl()}/settings/writing-prompt`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, source, evidence }),
@@ -512,7 +517,7 @@ export const api = {
 
   // Resolve a recommendation
   resolveRecommendation: (id: number, type: "accepted" | "dismissed") =>
-    fetch(`${BASE_URL}/insights/recommendations/${id}/resolve`, {
+    fetch(`${getBaseUrl()}/insights/recommendations/${id}/resolve`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type }),
@@ -557,7 +562,7 @@ export const api = {
     get<{ schedule: string; post_threshold: number }>("/settings/auto-refresh"),
 
   saveAutoRefreshSettings: (settings: { schedule?: string; post_threshold?: number }) =>
-    fetch(`${BASE_URL}/settings/auto-refresh`, {
+    fetch(`${getBaseUrl()}/settings/auto-refresh`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
@@ -577,14 +582,14 @@ export const api = {
     get<AuthorProfileResponse>("/author-profile"),
 
   saveAuthorProfile: (profile_text: string, profile_json?: Record<string, any>) =>
-    fetch(`${BASE_URL}/author-profile`, {
+    fetch(`${getBaseUrl()}/author-profile`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile_text, profile_json }),
     }).then((r) => r.json() as Promise<{ ok: boolean }>),
 
   createInterviewSession: () =>
-    fetch(`${BASE_URL}/author-profile/interview/session`, {
+    fetch(`${getBaseUrl()}/author-profile/interview/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -597,7 +602,7 @@ export const api = {
     }),
 
   extractProfile: (transcript: string, duration_seconds?: number) =>
-    fetch(`${BASE_URL}/author-profile/extract`, {
+    fetch(`${getBaseUrl()}/author-profile/extract`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transcript, duration_seconds }),
@@ -609,13 +614,13 @@ export const api = {
   // ── Generate Pipeline ─────────────────────────────────────
 
   generateDiscover: () =>
-    fetch(`${BASE_URL}/generate/discover`, { method: "POST" }).then((r) => {
+    fetch(`${getBaseUrl()}/generate/discover`, { method: "POST" }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<DiscoveryResponse>;
     }),
 
   generateResearch: (topic: string, avoid?: string[]) =>
-    fetch(`${BASE_URL}/generate/research`, {
+    fetch(`${getBaseUrl()}/generate/research`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -628,7 +633,7 @@ export const api = {
     }),
 
   generateDrafts: (researchId: number, storyIndex: number, personalConnection?: string, length?: "short" | "medium" | "long") =>
-    fetch(`${BASE_URL}/generate/drafts`, {
+    fetch(`${getBaseUrl()}/generate/drafts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -643,7 +648,7 @@ export const api = {
     }),
 
   generateChat: (generationId: number, message: string, editedDraft?: string) =>
-    fetch(`${BASE_URL}/generate/chat`, {
+    fetch(`${getBaseUrl()}/generate/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ generation_id: generationId, message, edited_draft: editedDraft }),
@@ -653,13 +658,13 @@ export const api = {
     }),
 
   generateChatHistory: (generationId: number) =>
-    fetch(`${BASE_URL}/generate/${generationId}/messages`).then((r) => {
+    fetch(`${getBaseUrl()}/generate/${generationId}/messages`).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<GenChatMessage[]>;
     }),
 
   generateCombine: (generationId: number, selectedDrafts: number[], combiningGuidance?: string) =>
-    fetch(`${BASE_URL}/generate/combine`, {
+    fetch(`${getBaseUrl()}/generate/combine`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ generation_id: generationId, selected_drafts: selectedDrafts, combining_guidance: combiningGuidance }),
@@ -674,7 +679,7 @@ export const api = {
     get<GenRulesResponse>("/generate/rules"),
 
   generateSaveRules: (categories: GenRulesResponse["categories"]) =>
-    fetch(`${BASE_URL}/generate/rules`, {
+    fetch(`${getBaseUrl()}/generate/rules`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ categories }),
@@ -684,7 +689,7 @@ export const api = {
     }),
 
   generateResetRules: () =>
-    fetch(`${BASE_URL}/generate/rules/reset`, { method: "POST" }).then((r) => {
+    fetch(`${getBaseUrl()}/generate/rules/reset`, { method: "POST" }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<GenRulesResponse>;
     }),
@@ -698,13 +703,13 @@ export const api = {
     get<any>(`/generate/history/${id}`),
 
   generateDiscard: (id: number) =>
-    fetch(`${BASE_URL}/generate/history/${id}/discard`, { method: "POST" }).then((r) => {
+    fetch(`${getBaseUrl()}/generate/history/${id}/discard`, { method: "POST" }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json();
     }),
 
   generateRetro: (id: number, publishedText: string) =>
-    fetch(`${BASE_URL}/generate/history/${id}/retro`, {
+    fetch(`${getBaseUrl()}/generate/history/${id}/retro`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ published_text: publishedText }),
@@ -717,7 +722,7 @@ export const api = {
     get<RetroResponse>(`/generate/history/${id}/retro`),
 
   generateAddRule: (category: string, ruleText: string) =>
-    fetch(`${BASE_URL}/generate/rules/add`, {
+    fetch(`${getBaseUrl()}/generate/rules/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ category, rule_text: ruleText }),
@@ -726,16 +731,21 @@ export const api = {
       return r.json() as Promise<{ ok: boolean }>;
     }),
 
+  // ── Pending Retros (for Coach) ──────────────────────────
+
+  getPendingRetros: () =>
+    get<{ retros: PendingRetro[] }>("/generate/retros/pending"),
+
   // ── Coaching Sync ─────────────────────────────────────────
 
   generateCoachingAnalyze: () =>
-    fetch(`${BASE_URL}/generate/coaching/analyze`, { method: "POST" }).then((r) => {
+    fetch(`${getBaseUrl()}/generate/coaching/analyze`, { method: "POST" }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<GenCoachingSyncResponse>;
     }),
 
   generateCoachingDecide: (changeId: number, action: string, editedText?: string) =>
-    fetch(`${BASE_URL}/generate/coaching/changes/${changeId}`, {
+    fetch(`${getBaseUrl()}/generate/coaching/changes/${changeId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, edited_text: editedText }),
@@ -755,7 +765,7 @@ export const api = {
     get<{ sources: GenSource[] }>("/sources"),
 
   addSource: (url: string) =>
-    fetch(`${BASE_URL}/sources`, {
+    fetch(`${getBaseUrl()}/sources`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
@@ -766,7 +776,7 @@ export const api = {
     }),
 
   updateSource: (id: number, updates: { enabled?: boolean; name?: string }) =>
-    fetch(`${BASE_URL}/sources/${id}`, {
+    fetch(`${getBaseUrl()}/sources/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
@@ -776,7 +786,7 @@ export const api = {
     }),
 
   deleteSource: (id: number) =>
-    fetch(`${BASE_URL}/sources/${id}`, { method: "DELETE" }).then((r) => {
+    fetch(`${getBaseUrl()}/sources/${id}`, { method: "DELETE" }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json();
     }),
@@ -784,7 +794,7 @@ export const api = {
   // ── Generic Settings (for onboarding gate, etc.) ────────
 
   getSetting: async (key: string): Promise<string | null> => {
-    const res = await fetch(`${BASE_URL}/settings/kv/${encodeURIComponent(key)}`);
+    const res = await fetch(`/api/settings/kv/${encodeURIComponent(key)}`);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     const data = await res.json();
@@ -792,7 +802,7 @@ export const api = {
   },
 
   setSetting: (key: string, value: string) =>
-    fetch(`${BASE_URL}/settings/kv`, {
+    fetch(`/api/settings/kv`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key, value }),
@@ -806,10 +816,13 @@ export const api = {
   // ── API Key Config ─────────────────────────────────────
 
   getConfigKeys: () =>
-    get<{ keys: Array<{ key: string; label: string; required: boolean; configured: boolean; prefix: string; url: string }> }>("/config/keys"),
+    fetch("/api/config/keys").then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<{ keys: Array<{ key: string; label: string; required: boolean; configured: boolean; prefix: string; url: string }> }>;
+    }),
 
   saveConfigKeys: (keys: Record<string, string>) =>
-    fetch(`${BASE_URL}/config/keys`, {
+    fetch(`/api/config/keys`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ keys }),
@@ -821,7 +834,7 @@ export const api = {
   // ── Source Discovery ────────────────────────────────────
 
   discoverSources: (topics?: string[]) =>
-    fetch(`${BASE_URL}/sources/discover`, {
+    fetch(`${getBaseUrl()}/sources/discover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topics }),
@@ -830,6 +843,22 @@ export const api = {
       const data = await r.json();
       return data.sources as Array<{ name: string; url: string; feed_url: string | null; description: string }>;
     }),
+
+  // Persona management (not scoped)
+  listPersonas: () =>
+    fetch("/api/personas").then(r => r.json() as Promise<{ personas: import("../context/PersonaContext").Persona[] }>),
+  createPersona: (data: { name: string; linkedin_url: string }) =>
+    fetch("/api/personas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).then(r => r.json()),
+  updatePersona: (id: number, data: { name?: string; linkedin_url?: string }) =>
+    fetch(`/api/personas/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }).then(r => r.json()),
 };
 
 export interface RetroChange {
@@ -870,6 +899,14 @@ export interface RetroResponse {
     analysis: RetroAnalysis;
     retro_at: string;
   } | null;
+}
+
+export interface PendingRetro {
+  generation_id: number;
+  draft_excerpt: string;
+  retro_at: string;
+  matched_post_id: string | null;
+  analysis: RetroAnalysis;
 }
 
 export interface GenSource {
