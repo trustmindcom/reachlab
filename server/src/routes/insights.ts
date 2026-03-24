@@ -25,6 +25,11 @@ import {
 import { createClient, calculateCostCents } from "../ai/client.js";
 import { runPipeline } from "../ai/orchestrator.js";
 
+function getPersonaId(request: any): number {
+  const params = request.params as any;
+  return params.personaId ? Number(params.personaId) : 1;
+}
+
 export function registerInsightsRoutes(app: FastifyInstance, db: Database.Database): void {
   // Backfill costs for existing runs (runs once, idempotent)
   const runsToBackfill = db
@@ -47,16 +52,23 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     console.log(`[Cost Backfill] Checked ${runsToBackfill.length} runs for missing costs`);
   }
 
-  app.get("/api/insights", async () => ({
-    recommendations: getRecommendations(db),
-    insights: getActiveInsights(db),
-  }));
+  app.get("/api/insights", async (request) => {
+    const personaId = getPersonaId(request);
+    return {
+      recommendations: getRecommendations(db, personaId),
+      insights: getActiveInsights(db, personaId),
+    };
+  });
 
-  app.get("/api/insights/overview", async () => ({
-    overview: getLatestOverview(db),
-  }));
+  app.get("/api/insights/overview", async (request) => {
+    const personaId = getPersonaId(request);
+    return { overview: getLatestOverview(db, personaId) };
+  });
 
-  app.get("/api/insights/changelog", async () => getChangelog(db));
+  app.get("/api/insights/changelog", async (request) => {
+    const personaId = getPersonaId(request);
+    return getChangelog(db, personaId);
+  });
 
   app.get("/api/insights/tags", async (request) => {
     const q = request.query as { post_ids?: string };
@@ -64,16 +76,17 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     return { tags: getAiTags(db, postIds) };
   });
 
-  app.get("/api/insights/taxonomy", async () => ({
-    taxonomy: getTaxonomy(db),
-  }));
+  app.get("/api/insights/taxonomy", async () => {
+    return { taxonomy: getTaxonomy(db) };
+  });
 
   app.post("/api/insights/refresh", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
     if (!apiKey) {
       return reply.status(400).send({ error: "No API key configured. Set TRUSTMIND_LLM_API_KEY." });
     }
-    const running = getRunningRun(db);
+    const running = getRunningRun(db, personaId);
     if (running) {
       return reply.status(409).send({ error: "Analysis already running", started_at: running.started_at });
     }
@@ -81,18 +94,19 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     const body = request.body as { force?: boolean } | undefined;
     const trigger = body?.force ? "force" : "manual";
     // Fire and forget — don't block the response
-    runPipeline(client, db, trigger).catch((err) => {
+    runPipeline(client, db, personaId, trigger).catch((err) => {
       console.error("[AI Pipeline] Refresh failed:", err.message);
     });
     return { ok: true, message: "Analysis started" };
   });
 
-  app.post("/api/insights/retag", async (_request, reply) => {
+  app.post("/api/insights/retag", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
     if (!apiKey) {
       return reply.status(400).send({ error: "No API key configured. Set TRUSTMIND_LLM_API_KEY." });
     }
-    const running = getRunningRun(db);
+    const running = getRunningRun(db, personaId);
     if (running) {
       return reply.status(409).send({ error: "Analysis already running", started_at: running.started_at });
     }
@@ -101,7 +115,7 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     db.prepare("DELETE FROM ai_post_topics").run();
     db.prepare("DELETE FROM ai_taxonomy").run();
     const client = createClient(apiKey);
-    runPipeline(client, db, "retag").catch((err) => {
+    runPipeline(client, db, personaId, "retag").catch((err) => {
       console.error("[AI Pipeline] Retag failed:", err.message);
     });
     return { ok: true, message: "Cleared tags and taxonomy, regenerating from scratch" };
@@ -140,13 +154,15 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     gaps: getLatestAnalysisGaps(db),
   }));
 
-  app.get("/api/insights/prompt-suggestions", async () => ({
-    prompt_suggestions: getLatestPromptSuggestions(db),
-  }));
+  app.get("/api/insights/prompt-suggestions", async (request) => {
+    const personaId = getPersonaId(request);
+    return { prompt_suggestions: getLatestPromptSuggestions(db, personaId) };
+  });
 
   // Coach redesign: recommendations with cooldown filtering
-  app.get("/api/insights/recommendations", async () => {
-    return getRecommendationsWithCooldown(db);
+  app.get("/api/insights/recommendations", async (request) => {
+    const personaId = getPersonaId(request);
+    return getRecommendationsWithCooldown(db, personaId);
   });
 
   // Resolve (accept/dismiss) a recommendation
@@ -166,47 +182,54 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
 
   // Deep Dive: progress metrics
   app.get("/api/insights/deep-dive/progress", async (request) => {
+    const personaId = getPersonaId(request);
     const q = request.query as { days?: string };
     const days = parseInt(q.days ?? "30", 10) || 30;
-    return getProgressMetrics(db, days);
+    return getProgressMetrics(db, personaId, days);
   });
 
   // Deep Dive: category performance
-  app.get("/api/insights/deep-dive/categories", async () => ({
-    categories: getCategoryPerformance(db),
-  }));
+  app.get("/api/insights/deep-dive/categories", async (request) => {
+    const personaId = getPersonaId(request);
+    return { categories: getCategoryPerformance(db, personaId) };
+  });
 
   // Deep Dive: engagement quality
-  app.get("/api/insights/deep-dive/engagement", async () => ({
-    engagement: getEngagementQuality(db),
-  }));
+  app.get("/api/insights/deep-dive/engagement", async (request) => {
+    const personaId = getPersonaId(request);
+    return { engagement: getEngagementQuality(db, personaId) };
+  });
 
   // Deep Dive: sparkline data (per-post time series)
   app.get("/api/insights/deep-dive/sparkline", async (request) => {
+    const personaId = getPersonaId(request);
     const q = request.query as { days?: string };
     const days = parseInt(q.days ?? "90", 10) || 90;
-    return { points: getSparklineData(db, days) };
+    return { points: getSparklineData(db, personaId, days) };
   });
 
   // Deep Dive: topic performance
   app.get("/api/insights/deep-dive/topics", async (request) => {
+    const personaId = getPersonaId(request);
     const q = request.query as { days?: string };
     const days = q.days ? parseInt(q.days, 10) || undefined : undefined;
-    return { topics: getTopicPerformance(db, days) };
+    return { topics: getTopicPerformance(db, personaId, days) };
   });
 
   // Deep Dive: hook type performance
   app.get("/api/insights/deep-dive/hooks", async (request) => {
+    const personaId = getPersonaId(request);
     const q = request.query as { days?: string };
     const days = q.days ? parseInt(q.days, 10) || undefined : undefined;
-    return getHookPerformance(db, days);
+    return getHookPerformance(db, personaId, days);
   });
 
   // Deep Dive: image subtype performance
   app.get("/api/insights/deep-dive/image-subtypes", async (request) => {
+    const personaId = getPersonaId(request);
     const q = request.query as { days?: string };
     const days = q.days ? parseInt(q.days, 10) || undefined : undefined;
-    return { subtypes: getImageSubtypePerformance(db, days) };
+    return { subtypes: getImageSubtypePerformance(db, personaId, days) };
   });
 
   // ── Run history with costs ────────────────────────────────
@@ -231,8 +254,9 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
 
   // ── Analysis status (for regenerate button + next auto-regen) ──
 
-  app.get("/api/insights/status", async () => {
-    const running = getRunningRun(db);
+  app.get("/api/insights/status", async (request) => {
+    const personaId = getPersonaId(request);
+    const running = getRunningRun(db, personaId);
     const lastFullRun = db.prepare(
       `SELECT id, triggered_by, post_count, completed_at
        FROM ai_runs WHERE status = 'completed'

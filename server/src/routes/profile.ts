@@ -8,10 +8,16 @@ import {
   incrementInterviewCount,
 } from "../db/profile-queries.js";
 
+function getPersonaId(request: any): number {
+  const params = request.params as any;
+  return params.personaId ? Number(params.personaId) : 1;
+}
+
 export function registerProfileRoutes(app: FastifyInstance, db: Database.Database): void {
   // Get current profile
-  app.get("/api/author-profile", async () => {
-    const profile = getAuthorProfile(db);
+  app.get("/api/author-profile", async (request) => {
+    const personaId = getPersonaId(request);
+    const profile = getAuthorProfile(db, personaId);
     return {
       profile_text: profile?.profile_text ?? "",
       profile_json: profile?.profile_json ? JSON.parse(profile.profile_json) : {},
@@ -21,11 +27,12 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
 
   // Update profile (manual edit)
   app.put("/api/author-profile", async (request) => {
+    const personaId = getPersonaId(request);
     const { profile_text, profile_json } = request.body as {
       profile_text: string;
       profile_json?: Record<string, any>;
     };
-    upsertAuthorProfile(db, {
+    upsertAuthorProfile(db, personaId, {
       profile_text,
       profile_json: profile_json ? JSON.stringify(profile_json) : undefined,
     });
@@ -34,12 +41,13 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
 
   // Create interview session (returns ephemeral token for OpenAI Realtime)
   app.post("/api/author-profile/interview/session", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!openaiKey) {
       return reply.status(422).send({ error: "OPENAI_API_KEY is not configured. Add OPENAI_API_KEY=sk-... to your server/.env file and restart the server." });
     }
 
-    const existingProfile = getAuthorProfile(db);
+    const existingProfile = getAuthorProfile(db, personaId);
 
     // Build the interviewer system prompt
     const { buildInterviewerPrompt } = await import("../ai/interviewer-prompt.js");
@@ -107,26 +115,29 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
     const { extractProfile } = await import("../ai/profile-extractor.js");
     const result = await extractProfile(client, transcript);
 
+    const personaId = getPersonaId(request);
+
     // Save interview record
-    insertProfileInterview(db, {
+    insertProfileInterview(db, personaId, {
       transcript_json: transcript,
       extracted_profile: JSON.stringify(result),
       duration_seconds,
     });
 
     // Update profile
-    upsertAuthorProfile(db, {
+    upsertAuthorProfile(db, personaId, {
       profile_text: result.profile_text,
       profile_json: JSON.stringify(result.profile_json),
     });
-    incrementInterviewCount(db);
+    incrementInterviewCount(db, personaId);
 
     return result;
   });
 
   // Get interview history
-  app.get("/api/author-profile/interviews", async () => {
-    const interviews = getProfileInterviews(db);
+  app.get("/api/author-profile/interviews", async (request) => {
+    const personaId = getPersonaId(request);
+    const interviews = getProfileInterviews(db, personaId);
     return { interviews };
   });
 }

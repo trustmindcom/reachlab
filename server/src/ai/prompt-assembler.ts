@@ -70,16 +70,17 @@ function formatProfileLayer(profileText: string): string {
 
 export function assemblePrompt(
   db: Database.Database,
+  personaId: number,
   storyContext: string
 ): AssembledPrompt {
-  const rules = getRules(db);
-  const insights = getActiveCoachingInsights(db);
+  const rules = getRules(db, personaId);
+  const insights = getActiveCoachingInsights(db, personaId);
 
   const rulesText = formatRulesLayer(rules);
   const coachingText = formatCoachingLayer(insights);
 
   // Author profile layer (always present if profile exists)
-  const profile = getAuthorProfile(db);
+  const profile = getAuthorProfile(db, personaId);
   const profileText = profile ? formatProfileLayer(profile.profile_text) : "";
   const profileTokens = estimateTokens(profileText);
 

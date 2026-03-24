@@ -25,6 +25,7 @@ import {
   insertInsightLineage,
   retireInsight,
   insertRecommendation,
+  getUnresolvedRecommendationHeadlines,
   upsertOverview,
   getPostCountWithMetrics,
   getSetting,
@@ -41,6 +42,27 @@ export interface PipelineResult {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── Dedup helpers ─────────────────────────────────────────
+
+function normalizeWords(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((w) => w.length > 1)
+  );
+}
+
+function isDuplicateRecommendation(headline: string, existingHeadlines: string[]): boolean {
+  const words = normalizeWords(headline);
+  if (words.size === 0) return false;
+  for (const existing of existingHeadlines) {
+    const existingWords = normalizeWords(existing);
+    const intersection = [...words].filter((w) => existingWords.has(w)).length;
+    const union = new Set([...words, ...existingWords]).size;
+    const jaccard = intersection / union;
+    if (jaccard > 0.5) return true;
+  }
+  return false;
+}
 
 // ── Pure functions ─────────────────────────────────────────
 
@@ -66,22 +88,23 @@ export function shouldRunPipeline(
 export async function runTaggingPipeline(
   client: Anthropic,
   db: Database.Database,
+  personaId: number,
   triggeredBy: string
 ): Promise<PipelineResult> {
-  const running = getRunningRun(db);
+  const running = getRunningRun(db, personaId);
   if (running) {
     return { runId: running.id, status: "failed", error: "A pipeline run is already in progress" };
   }
 
-  const postCount = getPostCountWithMetrics(db);
-  const runId = createRun(db, triggeredBy, postCount);
+  const postCount = getPostCountWithMetrics(db, personaId);
+  const runId = createRun(db, personaId, triggeredBy, postCount);
   const logger = new AiLogger(db, runId);
 
   try {
     // Step 1: Taxonomy and tagging
     const existingTaxonomy = getTaxonomy(db);
     await discoverTaxonomy(client, db, logger, existingTaxonomy.length > 0 ? existingTaxonomy : undefined);
-    const untaggedIds = getUntaggedPostIds(db);
+    const untaggedIds = getUntaggedPostIds(db, personaId);
     if (untaggedIds.length > 0) {
       const posts = db
         .prepare(
@@ -94,7 +117,7 @@ export async function runTaggingPipeline(
 
     // Step 2: Image classification
     const dataDir = path.dirname(db.name);
-    await classifyImages(client, db, dataDir, logger);
+    await classifyImages(client, db, personaId, dataDir, logger);
 
     // Sum tokens from ai_logs for this run
     const tokenSums = db
@@ -122,24 +145,25 @@ export async function runTaggingPipeline(
 export async function runFullPipeline(
   client: Anthropic,
   db: Database.Database,
+  personaId: number,
   triggeredBy: string
 ): Promise<PipelineResult> {
-  const running = getRunningRun(db);
+  const running = getRunningRun(db, personaId);
   if (running) {
     return { runId: running.id, status: "failed", error: "A pipeline run is already in progress" };
   }
 
-  const postCount = getPostCountWithMetrics(db);
+  const postCount = getPostCountWithMetrics(db, personaId);
   // Skip threshold check for retag/force/auto triggers
   if (triggeredBy !== "retag" && triggeredBy !== "force" && triggeredBy !== "auto") {
-    const lastRun = getLatestCompletedRun(db);
+    const lastRun = getLatestCompletedRun(db, personaId);
     const check = shouldRunPipeline(postCount, lastRun ? { post_count: lastRun.post_count } : null);
     if (!check.should) {
       return { runId: 0, status: "failed", error: check.reason };
     }
   }
 
-  const runId = createRun(db, triggeredBy, postCount);
+  const runId = createRun(db, personaId, triggeredBy, postCount);
   const logger = new AiLogger(db, runId);
 
   try {
@@ -147,7 +171,7 @@ export async function runFullPipeline(
     // Taxonomy evolves incrementally: only new posts are sent when taxonomy exists
     const existingTaxonomy = getTaxonomy(db);
     await discoverTaxonomy(client, db, logger, existingTaxonomy.length > 0 ? existingTaxonomy : undefined);
-    const untaggedIds = getUntaggedPostIds(db);
+    const untaggedIds = getUntaggedPostIds(db, personaId);
     if (untaggedIds.length > 0) {
       const posts = db
         .prepare(
@@ -160,7 +184,7 @@ export async function runFullPipeline(
 
     // Step 2: Image classification (kept)
     const dataDir = path.dirname(db.name);
-    await classifyImages(client, db, dataDir, logger);
+    await classifyImages(client, db, personaId, dataDir, logger);
 
     // Step 3: Build stats report
     const timezone = getSetting(db, "timezone") ?? "UTC";
@@ -173,7 +197,7 @@ export async function runFullPipeline(
       ? fs.readFileSync(knowledgePath, "utf-8")
       : "(knowledge base not found)";
 
-    const feedbackRows = getRecentFeedbackWithReasons(db);
+    const feedbackRows = getRecentFeedbackWithReasons(db, personaId);
     const feedbackHistory =
       feedbackRows.length > 0
         ? feedbackRows
@@ -193,7 +217,7 @@ export async function runFullPipeline(
 
     if (analysis) {
       // Store insights with lineage
-      const activeInsights = getActiveInsights(db);
+      const activeInsights = getActiveInsights(db, personaId);
       const activeByKey = new Map(
         activeInsights.map((i: any) => [i.stable_key, i])
       );
@@ -231,8 +255,12 @@ export async function runFullPipeline(
         if (!matchedKeys.has(key)) retireInsight(db, (insight as any).id);
       }
 
-      // Store recommendations
+      // Store recommendations (with dedup against existing unresolved ones)
+      const existingHeadlines = getUnresolvedRecommendationHeadlines(db, 1);
       for (const rec of analysis.recommendations) {
+        if (isDuplicateRecommendation(rec.headline, existingHeadlines)) {
+          continue;
+        }
         insertRecommendation(db, {
           run_id: runId,
           type: rec.type,
@@ -243,6 +271,7 @@ export async function runFullPipeline(
           action: rec.action,
           evidence_json: "[]",
         });
+        existingHeadlines.push(rec.headline);
       }
 
       // Store gaps
@@ -414,3 +443,4 @@ export async function runFullPipeline(
 }
 
 export const runPipeline = runFullPipeline;
+

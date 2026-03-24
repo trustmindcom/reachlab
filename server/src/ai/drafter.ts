@@ -23,7 +23,13 @@ const VARIATION_INSTRUCTIONS: Record<string, string> = {
 
 export type DraftLength = "short" | "medium" | "long";
 
-const LENGTH_INSTRUCTIONS: Record<DraftLength, string> = {
+export const LENGTH_RANGES: Record<DraftLength, { min: number; max: number }> = {
+  short: { min: 80, max: 120 },
+  medium: { min: 150, max: 250 },
+  long: { min: 300, max: 450 },
+};
+
+export const LENGTH_INSTRUCTIONS: Record<DraftLength, string> = {
   short: "Target approximately 80-120 words. Be extremely concise — one sharp hook, one clear argument, one strong close. Cut everything that isn't load-bearing.",
   medium: "Target approximately 150-250 words. One clear argument with enough room to develop the idea and provide one key piece of supporting evidence.",
   long: "Target approximately 300-450 words. Develop the argument fully with evidence, examples, and nuance. Still one idea — just explored in depth.",
@@ -35,6 +41,7 @@ const LENGTH_INSTRUCTIONS: Record<DraftLength, string> = {
 export async function generateDrafts(
   client: Anthropic,
   db: Database.Database,
+  personaId: number,
   logger: AiLogger,
   story: Story,
   personalConnection?: string,
@@ -45,7 +52,7 @@ export async function generateDrafts(
     ? `\n\n## Personal Connection\n${personalConnection}`
     : "";
   const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
-  const assembled = assemblePrompt(db, storyContext);
+  const assembled = assemblePrompt(db, personaId, storyContext);
 
   const draftPromises = Object.entries(VARIATION_INSTRUCTIONS).map(
     async ([variationType, instruction]): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {

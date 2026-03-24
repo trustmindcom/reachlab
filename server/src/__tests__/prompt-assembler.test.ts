@@ -14,7 +14,7 @@ let db: ReturnType<typeof initDatabase>;
 
 beforeAll(() => {
   db = initDatabase(TEST_DB_PATH);
-  seedDefaultRules(db);
+  seedDefaultRules(db, 1);
 });
 
 afterAll(() => {
@@ -28,7 +28,7 @@ afterAll(() => {
 
 describe("assemblePrompt", () => {
   it("includes writing rules and story context", () => {
-    const result = assemblePrompt(db, "Breaking: AI costs drop 90%");
+    const result = assemblePrompt(db, 1,"Breaking: AI costs drop 90%");
     expect(result.system).toContain("Writing Rules");
     expect(result.system).toContain("Story Context");
     expect(result.system).toContain("AI costs drop 90%");
@@ -38,11 +38,11 @@ describe("assemblePrompt", () => {
   });
 
   it("includes coaching insights when present", () => {
-    insertCoachingInsight(db, {
+    insertCoachingInsight(db, 1, {
       title: "Contrarian hooks",
       prompt_text: "Lead with a take that challenges conventional wisdom",
     });
-    const result = assemblePrompt(db, "");
+    const result = assemblePrompt(db, 1,"");
     expect(result.system).toContain("Coaching Insights");
     expect(result.system).toContain("Contrarian hooks");
     expect(result.layers.coaching).toBeGreaterThan(0);
@@ -51,12 +51,12 @@ describe("assemblePrompt", () => {
   it("respects token budget by trimming coaching insights", () => {
     // Add many coaching insights to push over budget
     for (let i = 0; i < 20; i++) {
-      insertCoachingInsight(db, {
+      insertCoachingInsight(db, 1, {
         title: `Insight ${i}`,
         prompt_text: "A".repeat(200), // ~50 tokens each
       });
     }
-    const result = assemblePrompt(db, "story");
+    const result = assemblePrompt(db, 1,"story");
     expect(result.token_count).toBeLessThanOrEqual(2200); // allow some flex for structure
   });
 
@@ -64,9 +64,9 @@ describe("assemblePrompt", () => {
     // Use a fresh DB for isolation
     const freshPath = path.join(import.meta.dirname, "../../data/test-prompt-assembler-fresh.db");
     const freshDb = initDatabase(freshPath);
-    seedDefaultRules(freshDb);
+    seedDefaultRules(freshDb, 1);
 
-    const result = assemblePrompt(freshDb, "My story");
+    const result = assemblePrompt(freshDb, 1,"My story");
     expect(result.system).not.toContain("Coaching Insights");
     expect(result.layers.coaching).toBe(0);
 
@@ -75,7 +75,7 @@ describe("assemblePrompt", () => {
   });
 
   it("does not include post type section", () => {
-    const result = assemblePrompt(db, "context");
+    const result = assemblePrompt(db, 1,"context");
     expect(result.system).not.toContain("Post Type:");
     expect(result.layers.post_type).toBe(0);
   });

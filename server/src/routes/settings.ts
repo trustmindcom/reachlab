@@ -10,6 +10,11 @@ import {
   getWritingPromptHistory,
 } from "../db/ai-queries.js";
 
+function getPersonaId(request: any): number {
+  const params = request.params as any;
+  return params.personaId ? Number(params.personaId) : 1;
+}
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 
@@ -140,13 +145,14 @@ export function registerSettingsRoutes(
   });
 
   app.put("/api/settings/writing-prompt", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const body = request.body as { text?: string; source?: string; evidence?: string };
     if (!body.text || typeof body.text !== "string") {
       return reply.status(400).send({ error: "text is required" });
     }
     const source = body.source ?? "manual_edit";
     upsertSetting(db, "writing_prompt", body.text);
-    saveWritingPromptHistory(db, {
+    saveWritingPromptHistory(db, personaId, {
       prompt_text: body.text,
       source,
       evidence: body.evidence ?? null,
@@ -161,8 +167,9 @@ export function registerSettingsRoutes(
     return { ok: true };
   });
 
-  app.get("/api/settings/writing-prompt/history", async () => {
-    return { history: getWritingPromptHistory(db) };
+  app.get("/api/settings/writing-prompt/history", async (request) => {
+    const personaId = getPersonaId(request);
+    return { history: getWritingPromptHistory(db, personaId) };
   });
 
   // ── Auto-refresh settings ────────────────────────────────

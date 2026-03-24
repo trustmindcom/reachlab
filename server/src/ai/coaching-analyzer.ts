@@ -31,10 +31,11 @@ export interface CoachingAnalysisResult {
 export async function analyzeCoaching(
   client: Anthropic,
   db: Database.Database,
+  personaId: number,
   logger: AiLogger
 ): Promise<CoachingAnalysisResult> {
-  const rules = getRules(db);
-  const insights = getActiveCoachingInsights(db);
+  const rules = getRules(db, personaId);
+  const insights = getActiveCoachingInsights(db, personaId);
 
   // Get recent generation performance for context
   const recentGens = db

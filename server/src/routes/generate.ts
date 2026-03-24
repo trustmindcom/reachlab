@@ -47,16 +47,22 @@ function getClient(): Anthropic {
   return createClient(apiKey);
 }
 
+function getPersonaId(request: any): number {
+  const params = request.params as any;
+  return params.personaId ? Number(params.personaId) : 1;
+}
+
 export function registerGenerateRoutes(app: FastifyInstance, db: Database.Database): void {
   // Seed default rules if table is empty (first run)
   const ruleCount = (db.prepare("SELECT COUNT(*) as count FROM generation_rules").get() as any).count;
   if (ruleCount === 0) {
-    seedDefaultRules(db);
+    seedDefaultRules(db, 1);
   }
 
   // ── Research ─────────────────────────────────────────────
 
   app.post("/api/generate/research", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const { topic, avoid } = request.body as {
       topic: string;
       avoid?: string[];
@@ -68,13 +74,13 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const safeAvoid = Array.isArray(avoid) ? avoid.slice(0, 50).map((s) => String(s).slice(0, 200)) : undefined;
 
     const client = getClient();
-    const runId = createRun(db, "generate_research", 0);
+    const runId = createRun(db, personaId, "generate_research", 0);
     const logger = new AiLogger(db, runId);
 
     try {
       const result = await researchStories(client, db, logger, safeTopic, safeAvoid);
 
-      const researchId = insertResearch(db, {
+      const researchId = insertResearch(db, personaId, {
         post_type: "general",
         stories_json: JSON.stringify(result.stories),
         sources_json: JSON.stringify(result.sources_metadata),
@@ -106,6 +112,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   // ── Drafts ───────────────────────────────────────────────
 
   app.post("/api/generate/drafts", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const { research_id, story_index, personal_connection, length } = request.body as {
       research_id: number;
       story_index: number;
@@ -124,26 +131,28 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     }
 
     const client = getClient();
-    const runId = createRun(db, "generate_drafts", 0);
+    const runId = createRun(db, personaId, "generate_drafts", 0);
     const logger = new AiLogger(db, runId);
 
     try {
       const result = await generateDrafts(
         client,
         db,
+        personaId,
         logger,
         stories[story_index],
         personal_connection,
         length
       );
 
-      const generationId = insertGeneration(db, {
+      const generationId = insertGeneration(db, personaId, {
         research_id,
         post_type: "general",
         selected_story_index: story_index,
         drafts_json: JSON.stringify(result.drafts),
         prompt_snapshot: result.prompt_snapshot,
         personal_connection,
+        draft_length: length,
       });
 
       // Log topic for anti-narrowing
@@ -193,16 +202,21 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(400).send({ error: `Invalid draft index: ${invalidIndex}` });
     }
 
+    const personaId = getPersonaId(request);
     const client = getClient();
-    const runId = createRun(db, "generate_combine", 0);
+    const runId = createRun(db, personaId, "generate_combine", 0);
     const logger = new AiLogger(db, runId);
 
     try {
-      const combineResult = await combineDrafts(client, logger, drafts, selected_drafts, combining_guidance, gen.prompt_snapshot ?? undefined);
+      const validLengths = new Set(["short", "medium", "long"]);
+      const draftLength = gen.draft_length && validLengths.has(gen.draft_length)
+        ? (gen.draft_length as import("../ai/drafter.js").DraftLength)
+        : undefined;
+      const combineResult = await combineDrafts(client, logger, drafts, selected_drafts, combining_guidance, gen.prompt_snapshot ?? undefined, draftLength);
 
       // Run coach-check
-      const rules = getRules(db);
-      const insights = getActiveCoachingInsights(db);
+      const rules = getRules(db, personaId);
+      const insights = getActiveCoachingInsights(db, personaId);
       const coachResult = await coachCheck(client, logger, combineResult.final_draft, rules, insights);
       const qualityData = {
         expertise_needed: coachResult.expertise_needed,
@@ -253,15 +267,16 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(404).send({ error: "Generation not found or no final draft" });
     }
 
+    const personaId = getPersonaId(request);
     const client = getClient();
-    const runId = createRun(db, "generate_chat", 0);
+    const runId = createRun(db, personaId, "generate_chat", 0);
     const logger = new AiLogger(db, runId);
 
     try {
       const history = getGenerationMessages(db, generation_id, 20).reverse();
 
-      const rules = getRules(db);
-      const insights = getActiveCoachingInsights(db);
+      const rules = getRules(db, personaId);
+      const insights = getActiveCoachingInsights(db, personaId);
       const rulesText = rules.filter((r) => r.enabled).map((r) => `- [${r.category}] ${r.rule_text}`).join("\n");
       const insightsText = insights.map((i) => `- ${i.prompt_text}`).join("\n");
 
@@ -408,9 +423,10 @@ Return JSON only:
 
   // ── Rules CRUD ───────────────────────────────────────────
 
-  app.get("/api/generate/rules", async () => {
-    const rules = getRules(db);
-    const antiAiEnabled = getAntiAiTropesEnabled(db);
+  app.get("/api/generate/rules", async (request) => {
+    const personaId = getPersonaId(request);
+    const rules = getRules(db, personaId);
+    const antiAiEnabled = getAntiAiTropesEnabled(db, personaId);
 
     const categories: Record<string, any> = {
       voice_tone: [] as any[],
@@ -431,6 +447,7 @@ Return JSON only:
   });
 
   app.put("/api/generate/rules", async (request) => {
+    const personaId = getPersonaId(request);
     const { categories } = request.body as {
       categories: {
         voice_tone: Array<{ rule_text: string; example_text?: string; sort_order: number }>;
@@ -451,15 +468,16 @@ Return JSON only:
       allRules.push({ category: "anti_ai_tropes", ...rule, enabled: categories.anti_ai_tropes.enabled ? 1 : 0 });
     }
 
-    replaceAllRules(db, allRules);
+    replaceAllRules(db, personaId, allRules);
     return { ok: true };
   });
 
-  app.post("/api/generate/rules/reset", async () => {
-    seedDefaultRules(db);
+  app.post("/api/generate/rules/reset", async (request) => {
+    const personaId = getPersonaId(request);
+    seedDefaultRules(db, personaId);
     // Return the freshly-seeded rules in the same shape as GET
-    const rules = getRules(db);
-    const antiAiEnabled = getAntiAiTropesEnabled(db);
+    const rules = getRules(db, personaId);
+    const antiAiEnabled = getAntiAiTropesEnabled(db, personaId);
     const categories: Record<string, any> = {
       voice_tone: [] as any[],
       structure_formatting: [] as any[],
@@ -499,8 +517,9 @@ Return JSON only:
   // ── History ──────────────────────────────────────────────
 
   app.get("/api/generate/history", async (request) => {
+    const personaId = getPersonaId(request);
     const q = request.query as { status?: string; offset?: string; limit?: string };
-    const result = listGenerations(db, {
+    const result = listGenerations(db, personaId, {
       status: q.status,
       offset: q.offset ? Number(q.offset) : undefined,
       limit: q.limit ? Number(q.limit) : undefined,
@@ -584,10 +603,11 @@ Return JSON only:
       return reply.status(400).send({ error: "Generation has no final draft to compare against" });
     }
 
+    const personaId = getPersonaId(request);
     const client = getClient();
 
     // Get existing rules for context
-    const rules = getRules(db);
+    const rules = getRules(db, personaId);
     const ruleTexts = rules.filter(r => r.enabled).map(r => r.rule_text);
 
     // Get current writing prompt so the LLM can suggest specific edits
@@ -631,17 +651,52 @@ Return JSON only:
     };
   });
 
+  // ── Pending Retros (for Coach page) ─────────────────────
+
+  app.get("/api/generate/retros/pending", async (request) => {
+    const personaId = getPersonaId(request);
+    const rows = db
+      .prepare(
+        `SELECT id, final_draft, published_text, retro_json, retro_at, matched_post_id
+         FROM generations
+         WHERE persona_id = ?
+           AND retro_json IS NOT NULL
+           AND retro_at IS NOT NULL
+         ORDER BY retro_at DESC
+         LIMIT 10`
+      )
+      .all(personaId) as Array<{
+        id: number;
+        final_draft: string;
+        published_text: string;
+        retro_json: string;
+        retro_at: string;
+        matched_post_id: string | null;
+      }>;
+
+    return {
+      retros: rows.map((r) => ({
+        generation_id: r.id,
+        draft_excerpt: (r.final_draft ?? "").split("\n").slice(0, 3).join("\n"),
+        retro_at: r.retro_at,
+        matched_post_id: r.matched_post_id,
+        analysis: JSON.parse(r.retro_json),
+      })),
+    };
+  });
+
   // ── Coaching Sync ────────────────────────────────────────
 
   app.post("/api/generate/coaching/analyze", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const client = getClient();
-    const runId = createRun(db, "coaching_analyze", 0);
+    const runId = createRun(db, personaId, "coaching_analyze", 0);
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await analyzeCoaching(client, db, logger);
+      const result = await analyzeCoaching(client, db, personaId, logger);
 
-      const syncId = insertCoachingSync(db, JSON.stringify(result.changes));
+      const syncId = insertCoachingSync(db, personaId, JSON.stringify(result.changes));
 
       // Create change log entries
       const changes = result.changes.map((change) => {
@@ -689,10 +744,12 @@ Return JSON only:
       return reply.status(404).send({ error: "Change not found" });
     }
 
+    const personaId = getPersonaId(request);
+
     // Apply the decision
     if (action === "accept") {
       if (change.change_type === "new") {
-        insertCoachingInsight(db, {
+        insertCoachingInsight(db, personaId, {
           title: change.new_text?.substring(0, 50) ?? "New insight",
           prompt_text: edited_text ?? change.new_text ?? "",
           evidence: change.evidence,
@@ -724,21 +781,24 @@ Return JSON only:
     return { ok: true };
   });
 
-  app.get("/api/generate/coaching/history", async () => {
-    const syncs = getCoachingSyncHistory(db);
+  app.get("/api/generate/coaching/history", async (request) => {
+    const personaId = getPersonaId(request);
+    const syncs = getCoachingSyncHistory(db, personaId);
     return { syncs };
   });
 
-  app.get("/api/generate/coaching/insights", async () => {
-    const insights = getActiveCoachingInsights(db);
+  app.get("/api/generate/coaching/insights", async (request) => {
+    const personaId = getPersonaId(request);
+    const insights = getActiveCoachingInsights(db, personaId);
     return { insights };
   });
 
   // ── Discovery ──────────────────────────────────────────────
 
-  app.post("/api/generate/discover", async (_request, reply) => {
+  app.post("/api/generate/discover", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const client = getClient();
-    const runId = createRun(db, "generate_discover", 0);
+    const runId = createRun(db, personaId, "generate_discover", 0);
     const logger = new AiLogger(db, runId);
 
     try {

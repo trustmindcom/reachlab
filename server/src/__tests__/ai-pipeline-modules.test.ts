@@ -43,8 +43,8 @@ function makeMockClient(responseText: string): any {
 
 beforeAll(() => {
   db = initDatabase(TEST_DB_PATH);
-  seedDefaultRules(db);
-  const runId = createRun(db, "test", 0);
+  seedDefaultRules(db, 1);
+  const runId = createRun(db, 1, "test", 0);
   logger = new AiLogger(db, runId);
 });
 
@@ -93,7 +93,7 @@ describe("drafter", () => {
       angles: ["Cost reduction angle"],
       is_stretch: false,
     };
-    const result = await generateDrafts(client, db, logger, story);
+    const result = await generateDrafts(client, db, 1, logger, story);
     expect(result.drafts).toHaveLength(3);
     expect(result.drafts[0].type).toBe("contrarian");
     expect(result.drafts[1].type).toBe("operator");
@@ -141,7 +141,7 @@ describe("coaching-analyzer", () => {
       ],
     });
     const client = makeMockClient(mockResponse);
-    const result = await analyzeCoaching(client, db, logger);
+    const result = await analyzeCoaching(client, db, 1, logger);
     expect(result.changes).toHaveLength(1);
     expect(result.changes[0].type).toBe("new");
     expect(result.changes[0].title).toBe("Use numbers early");
@@ -149,7 +149,7 @@ describe("coaching-analyzer", () => {
 
   it("returns empty changes when nothing to improve", async () => {
     const client = makeMockClient(JSON.stringify({ changes: [] }));
-    const result = await analyzeCoaching(client, db, logger);
+    const result = await analyzeCoaching(client, db, 1, logger);
     expect(result.changes).toHaveLength(0);
   });
 });

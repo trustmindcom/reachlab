@@ -323,16 +323,16 @@ export function buildApp(dbPath: string) {
           import("./ai/client.js"),
         ]).then(([{ runTaggingPipeline, runFullPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun, getSetting, getUntaggedPostIds }, { createClient }]) => {
           // Skip if nothing to do: no new posts upserted AND no untagged posts
-          const untaggedIds = getUntaggedPostIds(db);
+          const untaggedIds = getUntaggedPostIds(db, personaId);
           if (postsUpserted === 0 && untaggedIds.length === 0) return;
-          if (getRunningRun(db)) return;
-          const postCount = getPostCountWithMetrics(db);
+          if (getRunningRun(db, personaId)) return;
+          const postCount = getPostCountWithMetrics(db, personaId);
           if (postCount < 10) return;
 
           const client = createClient(aiApiKey);
 
           // Always run cheap tagging pipeline on sync
-          runTaggingPipeline(client, db, "sync_tagging").then(() => {
+          runTaggingPipeline(client, db, personaId, "sync_tagging").then(() => {
             // After tagging, check if full interpretation should run
             const schedule = getSetting(db, "auto_interpret_schedule") ?? "weekly";
             if (schedule === "off") return;
@@ -360,7 +360,7 @@ export function buildApp(dbPath: string) {
             }
 
             if (postThresholdMet || timeThresholdMet) {
-              runFullPipeline(client, db, "auto").catch((err: any) => {
+              runFullPipeline(client, db, personaId, "auto").catch((err: any) => {
                 console.error("[AI Pipeline] Auto-trigger failed:", err.message);
               });
             }
@@ -369,6 +369,29 @@ export function buildApp(dbPath: string) {
           });
         }).catch(() => {});
       }
+
+    // Auto-retro: match new posts with full_text to existing drafts
+    if (aiApiKey && payload.posts) {
+      const postsWithText = payload.posts.filter((p) => p.full_text);
+      if (postsWithText.length > 0) {
+        Promise.all([
+          import("./ai/auto-retro.js"),
+          import("./ai/client.js"),
+        ])
+          .then(([{ runAutoRetro }, { createClient }]) => {
+            const client = createClient(aiApiKey);
+            runAutoRetro(
+              client,
+              db,
+              personaId,
+              postsWithText.map((p) => p.id)
+            ).catch((err: any) => {
+              console.error("[Auto-Retro] Failed:", err.message);
+            });
+          })
+          .catch(() => {});
+      }
+    }
 
       // Include posts needing scraping so the extension doesn't need separate API calls
       const needsContent = payload.posts

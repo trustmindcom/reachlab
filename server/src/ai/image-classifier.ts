@@ -99,10 +99,11 @@ export function parseClassifierResponse(text: string): ImageClassification | nul
 export async function classifyImages(
   client: Anthropic,
   db: Database.Database,
+  personaId: number,
   dataDir: string,
   logger: AiLogger
 ): Promise<void> {
-  const posts = getUnclassifiedImagePosts(db);
+  const posts = getUnclassifiedImagePosts(db, personaId);
   if (posts.length === 0) return;
 
   // Check for author reference photo
