@@ -25,7 +25,7 @@ export function buildClusteringPrompt(items: RssItem[], authorContext?: string, 
     .join("\n");
 
   const contextBlock = authorContext
-    ? `\nAUTHOR CONTEXT — only surface topics relevant to this creator's expertise:\n${authorContext}\n`
+    ? `\nAUTHOR CONTEXT — this creator's areas of expertise:\n${authorContext}\n`
     : "";
 
   const avoidBlock = previousLabels && previousLabels.length > 0
@@ -39,9 +39,11 @@ ${itemList}
 
 Filter to only items relevant to the author's expertise and interests described above. Discard general news, politics, and anything outside their domain.
 
-Organize the relevant items into 3-5 thematic categories. For each category:
+IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST each be represented by at least one category. For example, if the author writes about security AND AI, you must have categories covering BOTH — don't let one area dominate. If the RSS feed doesn't have strong items for a core topic, still create a category with the best available items from that area.
+
+Organize the relevant items into 4-6 thematic categories. For each category:
 - Give it a short, descriptive name (e.g., "AI & Automation", "Cloud Security", "Developer Tools")
-- List 4-6 topics, each a 3-5 word label that captures an interesting angle or debate
+- List 3-5 topics, each a 3-5 word label that captures an interesting angle or debate
 - Each topic should reference a source headline and URL from the list
 
 Return JSON only (no markdown fences):
@@ -94,10 +96,12 @@ export async function discoverTopics(
 
   const contextParts: string[] = [];
   if (topics.length > 0) {
-    contextParts.push(`This creator writes about: ${topics.map((t) => t.name).join(", ")}`);
+    // Group taxonomy topics to identify primary domains
+    contextParts.push(`This creator's primary topics (from their post history): ${topics.map((t) => t.name).join(", ")}`);
+    contextParts.push(`EVERY major theme above must be covered by at least one category in the output. Do not let a single theme dominate all categories.`);
   }
   if (writingPrompt?.value) {
-    contextParts.push(writingPrompt.value);
+    contextParts.push(`Creator's writing brief:\n${writingPrompt.value}`);
   }
   const authorContext = contextParts.length > 0 ? contextParts.join("\n\n") : undefined;
 

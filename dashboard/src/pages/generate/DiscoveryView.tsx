@@ -64,77 +64,110 @@ function clearCachedTopics() {
 // ── Scanner animation ──────────────────────────────────────
 
 function ScannerLoader({ message }: { message: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const size = 120;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    ctx.scale(dpr, dpr);
+
+    const particles: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; size: number }[] = [];
+    let frame = 0;
+    let animId: number;
+
+    const spawn = () => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 8 + Math.random() * 12;
+      particles.push({
+        x: size / 2 + Math.cos(angle) * dist,
+        y: size / 2 + Math.sin(angle) * dist,
+        vx: Math.cos(angle) * (0.15 + Math.random() * 0.3),
+        vy: Math.sin(angle) * (0.15 + Math.random() * 0.3),
+        life: 0,
+        maxLife: 60 + Math.random() * 80,
+        size: 1 + Math.random() * 1.5,
+      });
+    };
+
+    const draw = () => {
+      frame++;
+      ctx.clearRect(0, 0, size, size);
+      const cx = size / 2;
+      const cy = size / 2;
+
+      // Morphing blob — 3 layered radial gradients orbiting
+      const t = frame * 0.008;
+      for (let layer = 0; layer < 3; layer++) {
+        const offset = (layer * Math.PI * 2) / 3;
+        const bx = cx + Math.cos(t * (1 + layer * 0.3) + offset) * (10 + layer * 4);
+        const by = cy + Math.sin(t * (1.2 + layer * 0.2) + offset) * (10 + layer * 4);
+        const radius = 20 + layer * 8 + Math.sin(t * 2 + layer) * 4;
+
+        const colors = [
+          [107, 161, 245],  // blue
+          [139, 92, 246],   // purple
+          [59, 130, 246],   // deeper blue
+        ];
+        const [r, g, b] = colors[layer];
+        const alpha = 0.25 - layer * 0.05;
+
+        const grad = ctx.createRadialGradient(bx, by, 0, bx, by, radius);
+        grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+        grad.addColorStop(0.6, `rgba(${r},${g},${b},${alpha * 0.4})`);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, size, size);
+      }
+
+      // Particles — drift outward and fade
+      if (frame % 3 === 0) spawn();
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life++;
+        if (p.life > p.maxLife) {
+          particles.splice(i, 1);
+          continue;
+        }
+        const progress = p.life / p.maxLife;
+        const alpha = progress < 0.15 ? progress / 0.15 : 1 - (progress - 0.15) / 0.85;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (1 - progress * 0.5), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(160,190,255,${alpha * 0.6})`;
+        ctx.fill();
+      }
+
+      // Center bright core — breathing
+      const coreAlpha = 0.5 + Math.sin(frame * 0.04) * 0.3;
+      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 8);
+      coreGrad.addColorStop(0, `rgba(220,230,255,${coreAlpha})`);
+      coreGrad.addColorStop(0.5, `rgba(107,161,245,${coreAlpha * 0.4})`);
+      coreGrad.addColorStop(1, "rgba(107,161,245,0)");
+      ctx.fillStyle = coreGrad;
+      ctx.fillRect(cx - 8, cy - 8, 16, 16);
+
+      animId = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => cancelAnimationFrame(animId);
+  }, []);
+
   return (
     <div className="flex flex-col items-center justify-center py-24 select-none">
-      {/* Scanner orb */}
-      <div className="relative w-28 h-28 mb-8">
-        {/* Ambient glow */}
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: "radial-gradient(circle, rgba(107,161,245,0.2) 0%, transparent 70%)",
-            animation: "scanner-glow 3s ease-in-out infinite",
-          }}
-        />
-
-        {/* Orbit ring 1 — fast, tight */}
-        <div
-          className="absolute inset-3"
-          style={{ animation: "scanner-orbit-1 2.2s linear infinite" }}
-        >
-          <div
-            className="absolute w-full h-full rounded-full"
-            style={{
-              background: "conic-gradient(from 0deg, transparent 0%, rgba(107,161,245,0.6) 30%, transparent 60%)",
-              filter: "blur(1px)",
-            }}
-          />
-        </div>
-
-        {/* Orbit ring 2 — medium, counter-rotate */}
-        <div
-          className="absolute inset-1"
-          style={{ animation: "scanner-orbit-2 3.5s linear infinite" }}
-        >
-          <div
-            className="absolute w-full h-full rounded-full"
-            style={{
-              background: "conic-gradient(from 180deg, transparent 0%, rgba(139,92,246,0.4) 25%, transparent 50%)",
-              filter: "blur(2px)",
-            }}
-          />
-        </div>
-
-        {/* Orbit ring 3 — slow, wide */}
-        <div
-          className="absolute -inset-1"
-          style={{ animation: "scanner-orbit-3 5s linear infinite" }}
-        >
-          <div
-            className="absolute w-full h-full rounded-full"
-            style={{
-              background: "conic-gradient(from 90deg, transparent 0%, rgba(107,161,245,0.2) 15%, transparent 35%)",
-              filter: "blur(4px)",
-            }}
-          />
-        </div>
-
-        {/* Core nucleus */}
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ animation: "scanner-pulse 2.5s ease-in-out infinite" }}
-        >
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{
-              background: "white",
-              boxShadow: "0 0 12px 4px rgba(107,161,245,0.5), 0 0 24px 8px rgba(107,161,245,0.2)",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Status message */}
+      <canvas
+        ref={canvasRef}
+        className="mb-8"
+        style={{ width: 120, height: 120 }}
+      />
       <p
         key={message}
         className="text-[13px] text-gen-text-3 tracking-wide"
@@ -438,6 +471,12 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               <textarea
                 value={gen.personalConnection}
                 onChange={(e) => setGen((prev: any) => ({ ...prev, personalConnection: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (gen.selectedStoryIndex !== null && !loading) handleGenerateDrafts();
+                  }
+                }}
                 rows={3}
                 placeholder='e.g. "We migrated off Heroku to AWS and it took 6 months longer than estimated..."'
                 className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[13px] text-gen-text-0 placeholder:text-gen-text-3 focus:outline-none focus:border-gen-accent resize-none"
