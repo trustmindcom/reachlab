@@ -716,6 +716,16 @@ export const api = {
   generateGetRetro: (id: number) =>
     get<RetroResponse>(`/generate/history/${id}/retro`),
 
+  generateAddRule: (category: string, ruleText: string) =>
+    fetch(`${BASE_URL}/generate/rules/add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, rule_text: ruleText }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<{ ok: boolean }>;
+    }),
+
   // ── Coaching Sync ─────────────────────────────────────────
 
   generateCoachingAnalyze: () =>
@@ -830,18 +840,27 @@ export interface RetroChange {
   published_excerpt?: string;
 }
 
+export interface RetroRuleSuggestion {
+  action: string;
+  category: string;
+  rule_text: string;
+  evidence: string;
+}
+
+export interface RetroPromptEdit {
+  type: "add" | "remove" | "replace";
+  remove_text?: string;
+  add_text: string;
+  reason: string;
+}
+
 export interface RetroAnalysis {
   core_message_same: boolean;
   surface_changes_summary: string;
   changes: RetroChange[];
   patterns: string[];
-  rule_suggestions: Array<{
-    action: string;
-    category: string;
-    rule_text: string;
-    evidence: string;
-  }>;
-  prompt_suggestions: string[];
+  rule_suggestions: RetroRuleSuggestion[];
+  prompt_edits: RetroPromptEdit[];
   summary: string;
 }
 

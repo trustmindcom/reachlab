@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api, type RetroAnalysis } from "../../api/client";
+import { api, type RetroAnalysis, type RetroRuleSuggestion, type RetroPromptEdit } from "../../api/client";
 
 interface PostRetroProps {
   generationId: number;
@@ -13,8 +13,9 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<RetroAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [appliedRules, setAppliedRules] = useState<Set<number>>(new Set());
+  const [appliedPromptEdits, setAppliedPromptEdits] = useState<Set<number>>(new Set());
 
-  // Load existing retro if available
   useEffect(() => {
     api.generateGetRetro(generationId).then((res) => {
       if (res.retro) {
@@ -28,6 +29,8 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
     if (!publishedText.trim()) return;
     setAnalyzing(true);
     setError(null);
+    setAppliedRules(new Set());
+    setAppliedPromptEdits(new Set());
     try {
       const res = await api.generateRetro(generationId, publishedText);
       setAnalysis(res.analysis);
@@ -38,21 +41,54 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
     }
   };
 
+  const handleAddRule = async (rule: RetroRuleSuggestion, index: number) => {
+    try {
+      await api.generateAddRule(rule.category, rule.rule_text);
+      setAppliedRules((prev) => new Set(prev).add(index));
+    } catch { /* ignore */ }
+  };
+
+  const handleApplyPromptEdit = async (edit: RetroPromptEdit, index: number) => {
+    try {
+      const res = await api.getWritingPrompt();
+      const current = res.text ?? "";
+      let updated: string;
+
+      if (edit.type === "add") {
+        if (current.includes(edit.add_text)) return; // Already present
+        updated = current.trimEnd() + "\n\n" + edit.add_text;
+      } else if (edit.type === "remove" && edit.remove_text) {
+        if (!current.includes(edit.remove_text)) return; // Not found
+        updated = current.replace(edit.remove_text, "").replace(/\n{3,}/g, "\n\n").trim();
+      } else if (edit.type === "replace" && edit.remove_text) {
+        if (!current.includes(edit.remove_text)) {
+          // Fallback: append if can't find the text to replace
+          updated = current.trimEnd() + "\n\n" + edit.add_text;
+        } else {
+          updated = current.replace(edit.remove_text, edit.add_text);
+        }
+      } else {
+        return;
+      }
+
+      await api.saveWritingPrompt(updated, "ai_suggestion", edit.reason);
+      setAppliedPromptEdits((prev) => new Set(prev).add(index));
+    } catch { /* ignore */ }
+  };
+
   const significanceDot = (s: string) =>
     s === "high" ? "bg-accent" : "bg-text-muted";
 
   const categoryLabel = (c: string) => {
     const labels: Record<string, string> = {
-      structural: "Structure",
-      voice: "Voice",
-      content: "Content",
-      hook: "Hook",
-      closing: "Closing",
-      cut: "Cut",
-      added: "Added",
+      structural: "Structure", voice: "Voice", content: "Content",
+      hook: "Hook", closing: "Closing", cut: "Cut", added: "Added",
     };
     return labels[c] ?? c;
   };
+
+  const ruleCategoryLabel = (c: string) =>
+    c.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 
   return (
     <div className="space-y-5">
@@ -120,7 +156,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
 
       {/* Results */}
       {analysis && (
-        <div className="space-y-5">
+        <div className="space-y-6">
           {/* Summary */}
           <div className="bg-surface-2 rounded-lg p-4 border border-border">
             <p className="text-[13px] text-text-primary leading-relaxed">{analysis.summary}</p>
@@ -131,7 +167,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
             )}
           </div>
 
-          {/* Editorial principles found */}
+          {/* Editorial principles */}
           {analysis.changes.length > 0 && (
             <div>
               <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
@@ -185,41 +221,87 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
             </div>
           )}
 
-          {/* Rule suggestions */}
+          {/* Rule suggestions — with Apply buttons */}
           {analysis.rule_suggestions.length > 0 && (
             <div>
               <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
-                Suggested Rule Updates
+                Suggested Rules
               </h3>
               <div className="space-y-3">
-                {analysis.rule_suggestions.map((rule, i) => (
-                  <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[11px] font-medium text-accent uppercase">
-                        {rule.action} · {rule.category.replace(/_/g, " ")}
-                      </span>
+                {analysis.rule_suggestions.map((rule, i) => {
+                  const applied = appliedRules.has(i);
+                  return (
+                    <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <span className="text-[11px] font-medium text-accent uppercase">
+                            {rule.action} · {ruleCategoryLabel(rule.category)}
+                          </span>
+                          <p className="text-[13px] text-text-primary mt-1">{rule.rule_text}</p>
+                          <p className="text-[11px] text-text-muted mt-1">{rule.evidence}</p>
+                        </div>
+                        <button
+                          onClick={() => handleAddRule(rule, i)}
+                          disabled={applied}
+                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                            applied
+                              ? "bg-positive/10 text-positive border border-positive/20"
+                              : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
+                          }`}
+                        >
+                          {applied ? "Added" : "Add Rule"}
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-[13px] text-text-primary">{rule.rule_text}</p>
-                    <p className="text-[11px] text-text-muted mt-1">Evidence: {rule.evidence}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Prompt suggestions */}
-          {analysis.prompt_suggestions.length > 0 && (
+          {/* Prompt edits — with preview and Apply buttons */}
+          {analysis.prompt_edits && analysis.prompt_edits.length > 0 && (
             <div>
               <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
-                Prompt Improvements
+                Writing Prompt Updates
               </h3>
-              <ul className="space-y-2">
-                {analysis.prompt_suggestions.map((s, i) => (
-                  <li key={i} className="text-[13px] text-text-secondary leading-relaxed pl-4 border-l-2 border-warning/30">
-                    {s}
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-3">
+                {analysis.prompt_edits.map((edit, i) => {
+                  const applied = appliedPromptEdits.has(i);
+                  return (
+                    <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <p className="text-[11px] text-text-muted">{edit.reason}</p>
+                          {edit.remove_text && (
+                            <div className="bg-negative/5 border border-negative/15 rounded-md p-3">
+                              <span className="text-[10px] uppercase tracking-wider text-negative/70 font-medium">Remove</span>
+                              <p className="text-[12px] text-negative/80 mt-1 line-through">{edit.remove_text}</p>
+                            </div>
+                          )}
+                          <div className="bg-positive/5 border border-positive/15 rounded-md p-3">
+                            <span className="text-[10px] uppercase tracking-wider text-positive/70 font-medium">
+                              {edit.type === "add" ? "Add" : "Replace with"}
+                            </span>
+                            <p className="text-[12px] text-positive/80 mt-1">{edit.add_text}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleApplyPromptEdit(edit, i)}
+                          disabled={applied}
+                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                            applied
+                              ? "bg-positive/10 text-positive border border-positive/20"
+                              : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
+                          }`}
+                        >
+                          {applied ? "Applied" : "Apply"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

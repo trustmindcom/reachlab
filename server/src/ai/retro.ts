@@ -9,18 +9,27 @@ export interface RetroChange {
   published_excerpt?: string;
 }
 
+export interface RetroRuleSuggestion {
+  action: "add" | "update";
+  category: "voice_tone" | "structure_formatting" | "anti_ai_tropes";
+  rule_text: string;
+  evidence: string;
+}
+
+export interface RetroPromptEdit {
+  type: "add" | "remove" | "replace";
+  remove_text?: string;
+  add_text: string;
+  reason: string;
+}
+
 export interface RetroAnalysis {
   core_message_same: boolean;
   surface_changes_summary: string;
   changes: RetroChange[];
   patterns: string[];
-  rule_suggestions: Array<{
-    action: "add" | "update";
-    category: "voice_tone" | "structure_formatting" | "anti_ai_tropes";
-    rule_text: string;
-    evidence: string;
-  }>;
-  prompt_suggestions: string[];
+  rule_suggestions: RetroRuleSuggestion[];
+  prompt_edits: RetroPromptEdit[];
   summary: string;
 }
 
@@ -28,10 +37,15 @@ export async function analyzeRetro(
   client: Anthropic,
   draftText: string,
   publishedText: string,
-  existingRules: string[]
+  existingRules: string[],
+  currentWritingPrompt?: string
 ): Promise<{ analysis: RetroAnalysis; input_tokens: number; output_tokens: number }> {
   const rulesBlock = existingRules.length > 0
     ? `\nEXISTING GENERATION RULES (don't suggest duplicates of these):\n${existingRules.map((r, i) => `${i + 1}. ${r}`).join("\n")}\n`
+    : "";
+
+  const promptBlock = currentWritingPrompt
+    ? `\nCURRENT WRITING PROMPT (suggest specific edits to this text — what to remove, what to add, what to replace):\n---\n${currentWritingPrompt}\n---\n`
     : "";
 
   const response = await client.messages.create({
@@ -41,7 +55,16 @@ export async function analyzeRetro(
 
 You understand revision taxonomy (Faigley & Witte): changes are either SURFACE (don't affect meaning — grammar, synonyms, punctuation, rephrasing that says the same thing) or MEANING changes (alter the argument, structure, tone, or rhetorical strategy).
 
-Your job: analyze surface changes briefly, then focus exclusively on meaning changes to extract the editorial principles driving the author's revisions.`,
+Your job: analyze surface changes briefly, then focus exclusively on meaning changes to extract editorial principles and suggest TIGHT, CONSOLIDATED improvements to rules and prompts.
+
+PROMPT & RULE MAINTENANCE PHILOSOPHY:
+- NEVER just append new rules or instructions. The goal is a tight, well-organized system — not an ever-growing list of exceptions.
+- CLUSTER FIRST: Group new learnings with existing rules by theme. If it fits an existing cluster, REWRITE that rule to subsume the new learning. Only create a new standalone rule if it truly doesn't fit anywhere.
+- SUBSUMPTION CHECK: Before suggesting any addition, verify no existing rule or prompt section already covers it. If it does, at most enhance the existing text.
+- When suggesting prompt edits, prefer REPLACING a section with a tighter rewrite over adding new text. The prompt should get better, not longer.
+- THREE-STRIKE CONSOLIDATION: If you notice 3+ specific rules covering the same theme, suggest consolidating them into one principle with examples.
+- BUDGET AWARENESS: A writing prompt with 20+ distinct instructions starts losing effectiveness. If the prompt is already long, prioritize consolidation over addition.
+- Think like an editor maintaining a style guide: the goal is FEWER, SHARPER rules that capture principles, not MORE rules that catalog every specific case.`,
     messages: [{
       role: "user",
       content: `I need you to compare an AI-generated draft with what I actually published on LinkedIn, and help me understand my own editorial principles so the AI can write better first drafts.
@@ -51,7 +74,7 @@ ${draftText}
 
 PUBLISHED (what I actually posted):
 ${publishedText}
-${rulesBlock}
+${rulesBlock}${promptBlock}
 Follow this analysis process:
 
 PHASE 1 — ALIGNMENT
@@ -93,7 +116,14 @@ Return JSON only (no markdown fences):
       "evidence": "Which changes in this revision support this rule"
     }
   ],
-  "prompt_suggestions": ["Specific, concrete changes to the writing prompt — not vague advice"],
+  "prompt_edits": [
+    {
+      "type": "add|remove|replace",
+      "remove_text": "exact text to remove from the writing prompt (for 'remove' or 'replace' types — must be a verbatim substring of the CURRENT WRITING PROMPT above)",
+      "add_text": "text to add (for 'add' type: appended to prompt; for 'replace' type: replaces remove_text)",
+      "reason": "Why this change improves generation based on the editorial principles found"
+    }
+  ],
   "summary": "2-3 sentences: what is the single most important thing the AI should learn from how this author revised this draft?"
 }
 

@@ -476,6 +476,26 @@ Return JSON only:
     return { categories };
   });
 
+  // Add a single rule (used by retro flow)
+  app.post("/api/generate/rules/add", async (request, reply) => {
+    const body = request.body as { category: string; rule_text: string };
+    if (!body.category || !body.rule_text) {
+      return reply.status(400).send({ error: "category and rule_text required" });
+    }
+    const validCategories = ["voice_tone", "structure_formatting", "anti_ai_tropes"];
+    if (!validCategories.includes(body.category)) {
+      return reply.status(400).send({ error: "Invalid category" });
+    }
+    // Get max sort_order for this category
+    const max = db.prepare(
+      "SELECT COALESCE(MAX(sort_order), -1) as m FROM generation_rules WHERE category = ?"
+    ).get(body.category) as { m: number };
+    db.prepare(
+      "INSERT INTO generation_rules (category, rule_text, sort_order, enabled) VALUES (?, ?, ?, 1)"
+    ).run(body.category, body.rule_text, max.m + 1);
+    return { ok: true };
+  });
+
   // ── History ──────────────────────────────────────────────
 
   app.get("/api/generate/history", async (request) => {
@@ -570,8 +590,11 @@ Return JSON only:
     const rules = getRules(db);
     const ruleTexts = rules.filter(r => r.enabled).map(r => r.rule_text);
 
+    // Get current writing prompt so the LLM can suggest specific edits
+    const writingPrompt = db.prepare("SELECT value FROM settings WHERE key = 'writing_prompt'").get() as { value: string } | undefined;
+
     const { analysis, input_tokens, output_tokens } = await analyzeRetro(
-      client, gen.final_draft, body.published_text.trim(), ruleTexts
+      client, gen.final_draft, body.published_text.trim(), ruleTexts, writingPrompt?.value
     );
 
     // Store the published text and analysis
