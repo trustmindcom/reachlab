@@ -8,6 +8,7 @@ import {
   scrapePostPage,
   scrapeProfilePhoto,
 } from "./scrapers.js";
+import { scrapeCompanyAnalytics, scrapeCompanyPosts, hasMoreAnalyticsPages } from "./company-scrapers.js";
 import {
   scrapedPostSchema,
   scrapedPostMetricsSchema,
@@ -15,6 +16,7 @@ import {
   scrapedProfileViewsSchema,
   scrapedSearchAppearancesSchema,
   scrapedPostContentSchema,
+  scrapedCompanyPostSchema,
 } from "../shared/types.js";
 import type { ContentMessage } from "../shared/types.js";
 import { z } from "zod";
@@ -42,6 +44,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         } as ContentMessage)
       );
     return true; // keep message channel open for async response
+  }
+
+  if (message.type === "check-pagination") {
+    const hasMore = hasMoreAnalyticsPages(document);
+    sendResponse({ hasMore });
+    return false;
+  }
+
+  if (message.type === "click-next-page") {
+    const pagination = document.querySelector(".artdeco-pagination");
+    const nextButton = pagination?.querySelector('button[aria-label="Next"]') ??
+      pagination?.querySelector('button:last-of-type');
+    if (nextButton && !(nextButton as HTMLButtonElement).disabled) {
+      (nextButton as HTMLButtonElement).click();
+    }
+    sendResponse({ clicked: true });
+    return false;
   }
 });
 
@@ -155,6 +174,19 @@ async function scrapeCurrent(): Promise<ContentMessage> {
       "search-appearances"
     );
     return { type: "search-appearances", data };
+  }
+
+  // Company analytics page
+  if (url.match(/\/company\/\d+\/admin\/analytics\/updates/)) {
+    const raw = scrapeCompanyAnalytics(document);
+    const data = validate(z.array(scrapedCompanyPostSchema), raw, "company-analytics");
+    return { type: "company-analytics", data };
+  }
+
+  // Company page posts
+  if (url.match(/\/company\/\d+\/admin\/page-posts\/published/)) {
+    const raw = scrapeCompanyPosts(document);
+    return { type: "company-posts", data: raw };
   }
 
   return {

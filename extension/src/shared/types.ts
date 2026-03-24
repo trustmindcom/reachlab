@@ -61,6 +61,27 @@ export type ScrapedProfileViews = z.infer<typeof scrapedProfileViewsSchema>;
 export type ScrapedSearchAppearances = z.infer<typeof scrapedSearchAppearancesSchema>;
 export type ScrapedPostContent = z.infer<typeof scrapedPostContentSchema>;
 
+// --- Company page schemas ---
+
+export const scrapedCompanyPostSchema = z.object({
+  id: z.string().min(1),
+  content_preview: z.string().nullable(),
+  content_type: z.enum(["text", "image", "carousel", "video", "article"]),
+  published_at: z.string().nullable(),
+  url: z.string().min(1),
+  impressions: z.number().int().nullable(),
+  clicks: z.number().int().nullable(),
+  click_through_rate: z.number().nullable(),
+  reactions: z.number().int().nullable(),
+  comments: z.number().int().nullable(),
+  reposts: z.number().int().nullable(),
+  follows: z.number().int().nullable(),
+  engagement_rate: z.number().nullable(),
+  views: z.number().int().nullable(),
+});
+
+export type ScrapedCompanyPost = z.infer<typeof scrapedCompanyPostSchema>;
+
 // --- Messages from content script to service worker ---
 
 export type ContentMessage =
@@ -70,8 +91,13 @@ export type ContentMessage =
   | { type: "profile-views"; data: ScrapedProfileViews }
   | { type: "search-appearances"; data: ScrapedSearchAppearances }
   | { type: "post-content"; data: ScrapedPostContent }
+  | { type: "company-analytics"; data: ScrapedCompanyPost[] }
+  | { type: "company-posts"; data: (ScrapedPostContent & { id: string })[] }
   | { type: "scrape-error"; page: string; error: string };
 
 // --- Commands from service worker to content script ---
 
-export type BackgroundCommand = { type: "scrape-page" };
+export type BackgroundCommand =
+  | { type: "scrape-page" }
+  | { type: "check-pagination" }
+  | { type: "click-next-page" };

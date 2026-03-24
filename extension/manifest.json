@@ -13,7 +13,8 @@
     {
       "matches": [
         "*://*.linkedin.com/analytics/*",
-        "*://*.linkedin.com/feed/*"
+        "*://*.linkedin.com/feed/*",
+        "*://*.linkedin.com/company/*/admin/*"
       ],
       "js": ["content/index.js"],
       "run_at": "document_idle"
