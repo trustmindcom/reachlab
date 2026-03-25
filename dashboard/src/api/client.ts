@@ -751,6 +751,10 @@ export const api = {
   getPendingRetros: () =>
     getUnscoped<{ retros: PendingRetro[] }>("/generate/retros/pending"),
 
+  markRetroApplied: (generationId: number) =>
+    fetch(withPersonaId(`/api/generate/retros/${generationId}/apply`), { method: "PATCH" })
+      .then((r) => r.json()),
+
   // ── Coaching Sync ─────────────────────────────────────────
 
   generateCoachingAnalyze: () =>

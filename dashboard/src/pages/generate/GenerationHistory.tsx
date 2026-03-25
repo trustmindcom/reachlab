@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, type GenHistoryItem } from "../../api/client";
 
-const statusFilters = ["all", "published", "draft", "discarded"] as const;
+const statusFilters = ["active", "all", "published", "discarded"] as const;
 type StatusFilter = (typeof statusFilters)[number];
 
 interface GenerationHistoryProps {
@@ -11,7 +11,7 @@ interface GenerationHistoryProps {
 export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
   const [items, setItems] = useState<GenHistoryItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [filter, setFilter] = useState<StatusFilter>("active");
   const [offset, setOffset] = useState(0);
   const limit = 20;
 

@@ -666,6 +666,7 @@ Return JSON only:
          WHERE persona_id = ?
            AND retro_json IS NOT NULL
            AND retro_at IS NOT NULL
+           AND retro_applied_at IS NULL
          ORDER BY retro_at DESC
          LIMIT 10`
       )
@@ -687,6 +688,14 @@ Return JSON only:
         analysis: JSON.parse(r.retro_json),
       })),
     };
+  });
+
+  app.patch("/api/generate/retros/:id/apply", async (request) => {
+    const { id } = request.params as { id: string };
+    db.prepare(
+      "UPDATE generations SET retro_applied_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).run(Number(id));
+    return { ok: true };
   });
 
   // ── Coaching Sync ────────────────────────────────────────

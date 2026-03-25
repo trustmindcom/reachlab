@@ -16,6 +16,8 @@ import {
   type HookPerformance,
   type ImageSubtypePerformance,
   type AnalysisStatus,
+  type PendingRetro,
+  type RetroPromptEdit,
 } from "../api/client";
 
 type CoachTab = "actions" | "insights" | "deep-dive";
@@ -1114,11 +1116,44 @@ export default function Coach() {
   const [hooks, setHooks] = useState<{ by_hook_type: HookPerformance[]; by_format_style: HookPerformance[] }>({ by_hook_type: [], by_format_style: [] });
   const [imageSubtypes, setImageSubtypes] = useState<ImageSubtypePerformance[]>([]);
 
+  // Post Retro
+  const [pendingRetros, setPendingRetros] = useState<PendingRetro[]>([]);
+  const [appliedRetroEdits, setAppliedRetroEdits] = useState<Set<string>>(new Set());
+
+  const handleApplyRetroEdit = async (retroId: number, editIndex: number, edit: RetroPromptEdit) => {
+    const key = `${retroId}-${editIndex}`;
+    try {
+      const res = await api.getWritingPrompt();
+      const current = res.text ?? "";
+      let updated: string;
+      if (edit.type === "add") {
+        if (current.includes(edit.add_text)) return;
+        updated = current.trimEnd() + "\n\n" + edit.add_text;
+      } else if (edit.type === "remove" && edit.remove_text) {
+        if (!current.includes(edit.remove_text)) return;
+        updated = current.replace(edit.remove_text, "").replace(/\n{3,}/g, "\n\n").trim();
+      } else if (edit.type === "replace" && edit.remove_text) {
+        if (!current.includes(edit.remove_text)) {
+          updated = current.trimEnd() + "\n\n" + edit.add_text;
+        } else {
+          updated = current.replace(edit.remove_text, edit.add_text);
+        }
+      } else {
+        return;
+      }
+      await api.saveWritingPrompt(updated, "ai_suggestion", edit.reason);
+      await api.markRetroApplied(retroId);
+      setAppliedRetroEdits((prev) => new Set(prev).add(key));
+      setPendingRetros((prev) => prev.filter((r) => r.generation_id !== retroId));
+    } catch { /* ignore */ }
+  };
+
   const loadAll = () => {
     // Status
     api.insightsStatus().then(setStatus).catch(() => {});
 
-    // Actions
+    // Actions + Retros
+    api.getPendingRetros().then((r) => setPendingRetros(r.retros)).catch(() => {});
     api.recommendationsWithCooldown().then((r) => {
       setActiveRecs(r.active);
       setResolvedRecs(r.resolved);
@@ -1271,17 +1306,80 @@ export default function Coach() {
 
       {/* Tab content */}
       {tab === "actions" && (
-        <ActionsTab
-          active={activeRecs}
-          resolved={resolvedRecs}
-          promptSuggestions={promptSuggestions}
-          onResolve={handleResolve}
-          onFeedback={handleFeedback}
-          onAcceptSuggestion={handleAcceptSuggestion}
-          progress={progress}
-          sparklinePoints={sparklinePoints}
-          insights={insights}
-        />
+        <>
+          {/* Post Retro — auto-detected prompt improvements */}
+          {pendingRetros.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider mb-2">
+                Post Retro
+              </h2>
+              <p className="text-[12px] text-text-muted mb-4">
+                Based on changes you made between AI drafts and what you published
+              </p>
+              {pendingRetros.map((retro) => (
+                <div key={retro.generation_id} className="bg-surface-1 rounded-xl border border-border p-5 mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[12px] text-text-muted">{formatTimeAgo(retro.retro_at)}</span>
+                    <span className="text-[11px] text-text-muted">Draft #{retro.generation_id}</span>
+                  </div>
+                  <p className="text-[13px] text-text-primary mb-4 leading-relaxed">{retro.analysis.summary}</p>
+
+                  {retro.analysis.prompt_edits && retro.analysis.prompt_edits.length > 0 && (
+                    <div className="space-y-3">
+                      <span className="text-[11px] uppercase tracking-wider text-text-muted font-medium">
+                        Suggested prompt updates
+                      </span>
+                      {retro.analysis.prompt_edits.map((edit, i) => {
+                        const key = `${retro.generation_id}-${i}`;
+                        const applied = appliedRetroEdits.has(key);
+                        return (
+                          <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <p className="text-[12px] text-text-muted mb-2">{edit.reason}</p>
+                                {edit.remove_text && (
+                                  <div className="text-[12px] bg-negative/5 text-negative/80 rounded px-2 py-1 mb-1 font-mono">
+                                    − {edit.remove_text}
+                                  </div>
+                                )}
+                                <div className="text-[12px] bg-positive/5 text-positive/80 rounded px-2 py-1 font-mono">
+                                  + {edit.add_text}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleApplyRetroEdit(retro.generation_id, i, edit)}
+                                disabled={applied}
+                                className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                                  applied
+                                    ? "bg-positive/10 text-positive border border-positive/20"
+                                    : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
+                                }`}
+                              >
+                                {applied ? "Applied" : "Apply"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <ActionsTab
+            active={activeRecs}
+            resolved={resolvedRecs}
+            promptSuggestions={promptSuggestions}
+            onResolve={handleResolve}
+            onFeedback={handleFeedback}
+            onAcceptSuggestion={handleAcceptSuggestion}
+            progress={progress}
+            sparklinePoints={sparklinePoints}
+            insights={insights}
+          />
+        </>
       )}
       {tab === "insights" && (
         <InsightsTab

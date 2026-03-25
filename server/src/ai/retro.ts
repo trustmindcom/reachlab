@@ -64,7 +64,12 @@ PROMPT & RULE MAINTENANCE PHILOSOPHY:
 - When suggesting prompt edits, prefer REPLACING a section with a tighter rewrite over adding new text. The prompt should get better, not longer.
 - THREE-STRIKE CONSOLIDATION: If you notice 3+ specific rules covering the same theme, suggest consolidating them into one principle with examples.
 - BUDGET AWARENESS: A writing prompt with 20+ distinct instructions starts losing effectiveness. If the prompt is already long, prioritize consolidation over addition.
-- Think like an editor maintaining a style guide: the goal is FEWER, SHARPER rules that capture principles, not MORE rules that catalog every specific case.`,
+- Think like an editor maintaining a style guide: the goal is FEWER, SHARPER rules that capture principles, not MORE rules that catalog every specific case.
+
+OUTPUT CHANNEL:
+- All suggestions go into prompt_edits. The writing prompt is the single source of truth for how the AI writes.
+- Do NOT suggest rules. Rules are user-managed guardrails added manually — the retro system only refines the writing prompt.
+- rule_suggestions must always be an empty array.`,
     messages: [{
       role: "user",
       content: `I need you to compare an AI-generated draft with what I actually published on LinkedIn, and help me understand my own editorial principles so the AI can write better first drafts.
@@ -108,14 +113,7 @@ Return JSON only (no markdown fences):
     }
   ],
   "patterns": ["Generalizable editorial principles — each should be something that would improve future drafts if the AI followed it"],
-  "rule_suggestions": [
-    {
-      "action": "add|update",
-      "category": "voice_tone|structure_formatting|anti_ai_tropes",
-      "rule_text": "Specific, actionable rule for the generation system",
-      "evidence": "Which changes in this revision support this rule"
-    }
-  ],
+  "rule_suggestions": [],
   "prompt_edits": [
     {
       "type": "add|remove|replace",

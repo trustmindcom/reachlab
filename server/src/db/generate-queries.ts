@@ -83,6 +83,7 @@ export interface GenerationRecord {
   total_output_tokens: number | null;
   total_cost_cents: number | null;
   personal_connection: string | null;
+  draft_length: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -238,14 +239,15 @@ export function insertGeneration(
     drafts_json: string;
     prompt_snapshot?: string;
     personal_connection?: string;
+    draft_length?: string;
   }
 ): number {
   const result = db
     .prepare(
-      `INSERT INTO generations (persona_id, research_id, post_type, selected_story_index, drafts_json, prompt_snapshot, personal_connection)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO generations (persona_id, research_id, post_type, selected_story_index, drafts_json, prompt_snapshot, personal_connection, draft_length)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(personaId, data.research_id, data.post_type, data.selected_story_index, data.drafts_json, data.prompt_snapshot ?? null, data.personal_connection ?? null);
+    .run(personaId, data.research_id, data.post_type, data.selected_story_index, data.drafts_json, data.prompt_snapshot ?? null, data.personal_connection ?? null, data.draft_length ?? null);
   return Number(result.lastInsertRowid);
 }
 
@@ -296,10 +298,18 @@ export function listGenerations(
   personaId: number,
   opts: { status?: string; offset?: number; limit?: number }
 ): { generations: GenerationRecord[]; total: number } {
-  const where = opts.status && opts.status !== "all"
-    ? "WHERE persona_id = ? AND status = ?"
-    : "WHERE persona_id = ?";
-  const params: any[] = opts.status && opts.status !== "all" ? [personaId, opts.status] : [personaId];
+  let where: string;
+  let params: any[];
+  if (opts.status === "active") {
+    where = "WHERE persona_id = ? AND status IN ('draft', 'copied')";
+    params = [personaId];
+  } else if (opts.status && opts.status !== "all") {
+    where = "WHERE persona_id = ? AND status = ?";
+    params = [personaId, opts.status];
+  } else {
+    where = "WHERE persona_id = ?";
+    params = [personaId];
+  }
 
   const total = (
     db.prepare(`SELECT COUNT(*) as count FROM generations ${where}`).get(...params) as { count: number }
