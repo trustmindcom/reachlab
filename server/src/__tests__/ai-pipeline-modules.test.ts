@@ -71,6 +71,10 @@ describe("researcher", () => {
     expect(result.stories).toHaveLength(3);
     expect(result.stories[2].is_stretch).toBe(true);
     expect(client.messages.create).toHaveBeenCalledOnce();
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) }),
+      expect.objectContaining({ timeout: 45_000, maxRetries: 2 })
+    );
   });
 });
 
@@ -99,6 +103,10 @@ describe("drafter", () => {
     expect(result.drafts[1].type).toBe("operator");
     expect(result.drafts[2].type).toBe("future");
     expect(client.messages.create).toHaveBeenCalledTimes(3);
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) }),
+      expect.objectContaining({ timeout: 90_000, maxRetries: 1 })
+    );
   });
 });
 
@@ -124,6 +132,10 @@ describe("combiner", () => {
     expect(result.final_draft).toContain("Combined post");
     expect(result.input_tokens).toBe(100);
     expect(client.messages.create).toHaveBeenCalledOnce();
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) }),
+      expect.objectContaining({ timeout: 90_000, maxRetries: 1 })
+    );
   });
 });
 
@@ -145,6 +157,10 @@ describe("coaching-analyzer", () => {
     expect(result.changes).toHaveLength(1);
     expect(result.changes[0].type).toBe("new");
     expect(result.changes[0].title).toBe("Use numbers early");
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) }),
+      expect.objectContaining({ timeout: 120_000, maxRetries: 2 })
+    );
   });
 
   it("returns empty changes when nothing to improve", async () => {

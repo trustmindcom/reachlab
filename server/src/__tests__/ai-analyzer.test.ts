@@ -70,6 +70,16 @@ describe("interpretStats", () => {
     await interpretStats(client, "Stats report", "System prompt", mockLogger as any);
     // 2 parallel interpretation calls + 1 reconciliation
     expect(client.messages.create).toHaveBeenCalledTimes(3);
+    // callModel calls use 180s timeout
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.stringContaining("/") }),
+      expect.objectContaining({ timeout: 180_000, maxRetries: 2 })
+    );
+    // reconciliation call uses 120s timeout
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) }),
+      expect.objectContaining({ timeout: 120_000, maxRetries: 2 })
+    );
   });
 
   it("parses and returns structured JSON from reconciled output", async () => {
