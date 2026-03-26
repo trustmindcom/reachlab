@@ -8,6 +8,8 @@ import { AiLogger } from "../ai/logger.js";
 import { discoverTopics } from "../ai/discovery.js";
 import { discoverFeeds, discoverFeedsByGuessing } from "../ai/feed-discoverer.js";
 import { getPersonaId } from "../utils.js";
+import { validateBody } from "../validation.js";
+import { sourceUrlBody, sourceUpdateBody, sourceDiscoverBody } from "../schemas/generate.js";
 
 export function registerSourceRoutes(app: FastifyInstance, db: Database.Database): void {
   const dbc = createDbClient(db);
@@ -50,7 +52,7 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
 
   app.post("/api/sources", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { url } = request.body as { url: string };
+    const { url } = validateBody(sourceUrlBody, request.body);
     if (!url || typeof url !== "string" || !url.trim()) {
       return reply.status(400).send({ error: "url is required" });
     }
@@ -87,7 +89,7 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
   app.patch("/api/sources/:id", async (request, reply) => {
     const personaId = getPersonaId(request);
     const { id } = request.params as { id: string };
-    const { enabled, name } = request.body as { enabled?: boolean; name?: string };
+    const { enabled, name } = validateBody(sourceUpdateBody, request.body);
 
     if (!getSource(dbc, Number(id), personaId)) {
       return reply.status(404).send({ error: "Source not found" });
@@ -110,7 +112,7 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
   // ── Source Discovery ─────────────────────────────────────
 
   app.post("/api/sources/discover", async (request) => {
-    const { topics } = request.body as { topics?: string[] };
+    const { topics } = validateBody(sourceDiscoverBody, request.body);
 
     // Fall back to taxonomy topics if none provided
     let topicList = topics;

@@ -35,6 +35,8 @@ import {
 import { createClient } from "../ai/client.js";
 import { runPipeline } from "../ai/orchestrator.js";
 import { getPersonaId } from "../utils.js";
+import { validateBody } from "../validation.js";
+import { feedbackBody, resolveBody } from "../schemas/insights.js";
 
 export function registerInsightsRoutes(app: FastifyInstance, db: Database.Database): void {
   // Backfill costs for existing runs (runs once, idempotent)
@@ -118,7 +120,7 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
 
   app.patch("/api/insights/recommendations/:id/feedback", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { feedback?: string | { rating: string; reason?: string }; acted_on?: boolean };
+    const body = validateBody(feedbackBody, request.body);
     if (!body.feedback && body.acted_on === undefined) {
       return reply.status(400).send({ error: "Provide feedback or acted_on" });
     }
@@ -161,7 +163,7 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
   // Resolve (accept/dismiss) a recommendation
   app.patch("/api/insights/recommendations/:id/resolve", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { type?: "accepted" | "dismissed" };
+    const body = validateBody(resolveBody, request.body);
     if (!body.type || !["accepted", "dismissed"].includes(body.type)) {
       return reply.status(400).send({ error: "Provide type: 'accepted' or 'dismissed'" });
     }

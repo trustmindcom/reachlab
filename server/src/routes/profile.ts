@@ -8,6 +8,8 @@ import {
   incrementInterviewCount,
 } from "../db/profile-queries.js";
 import { getPersonaId } from "../utils.js";
+import { validateBody } from "../validation.js";
+import { saveProfileBody, interviewBody } from "../schemas/profile.js";
 
 export function registerProfileRoutes(app: FastifyInstance, db: Database.Database): void {
   // Get current profile
@@ -24,10 +26,7 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
   // Update profile (manual edit)
   app.put("/api/author-profile", async (request) => {
     const personaId = getPersonaId(request);
-    const { profile_text, profile_json } = request.body as {
-      profile_text: string;
-      profile_json?: Record<string, any>;
-    };
+    const { profile_text, profile_json } = validateBody(saveProfileBody, request.body);
     upsertAuthorProfile(db, personaId, {
       profile_text,
       profile_json: profile_json ? JSON.stringify(profile_json) : undefined,
@@ -91,10 +90,7 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
 
   // Extract profile from interview transcript
   app.post("/api/author-profile/extract", async (request, reply) => {
-    const { transcript, duration_seconds } = request.body as {
-      transcript: string;
-      duration_seconds?: number;
-    };
+    const { transcript, duration_seconds } = validateBody(interviewBody, request.body);
 
     if (!transcript || transcript.trim().length === 0) {
       return reply.status(400).send({ error: "Transcript is required" });

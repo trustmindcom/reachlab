@@ -11,6 +11,8 @@ import {
   clearPromptSuggestions,
 } from "../db/ai-queries.js";
 import { getPersonaId } from "../utils.js";
+import { validateBody } from "../validation.js";
+import { timezoneBody, writingPromptBody, autoRefreshBody, settingBody, configKeysBody } from "../schemas/settings.js";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -123,7 +125,7 @@ export function registerSettingsRoutes(
   // ── Timezone ───────────────────────────────────────────────
 
   app.put("/api/settings/timezone", async (request, reply) => {
-    const body = request.body as { timezone?: string };
+    const body = validateBody(timezoneBody, request.body);
     if (!body.timezone || typeof body.timezone !== "string") {
       return reply.status(400).send({ error: "timezone is required" });
     }
@@ -143,7 +145,7 @@ export function registerSettingsRoutes(
 
   app.put("/api/settings/writing-prompt", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const body = request.body as { text?: string; source?: string; evidence?: string };
+    const body = validateBody(writingPromptBody, request.body);
     if (!body.text || typeof body.text !== "string") {
       return reply.status(400).send({ error: "text is required" });
     }
@@ -175,10 +177,7 @@ export function registerSettingsRoutes(
   });
 
   app.put("/api/settings/auto-refresh", async (request, reply) => {
-    const body = request.body as {
-      schedule?: string;
-      post_threshold?: number;
-    };
+    const body = validateBody(autoRefreshBody, request.body);
 
     if (body.schedule !== undefined) {
       if (!["daily", "weekly", "off"].includes(body.schedule)) {
@@ -209,7 +208,7 @@ export function registerSettingsRoutes(
   const ALLOWED_KV_KEYS = new Set(["onboarding_complete"]);
 
   app.post("/api/settings/kv", async (request, reply) => {
-    const { key, value } = request.body as { key: string; value: string };
+    const { key, value } = validateBody(settingBody, request.body);
     if (!key || typeof key !== "string" || !ALLOWED_KV_KEYS.has(key)) {
       return reply.status(400).send({ error: "Invalid setting key" });
     }
@@ -248,7 +247,7 @@ export function registerSettingsRoutes(
   });
 
   app.post("/api/config/keys", async (request, reply) => {
-    const { keys } = request.body as { keys: Record<string, string> };
+    const { keys } = validateBody(configKeysBody, request.body);
     if (!keys || typeof keys !== "object") {
       return reply.status(400).send({ error: "keys object is required" });
     }

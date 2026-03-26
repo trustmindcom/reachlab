@@ -1,0 +1,71 @@
+import { z } from "zod";
+
+export const researchBody = z.object({
+  topic: z.string().max(500).optional(),
+  avoid: z.array(z.string().max(500)).max(50).optional(),
+  sources: z.array(z.string()).optional(),
+});
+
+export const draftsBody = z.object({
+  research_id: z.number().int().positive(),
+  story_index: z.number().int().min(0),
+  personal_connection: z.string().optional(),
+  length: z.enum(["short", "medium", "long"]).optional(),
+});
+
+export const combineBody = z.object({
+  generation_id: z.number().int().positive(),
+  selected_drafts: z.array(z.number().int().min(0)),
+  combining_guidance: z.string().optional(),
+});
+
+export const chatBody = z.object({
+  generation_id: z.number().int().positive(),
+  message: z.string().min(1).max(5000),
+  edited_draft: z.string().optional(),
+});
+
+const ruleItem = z.object({
+  rule_text: z.string().min(1),
+  example_text: z.string().optional(),
+  sort_order: z.number(),
+  enabled: z.number().optional(),
+});
+
+export const rulesBody = z.object({
+  categories: z.object({
+    voice_tone: z.array(ruleItem),
+    structure_formatting: z.array(ruleItem),
+    anti_ai_tropes: z.object({
+      enabled: z.boolean(),
+      rules: z.array(ruleItem),
+    }),
+  }),
+});
+
+export const addRuleBody = z.object({
+  category: z.string().min(1),
+  rule_text: z.string().min(1),
+});
+
+export const retroBody = z.object({
+  published_text: z.string().min(1),
+});
+
+export const coachingChangeBody = z.object({
+  action: z.string().min(1),
+  edited_text: z.string().optional(),
+});
+
+export const sourceUrlBody = z.object({
+  url: z.string().url().min(1),
+});
+
+export const sourceUpdateBody = z.object({
+  enabled: z.boolean().optional(),
+  name: z.string().optional(),
+});
+
+export const sourceDiscoverBody = z.object({
+  topics: z.array(z.string()).optional(),
+});

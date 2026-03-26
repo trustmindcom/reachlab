@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
 import { listPersonas, getPersona, createPersona, updatePersona } from "../db/persona-queries.js";
+import { validateBody } from "../validation.js";
+import { createPersonaBody, updatePersonaBody } from "../schemas/personas.js";
 
 export function registerPersonaRoutes(app: FastifyInstance, db: Database.Database) {
   app.get("/api/personas", async () => {
@@ -17,7 +19,7 @@ export function registerPersonaRoutes(app: FastifyInstance, db: Database.Databas
   });
 
   app.post("/api/personas", async (request) => {
-    const body = request.body as { name: string; linkedin_url: string; type?: string };
+    const body = validateBody(createPersonaBody, request.body);
     const type = body.linkedin_url.includes("/company/") ? "company_page" : (body.type as any ?? "personal");
     const persona = createPersona(db, { name: body.name, linkedin_url: body.linkedin_url, type });
     return persona;
@@ -27,7 +29,7 @@ export function registerPersonaRoutes(app: FastifyInstance, db: Database.Databas
     const { personaId } = request.params as { personaId: string };
     const persona = getPersona(db, Number(personaId));
     if (!persona) return reply.status(404).send({ error: "Persona not found" });
-    const body = request.body as { name?: string; linkedin_url?: string };
+    const body = validateBody(updatePersonaBody, request.body);
     updatePersona(db, Number(personaId), body);
     return { ok: true };
   });

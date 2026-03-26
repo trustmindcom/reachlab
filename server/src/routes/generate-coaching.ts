@@ -17,6 +17,8 @@ import { createClient } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { analyzeCoaching } from "../ai/coaching-analyzer.js";
 import { getPersonaId } from "../utils.js";
+import { validateBody } from "../validation.js";
+import { coachingChangeBody } from "../schemas/generate.js";
 
 export function registerCoachingRoutes(app: FastifyInstance, db: Database.Database): void {
   app.post("/api/generate/coaching/analyze", async (request, reply) => {
@@ -56,10 +58,7 @@ export function registerCoachingRoutes(app: FastifyInstance, db: Database.Databa
 
   app.patch("/api/generate/coaching/changes/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { action, edited_text } = request.body as {
-      action: "accept" | "skip" | "retire" | "keep";
-      edited_text?: string;
-    };
+    const { action, edited_text } = validateBody(coachingChangeBody, request.body);
 
     const changeId = Number(id);
 

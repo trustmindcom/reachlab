@@ -38,6 +38,8 @@ import { analyzeRetro } from "../ai/retro.js";
 import { registerCoachingRoutes } from "./generate-coaching.js";
 import { registerSourceRoutes } from "./generate-sources.js";
 import { getPersonaId } from "../utils.js";
+import { validateBody } from "../validation.js";
+import { researchBody, draftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody } from "../schemas/generate.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -55,10 +57,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
   app.post("/api/generate/research", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { topic, avoid } = request.body as {
-      topic: string;
-      avoid?: string[];
-    };
+    const { topic, avoid } = validateBody(researchBody, request.body);
     if (!topic || typeof topic !== "string" || !topic.trim()) {
       return reply.status(400).send({ error: "topic is required" });
     }
@@ -98,12 +97,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
   app.post("/api/generate/drafts", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { research_id, story_index, personal_connection, length } = request.body as {
-      research_id: number;
-      story_index: number;
-      personal_connection?: string;
-      length?: "short" | "medium" | "long";
-    };
+    const { research_id, story_index, personal_connection, length } = validateBody(draftsBody, request.body);
 
     const research = getResearch(db, research_id);
     if (!research) {
@@ -159,11 +153,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   // ── Combine ──────────────────────────────────────────────
 
   app.post("/api/generate/combine", async (request, reply) => {
-    const { generation_id, selected_drafts, combining_guidance } = request.body as {
-      generation_id: number;
-      selected_drafts: number[];
-      combining_guidance?: string;
-    };
+    const { generation_id, selected_drafts, combining_guidance } = validateBody(combineBody, request.body);
 
     const gen = getGeneration(db, generation_id);
     if (!gen) {
@@ -223,11 +213,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   // ── Chat (replaces Revise) ───────────────────────────────
 
   app.post("/api/generate/chat", async (request, reply) => {
-    const { generation_id, message, edited_draft } = request.body as {
-      generation_id: number;
-      message: string;
-      edited_draft?: string;
-    };
+    const { generation_id, message, edited_draft } = validateBody(chatBody, request.body);
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return reply.status(400).send({ error: "message is required" });
@@ -412,13 +398,7 @@ Return JSON only:
 
   app.put("/api/generate/rules", async (request) => {
     const personaId = getPersonaId(request);
-    const { categories } = request.body as {
-      categories: {
-        voice_tone: Array<{ rule_text: string; example_text?: string; sort_order: number }>;
-        structure_formatting: Array<{ rule_text: string; example_text?: string; sort_order: number }>;
-        anti_ai_tropes: { enabled: boolean; rules: Array<{ rule_text: string; example_text?: string; sort_order: number }> };
-      };
-    };
+    const { categories } = validateBody(rulesBody, request.body);
 
     const allRules: Array<{ category: string; rule_text: string; example_text?: string; sort_order: number; enabled?: number }> = [];
 
@@ -461,7 +441,7 @@ Return JSON only:
   // Add a single rule (used by retro flow)
   app.post("/api/generate/rules/add", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const body = request.body as { category: string; rule_text: string };
+    const body = validateBody(addRuleBody, request.body);
     if (!body.category || !body.rule_text) {
       return reply.status(400).send({ error: "category and rule_text required" });
     }
@@ -550,7 +530,7 @@ Return JSON only:
 
   app.post("/api/generate/history/:id/retro", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { published_text: string };
+    const body = validateBody(retroBody, request.body);
     if (!body.published_text?.trim()) {
       return reply.status(400).send({ error: "published_text is required" });
     }
