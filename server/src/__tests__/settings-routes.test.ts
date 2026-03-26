@@ -44,10 +44,11 @@ describe("PUT /api/settings/timezone", () => {
 });
 
 describe("GET /api/settings/writing-prompt", () => {
-  it("returns null when not set", async () => {
+  it("returns the seeded default prompt", async () => {
     const res = await app.inject({ method: "GET", url: "/api/settings/writing-prompt" });
     expect(res.statusCode).toBe(200);
-    expect(res.json().text).toBeNull();
+    // Migration 008 seeds a default writing prompt
+    expect(res.json().text).toBeTruthy();
   });
 });
 
