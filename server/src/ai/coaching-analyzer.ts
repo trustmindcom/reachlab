@@ -99,7 +99,7 @@ Return at most 3 changes. If nothing needs changing, return {"changes": []}.`;
     max_tokens: 1500,
     system: "You are a prompt coaching system. Return valid JSON only.",
     messages: [{ role: "user", content: prompt }],
-  });
+  }, { timeout: 120_000, maxRetries: 2 });
 
   const duration = Date.now() - start;
   const text =

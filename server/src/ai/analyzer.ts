@@ -82,7 +82,7 @@ async function callModel(
     system: systemPrompt,
     messages: [{ role: "user", content: statsReport }],
     ...extraParams,
-  } as any);
+  } as any, { timeout: 180_000, maxRetries: 2 });
   const duration = Date.now() - start;
 
   const textBlock = (response.content as any[])
@@ -200,7 +200,7 @@ export async function interpretStats(
       max_tokens: 16000,
       thinking: { type: "enabled", budget_tokens: 8000 },
       messages: [{ role: "user", content: reconciliationPrompt }],
-    } as any);
+    } as any, { timeout: 120_000, maxRetries: 2 });
     const duration = Date.now() - start;
 
     const textBlock = (response.content as any[])
