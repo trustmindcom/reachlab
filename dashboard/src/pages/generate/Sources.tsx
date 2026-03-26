@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { api, type GenSource } from "../../api/client";
+import { useToast } from "../../components/Toast";
 
 export default function Sources() {
+  const { showError } = useToast();
   const [sources, setSources] = useState<GenSource[]>([]);
   const [urlInput, setUrlInput] = useState("");
   const [adding, setAdding] = useState(false);
@@ -9,7 +11,7 @@ export default function Sources() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getSources().then((res) => setSources(res.sources)).catch(() => {});
+    api.getSources().then((res) => setSources(res.sources)).catch(() => showError("Failed to load sources"));
   }, []);
 
   const handleAdd = async () => {
@@ -53,7 +55,7 @@ export default function Sources() {
       await api.deleteSource(source.id);
     } catch {
       // Rollback — re-fetch
-      api.getSources().then((res) => setSources(res.sources)).catch(() => {});
+      api.getSources().then((res) => setSources(res.sources)).catch(() => showError("Failed to reload sources"));
     }
   };
 

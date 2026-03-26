@@ -4,6 +4,7 @@ import KPICard from "../components/KPICard";
 import DateRangeSelector, {
   daysToDateRange,
 } from "../components/DateRangeSelector";
+import { useToast } from "../components/Toast";
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "--";
@@ -28,6 +29,7 @@ function pctChange(
 }
 
 export default function Overview() {
+  const { showError } = useToast();
   const [range, setRange] = useState(30);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [prevOverview, setPrevOverview] = useState<OverviewData | null>(null);
@@ -41,7 +43,7 @@ export default function Overview() {
 
   useEffect(() => {
     const params = daysToDateRange(range);
-    api.overview(params).then(setOverview).catch(() => {});
+    api.overview(params).then(setOverview).catch(() => showError("Failed to load overview data"));
 
     // Fetch previous period for comparison
     if (range > 0) {
@@ -52,7 +54,7 @@ export default function Overview() {
       api
         .overview({ since: since.toISOString(), until: until.toISOString() })
         .then(setPrevOverview)
-        .catch(() => {});
+        .catch(() => showError("Failed to load comparison data"));
     } else {
       setPrevOverview(null);
     }
@@ -60,7 +62,7 @@ export default function Overview() {
     api
       .insightsOverview()
       .then((r) => setAiOverview(r.overview))
-      .catch(() => {});
+      .catch(() => showError("Failed to load AI insights"));
   }, [range]);
 
   const handleRefresh = () => {

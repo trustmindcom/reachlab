@@ -11,6 +11,7 @@ import Settings from "./pages/Settings";
 import Generate from "./pages/Generate";
 import OnboardingWizard from "./pages/onboarding/OnboardingWizard";
 import ApiKeySetup from "./pages/onboarding/ApiKeySetup";
+import { ToastProvider } from "./components/Toast";
 
 const tabs = ["Overview", "Posts", "Coach", "Generate", "Timing", "Followers", "Settings"] as const;
 type Tab = (typeof tabs)[number];
@@ -88,6 +89,7 @@ export default function App() {
   }
 
   return (
+    <ToastProvider>
     <PersonaProvider>
     <div className="min-h-screen">
       {/* Alert banner */}
@@ -150,5 +152,6 @@ export default function App() {
       </main>
     </div>
     </PersonaProvider>
+    </ToastProvider>
   );
 }

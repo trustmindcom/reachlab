@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { api, type RetroAnalysis, type RetroRuleSuggestion, type RetroPromptEdit } from "../../api/client";
+import ScannerLoader from "./components/ScannerLoader";
+import { useToast } from "../../components/Toast";
 
 interface PostRetroProps {
   generationId: number;
@@ -9,6 +11,7 @@ interface PostRetroProps {
 }
 
 export default function PostRetro({ generationId, draftText, finalDraftText, onBack }: PostRetroProps) {
+  const { showError } = useToast();
   const [publishedText, setPublishedText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<RetroAnalysis | null>(null);
@@ -16,26 +19,37 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
   const [appliedRules, setAppliedRules] = useState<Set<number>>(new Set());
   const [appliedPromptEdits, setAppliedPromptEdits] = useState<Set<number>>(new Set());
 
+  // Load existing retro (including ones completed while we were away)
   useEffect(() => {
     api.generateGetRetro(generationId).then((res) => {
       if (res.retro) {
         setPublishedText(res.retro.published_text);
         setAnalysis(res.retro.analysis);
       }
-    }).catch(() => {});
+    }).catch(() => showError("Failed to load retro data"));
   }, [generationId]);
 
   const handleAnalyze = async () => {
     if (!publishedText.trim()) return;
     setAnalyzing(true);
     setError(null);
+    setAnalysis(null);
     setAppliedRules(new Set());
     setAppliedPromptEdits(new Set());
     try {
       const res = await api.generateRetro(generationId, publishedText);
       setAnalysis(res.analysis);
     } catch (err: any) {
-      setError(err.message || "Analysis failed");
+      // Try to extract a useful message from the response
+      let msg = "Analysis failed";
+      try {
+        if (err.message?.includes("502") || err.message?.includes("API error")) {
+          msg = "AI service temporarily unavailable — try again in a moment";
+        } else {
+          msg = err.message || msg;
+        }
+      } catch { /* use default */ }
+      setError(msg);
     } finally {
       setAnalyzing(false);
     }
@@ -55,14 +69,13 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
       let updated: string;
 
       if (edit.type === "add") {
-        if (current.includes(edit.add_text)) return; // Already present
+        if (current.includes(edit.add_text)) return;
         updated = current.trimEnd() + "\n\n" + edit.add_text;
       } else if (edit.type === "remove" && edit.remove_text) {
-        if (!current.includes(edit.remove_text)) return; // Not found
+        if (!current.includes(edit.remove_text)) return;
         updated = current.replace(edit.remove_text, "").replace(/\n{3,}/g, "\n\n").trim();
       } else if (edit.type === "replace" && edit.remove_text) {
         if (!current.includes(edit.remove_text)) {
-          // Fallback: append if can't find the text to replace
           updated = current.trimEnd() + "\n\n" + edit.add_text;
         } else {
           updated = current.replace(edit.remove_text, edit.add_text);
@@ -72,6 +85,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
       }
 
       await api.saveWritingPrompt(updated, "ai_suggestion", edit.reason);
+      await api.markRetroApplied(generationId);
       setAppliedPromptEdits((prev) => new Set(prev).add(index));
     } catch { /* ignore */ }
   };
@@ -100,59 +114,76 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
       </div>
 
       {/* Side-by-side: original, revised (if changed), published */}
-      {(() => {
-        const hasRevisions = finalDraftText && finalDraftText !== draftText;
-        const cols = hasRevisions ? "grid-cols-3" : "grid-cols-2";
-        return (
-          <div className={`grid ${cols} gap-4`}>
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
-                {hasRevisions ? "Original AI Draft" : "AI Draft"}
-              </label>
-              <div className="bg-surface-2 rounded-lg p-4 text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-                {draftText}
-              </div>
-            </div>
-            {hasRevisions && (
-              <div>
-                <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
-                  After Your Revisions
-                </label>
-                <div className="bg-surface-2 rounded-lg p-4 text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-                  {finalDraftText}
+      <div className="relative">
+        {analyzing && (
+          <div className="absolute inset-0 bg-surface-0/70 z-10 rounded-xl flex items-center justify-center backdrop-blur-[1px]">
+            <ScannerLoader
+              messages={[
+                "Comparing drafts...",
+                "Identifying meaning changes...",
+                "Extracting editorial principles...",
+                "Generating prompt suggestions...",
+              ]}
+              interval={4000}
+            />
+          </div>
+        )}
+        <div className={analyzing ? "opacity-30 pointer-events-none" : ""}>
+          {(() => {
+            const hasRevisions = finalDraftText && finalDraftText !== draftText;
+            const cols = hasRevisions ? "grid-cols-3" : "grid-cols-2";
+            return (
+              <div className={`grid ${cols} gap-4`}>
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
+                    {hasRevisions ? "Original AI Draft" : "AI Draft"}
+                  </label>
+                  <div className="bg-surface-2 rounded-lg p-4 text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+                    {draftText}
+                  </div>
+                </div>
+                {hasRevisions && (
+                  <div>
+                    <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
+                      After Your Revisions
+                    </label>
+                    <div className="bg-surface-2 rounded-lg p-4 text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+                      {finalDraftText}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
+                    What You Published
+                  </label>
+                  <textarea
+                    value={publishedText}
+                    onChange={(e) => setPublishedText(e.target.value)}
+                    placeholder="Paste the final version you published on LinkedIn..."
+                    className="w-full bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-primary leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-accent"
+                    rows={16}
+                    disabled={analyzing}
+                  />
                 </div>
               </div>
-            )}
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
-                What You Published
-              </label>
-              <textarea
-                value={publishedText}
-                onChange={(e) => setPublishedText(e.target.value)}
-                placeholder="Paste the final version you published on LinkedIn..."
-                className="w-full bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-primary leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-accent"
-                rows={16}
-                disabled={analyzing}
-              />
-            </div>
-          </div>
-        );
-      })()}
+            );
+          })()}
 
-      {/* Analyze button */}
-      {!analysis && (
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleAnalyze}
-            disabled={analyzing || !publishedText.trim()}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-50"
-          >
-            {analyzing ? "Analyzing..." : "Analyze Differences"}
-          </button>
-          {error && <span className="text-[12px] text-negative">{error}</span>}
+          {/* Analyze button */}
+          {!analysis && !analyzing && (
+            <div className="flex items-center gap-3 mt-5">
+              <button
+                onClick={handleAnalyze}
+                disabled={!publishedText.trim()}
+                className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-50"
+              >
+                Analyze Differences
+              </button>
+              {error && <span className="text-[12px] text-negative">{error}</span>}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Results */}
       {analysis && (
@@ -311,7 +342,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
             disabled={analyzing || !publishedText.trim()}
             className="text-[12px] text-text-muted hover:text-accent transition-colors"
           >
-            {analyzing ? "Analyzing..." : "Re-analyze"}
+            Re-analyze
           </button>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api, type TimingSlot } from "../api/client";
+import { useToast } from "../components/Toast";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -12,10 +13,11 @@ function formatHour(h: number): string {
 }
 
 export default function Timing() {
+  const { showError } = useToast();
   const [slots, setSlots] = useState<TimingSlot[]>([]);
 
   useEffect(() => {
-    api.timing().then((r) => setSlots(r.slots)).catch(() => {});
+    api.timing().then((r) => setSlots(r.slots)).catch(() => showError("Failed to load timing data"));
   }, []);
 
   // Build lookup map

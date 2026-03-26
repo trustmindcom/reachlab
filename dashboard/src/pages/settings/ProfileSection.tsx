@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { api } from "../../api/client";
 import InterviewModal from "./InterviewModal";
+import { useToast } from "../../components/Toast";
 
 export default function ProfileSection() {
+  const { showError } = useToast();
   const [profileText, setProfileText] = useState("");
   const [interviewCount, setInterviewCount] = useState(0);
   const [saved, setSaved] = useState(false);
@@ -13,7 +15,7 @@ export default function ProfileSection() {
     api.getAuthorProfile().then((r) => {
       setProfileText(r.profile_text);
       setInterviewCount(r.interview_count);
-    }).catch(() => {});
+    }).catch(() => showError("Failed to load author profile"));
   }, []);
 
   const handleSave = async () => {

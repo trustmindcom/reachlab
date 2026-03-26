@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { AiRun } from "../api/client";
 import ProfileSection from "./settings/ProfileSection";
 import { usePersona } from "../context/PersonaContext";
+import { useToast } from "../components/Toast";
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -30,6 +31,7 @@ function SavedIndicator({ show }: { show: boolean }) {
 }
 
 export default function Settings() {
+  const { showError } = useToast();
   // ── Photo state ──────────────────────────────────────────
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoLoading, setPhotoLoading] = useState(false);
@@ -64,12 +66,12 @@ export default function Settings() {
       .then((r) => {
         if (r.ok) setPhotoUrl(`/api/settings/author-photo?t=${Date.now()}`);
       })
-      .catch(() => {});
+      .catch(() => showError("Failed to load author photo"));
   }, []);
 
   useEffect(() => {
-    api.getWritingPrompt().then((r) => setPromptText(r.text ?? "")).catch(() => {});
-    api.getWritingPromptHistory().then((r) => setPromptHistory(r.history)).catch(() => {});
+    api.getWritingPrompt().then((r) => setPromptText(r.text ?? "")).catch(() => showError("Failed to load writing prompt"));
+    api.getWritingPromptHistory().then((r) => setPromptHistory(r.history)).catch(() => showError("Failed to load prompt history"));
   }, []);
 
   useEffect(() => {
@@ -78,13 +80,13 @@ export default function Settings() {
         setSchedule(r.schedule);
         setPostThreshold(r.post_threshold);
       })
-      .catch(() => {});
+      .catch(() => showError("Failed to load refresh settings"));
     api.getAiRuns()
       .then((r) => {
         setAiRuns(r.runs);
         setTotalCostCents(r.total_cost_cents);
       })
-      .catch(() => {});
+      .catch(() => showError("Failed to load AI run history"));
   }, []);
 
   // ── Photo handlers ───────────────────────────────────────
@@ -648,6 +650,7 @@ function PersonaSettings() {
 }
 
 function ApiKeysManager() {
+  const { showError } = useToast();
   const [keys, setKeys] = useState<Array<{ key: string; label: string; required: boolean; configured: boolean; prefix: string; url: string }>>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -661,7 +664,7 @@ function ApiKeysManager() {
         for (const key of k) v[key.key] = "";
         setValues(v);
       })
-      .catch(() => {});
+      .catch(() => showError("Failed to load API key configuration"));
   }, []);
 
   const handleSave = async () => {
@@ -684,7 +687,9 @@ function ApiKeysManager() {
         });
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
-      } catch {}
+      } catch {
+        showError("Failed to save API keys");
+      }
     }
     setSaving(false);
   };

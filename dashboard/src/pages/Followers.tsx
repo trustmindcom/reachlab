@@ -11,6 +11,7 @@ import {
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
 import { api, type FollowerSnapshot, type ProfileSnapshot } from "../api/client";
+import { useToast } from "../components/Toast";
 
 ChartJS.register(
   CategoryScale,
@@ -26,12 +27,13 @@ const chartGrid = { color: "#2a2a4a" };
 const chartTick = { color: "#8888a8" };
 
 export default function Followers() {
+  const { showError } = useToast();
   const [followers, setFollowers] = useState<FollowerSnapshot[]>([]);
   const [profile, setProfile] = useState<ProfileSnapshot[]>([]);
 
   useEffect(() => {
-    api.followers().then((r) => setFollowers(r.snapshots)).catch(() => {});
-    api.profile().then((r) => setProfile(r.snapshots)).catch(() => {});
+    api.followers().then((r) => setFollowers(r.snapshots)).catch(() => showError("Failed to load follower data"));
+    api.profile().then((r) => setProfile(r.snapshots)).catch(() => showError("Failed to load profile data"));
   }, []);
 
   const noData = followers.length === 0 && profile.length === 0;

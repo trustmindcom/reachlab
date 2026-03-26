@@ -23,10 +23,12 @@ import { formatTimeAgo, formatTimeUntil } from "./coach/components";
 import { ActionsTab } from "./coach/ActionsTab";
 import { InsightsTab } from "./coach/InsightsTab";
 import { DeepDiveTab } from "./coach/DeepDiveTab";
+import { useToast } from "../components/Toast";
 
 type CoachTab = "actions" | "insights" | "deep-dive";
 
 export default function Coach() {
+  const { showError } = useToast();
   const [tab, setTab] = useState<CoachTab>("actions");
   const [refreshing, setRefreshing] = useState(false);
   const [status, setStatus] = useState<AnalysisStatus | null>(null);
@@ -84,31 +86,33 @@ export default function Coach() {
   };
 
   const loadAll = () => {
+    const fail = (what: string) => () => showError(`Failed to load ${what}`);
+
     // Status
-    api.insightsStatus().then(setStatus).catch(() => {});
+    api.insightsStatus().then(setStatus).catch(fail("analysis status"));
 
     // Actions + Retros
-    api.getPendingRetros().then((r) => setPendingRetros(r.retros)).catch(() => {});
+    api.getPendingRetros().then((r) => setPendingRetros(r.retros)).catch(() => {}); // non-critical
     api.recommendationsWithCooldown().then((r) => {
       setActiveRecs(r.active);
       setResolvedRecs(r.resolved);
-    }).catch(() => {});
-    api.insightsPromptSuggestions().then((r) => setPromptSuggestions(r.prompt_suggestions)).catch(() => {});
+    }).catch(fail("recommendations"));
+    api.insightsPromptSuggestions().then((r) => setPromptSuggestions(r.prompt_suggestions)).catch(() => {}); // non-critical
 
     // Insights
-    api.insights().then((r) => setInsights(r.insights)).catch(() => {});
-    api.insightsChangelog().then(setChangelog).catch(() => {});
-    api.insightsGaps().then((r) => setGaps(r.gaps)).catch(() => {});
-    api.timing().then((r) => setTimingSlots(r.slots)).catch(() => {});
+    api.insights().then((r) => setInsights(r.insights)).catch(fail("insights"));
+    api.insightsChangelog().then(setChangelog).catch(() => {}); // non-critical
+    api.insightsGaps().then((r) => setGaps(r.gaps)).catch(() => {}); // non-critical
+    api.timing().then((r) => setTimingSlots(r.slots)).catch(fail("timing data"));
 
     // Deep Dive / Breakdowns
-    api.deepDiveProgress().then(setProgress).catch(() => {});
-    api.deepDiveCategories().then((r) => setCategories(r.categories)).catch(() => {});
-    api.deepDiveEngagement().then((r) => setEngagement(r.engagement)).catch(() => {});
-    api.deepDiveSparkline(90).then((r) => setSparklinePoints(r.points)).catch(() => {});
-    api.deepDiveTopics().then((r) => setTopics(r.topics)).catch(() => {});
-    api.deepDiveHooks().then(setHooks).catch(() => {});
-    api.deepDiveImageSubtypes().then((r) => setImageSubtypes(r.subtypes)).catch(() => {});
+    api.deepDiveProgress().then(setProgress).catch(fail("progress metrics"));
+    api.deepDiveCategories().then((r) => setCategories(r.categories)).catch(fail("categories"));
+    api.deepDiveEngagement().then((r) => setEngagement(r.engagement)).catch(fail("engagement"));
+    api.deepDiveSparkline(90).then((r) => setSparklinePoints(r.points)).catch(() => {}); // non-critical
+    api.deepDiveTopics().then((r) => setTopics(r.topics)).catch(fail("topics"));
+    api.deepDiveHooks().then(setHooks).catch(fail("hook performance"));
+    api.deepDiveImageSubtypes().then((r) => setImageSubtypes(r.subtypes)).catch(() => {}); // non-critical
   };
 
   useEffect(() => {
@@ -159,11 +163,11 @@ export default function Coach() {
         if (rec) return [{ ...rec, resolved_type: type, resolved_at: new Date().toISOString() }, ...prev];
         return prev;
       });
-    }).catch(() => {});
+    }).catch(() => showError("Failed to save recommendation"));
   };
 
   const handleFeedback = (id: number, rating: string) => {
-    api.recommendationFeedback(id, rating).catch(() => {});
+    api.recommendationFeedback(id, rating).catch(() => showError("Failed to save feedback"));
   };
 
   const handleAcceptSuggestion = async (_index: number, suggestion: PromptSuggestion) => {
@@ -178,7 +182,7 @@ export default function Coach() {
     } else {
       newText = currentText + "\n" + suggestion.suggested;
     }
-    await api.saveWritingPrompt(newText, "ai_suggestion", suggestion.evidence).catch(() => {});
+    await api.saveWritingPrompt(newText, "ai_suggestion", suggestion.evidence).catch(() => showError("Failed to save prompt"));
     setPromptSuggestions(null); // Clear the UI immediately
   };
 

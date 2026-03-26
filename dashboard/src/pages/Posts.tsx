@@ -9,6 +9,7 @@ import {
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 import { api, type Post, type MetricSnapshot } from "../api/client";
+import { useToast } from "../components/Toast";
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip);
 
@@ -70,6 +71,7 @@ function ContentTypeIcon({ type }: { type: string }) {
 }
 
 export default function Posts() {
+  const { showError } = useToast();
   const [posts, setPosts] = useState<Post[]>([]);
   const [total, setTotal] = useState(0);
   const [contentType, setContentType] = useState("all");
@@ -83,7 +85,7 @@ export default function Posts() {
     fetch("/api/posts/needs-content")
       .then((r) => r.json())
       .then((r) => setBackfillCount(r.post_ids?.length ?? 0))
-      .catch(() => {});
+      .catch(() => showError("Failed to check backfill status"));
   }, []);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export default function Posts() {
         setPosts(r.posts);
         setTotal(r.total);
       })
-      .catch(() => {});
+      .catch(() => showError("Failed to load posts"));
   }, [contentType, sortBy, sortOrder]);
 
   useEffect(() => {
