@@ -31,6 +31,8 @@ import { registerIngestRoutes } from "./routes/ingest.js";
 
 import { getPersonaId } from "./utils.js";
 import { ensureDefaultUser, getUserByToken } from "./db/user-queries.js";
+import { validateBody } from "./validation.js";
+import { scrapeErrorBody, syncStateBody } from "./schemas/app.js";
 
 export function buildApp(dbPath: string) {
   const app = Fastify({ logger: false });
@@ -38,7 +40,7 @@ export function buildApp(dbPath: string) {
 
   // Auto-create default user with API token on first run
   const defaultUser = ensureDefaultUser(db);
-  console.log(`[Auth] API token: ${defaultUser.api_token.slice(0, 8)}...`);
+  console.log("[Auth] Default user ready");
 
   app.register(cors, {
     origin: (origin, cb) => {
@@ -97,8 +99,8 @@ export function buildApp(dbPath: string) {
 
     app.put(`${prefix}/sync-state`, async (request) => {
       const personaId = getPersonaId(request);
-      const body = request.body as { last_sync_at: number };
-      upsertSetting(db, `last_sync_at:${personaId}`, String(body.last_sync_at));
+      const { last_sync_at } = validateBody(syncStateBody, request.body);
+      upsertSetting(db, `last_sync_at:${personaId}`, String(last_sync_at));
       return { ok: true };
     });
 
@@ -170,9 +172,7 @@ export function buildApp(dbPath: string) {
 
     app.post(`${prefix}/scrape-error`, async (request) => {
       const personaId = getPersonaId(request);
-      const { error_type, page_type, selector, message } = request.body as {
-        error_type: string; page_type: string; selector?: string; message: string;
-      };
+      const { error_type, page_type, selector, message } = validateBody(scrapeErrorBody, request.body);
       upsertScrapeError(db, { persona_id: personaId, error_type, page_type, selector, message });
       return { ok: true };
     });

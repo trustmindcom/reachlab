@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const researchBody = z.object({
-  topic: z.string().max(500).optional(),
+  topic: z.string().trim().min(1).max(500),
   avoid: z.array(z.string().max(500)).max(50).optional(),
   sources: z.array(z.string()).optional(),
 });
@@ -21,7 +21,7 @@ export const combineBody = z.object({
 
 export const chatBody = z.object({
   generation_id: z.number().int().positive(),
-  message: z.string().min(1).max(5000),
+  message: z.string().trim().min(1).max(5000),
   edited_draft: z.string().optional(),
 });
 

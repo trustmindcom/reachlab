@@ -58,10 +58,6 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   app.post("/api/generate/research", async (request, reply) => {
     const personaId = getPersonaId(request);
     const { topic, avoid } = validateBody(researchBody, request.body);
-    if (!topic || typeof topic !== "string" || !topic.trim()) {
-      return reply.status(400).send({ error: "topic is required" });
-    }
-    const safeTopic = topic.slice(0, 500).trim();
     const safeAvoid = Array.isArray(avoid) ? avoid.slice(0, 50).map((s) => String(s).slice(0, 200)) : undefined;
 
     const client = getClient();
@@ -69,7 +65,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await researchStories(client, db, logger, safeTopic, safeAvoid);
+      const result = await researchStories(client, db, logger, topic, safeAvoid);
 
       const researchId = insertResearch(db, personaId, {
         post_type: "general",
@@ -214,10 +210,6 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
   app.post("/api/generate/chat", async (request, reply) => {
     const { generation_id, message, edited_draft } = validateBody(chatBody, request.body);
-
-    if (!message || typeof message !== "string" || !message.trim()) {
-      return reply.status(400).send({ error: "message is required" });
-    }
 
     const gen = getGeneration(db, generation_id);
     if (!gen?.final_draft) {

@@ -424,6 +424,11 @@ export function queryHealth(db: Database.Database, personaId: number) {
   };
 
   const mapStatus = (s: string) => (s === "error" ? "error" : "ok") as "ok" | "error";
+  const safeParseDetails = (json: string | null | undefined): any => {
+    if (!json) return {};
+    try { return JSON.parse(json); } catch { return {}; }
+  };
+  const errorDetails = safeParseDetails(lastLog.error_details);
 
   return {
     last_sync_at: lastLog.completed_at,
@@ -431,22 +436,22 @@ export function queryHealth(db: Database.Database, personaId: number) {
       posts: {
         status: mapStatus(lastLog.posts_status),
         last_success: getLastSuccess("posts_status"),
-        ...(lastLog.posts_status === "error" && lastLog.error_details
-          ? { error: JSON.parse(lastLog.error_details)?.posts }
+        ...(lastLog.posts_status === "error" && errorDetails?.posts
+          ? { error: errorDetails.posts }
           : {}),
       },
       followers: {
         status: mapStatus(lastLog.followers_status),
         last_success: getLastSuccess("followers_status"),
-        ...(lastLog.followers_status === "error" && lastLog.error_details
-          ? { error: JSON.parse(lastLog.error_details)?.followers }
+        ...(lastLog.followers_status === "error" && errorDetails?.followers
+          ? { error: errorDetails.followers }
           : {}),
       },
       profile: {
         status: mapStatus(lastLog.profile_status),
         last_success: getLastSuccess("profile_status"),
-        ...(lastLog.profile_status === "error" && lastLog.error_details
-          ? { error: JSON.parse(lastLog.error_details)?.profile }
+        ...(lastLog.profile_status === "error" && errorDetails?.profile
+          ? { error: errorDetails.profile }
           : {}),
       },
     },

@@ -36,7 +36,7 @@ import { createClient } from "../ai/client.js";
 import { runPipeline } from "../ai/orchestrator.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
-import { feedbackBody, resolveBody } from "../schemas/insights.js";
+import { refreshBody, feedbackBody, resolveBody } from "../schemas/insights.js";
 
 export function registerInsightsRoutes(app: FastifyInstance, db: Database.Database): void {
   // Backfill costs for existing runs (runs once, idempotent)
@@ -90,7 +90,7 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(409).send({ error: "Analysis already running", started_at: running.started_at });
     }
     const client = createClient(apiKey);
-    const body = request.body as { force?: boolean } | undefined;
+    const body = request.body ? validateBody(refreshBody, request.body) : undefined;
     const trigger = body?.force ? "force" : "manual";
     // Fire and forget — don't block the response
     runPipeline(client, db, personaId, trigger).catch((err) => {

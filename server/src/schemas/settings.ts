@@ -12,7 +12,7 @@ export const writingPromptBody = z.object({
 
 export const autoRefreshBody = z.object({
   schedule: z.enum(["off", "daily", "weekly"]).optional(),
-  post_threshold: z.number().int().min(1).max(100).optional(),
+  post_threshold: z.number().int().min(1).max(50).optional(),
 });
 
 export const settingBody = z.object({
