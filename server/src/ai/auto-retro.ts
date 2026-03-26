@@ -38,7 +38,7 @@ async function findMatch(
         content: `PUBLISHED POST (excerpt):\n${postExcerpt}\n\n---\n\nCANDIDATE DRAFTS:\n${candidateList}\n\nWhich draft, if any, is this post based on? The post may have been significantly rewritten but will share the same core topic/argument.\n\nReturn JSON only: { "match_id": <draft id or null>, "confidence": "high"|"medium"|"none" }\nReturn null if none are a clear match.`,
       },
     ],
-  });
+  }, { timeout: 30_000, maxRetries: 2 });
 
   const text =
     response.content[0].type === "text" ? response.content[0].text : "";

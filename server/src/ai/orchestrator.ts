@@ -380,7 +380,7 @@ export async function runFullPipeline(
                 ),
               },
             ],
-          });
+          }, { timeout: 30_000, maxRetries: 2 });
           const reasonText = (reasonResponse.content as any[])
             .filter((b) => b.type === "text")
             .map((b) => (b as any).text)

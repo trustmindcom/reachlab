@@ -155,7 +155,7 @@ export async function classifyImages(
           max_tokens: 256,
           system: systemPrompt,
           messages: [{ role: "user", content }],
-        });
+        }, { timeout: 30_000, maxRetries: 2 });
         const duration = Date.now() - start;
 
         const text = response.content

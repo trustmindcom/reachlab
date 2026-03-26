@@ -113,7 +113,7 @@ export async function discoverTopics(
     max_tokens: 2000,
     system: "You are a content researcher. Return only valid JSON.",
     messages: [{ role: "user", content: prompt }],
-  });
+  }, { timeout: 30_000, maxRetries: 2 });
 
   const duration = Date.now() - start;
   const text =

@@ -54,7 +54,7 @@ export async function discoverTaxonomy(
       },
     ],
     system: systemPrompt,
-  });
+  }, { timeout: 30_000, maxRetries: 2 });
   const duration = Date.now() - start;
 
   const outputText =

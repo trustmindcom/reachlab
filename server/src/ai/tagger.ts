@@ -79,7 +79,7 @@ export async function tagPosts(
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
-    });
+    }, { timeout: 30_000, maxRetries: 2 });
     const duration = Date.now() - start;
 
     const outputText =
