@@ -12,10 +12,12 @@ import { EventEmitter } from "events";
  * integration.
  */
 
+const DEFAULT_USAGE = { input_tokens: 10, output_tokens: 20, thinking_tokens: 0 };
+
 function makeMockStream(
   tokens: string[],
   tokenDelayMs: number,
-  usageMock = { input_tokens: 10, output_tokens: 20 }
+  usageMock = DEFAULT_USAGE
 ) {
   const emitter = new EventEmitter() as any;
   emitter.abort = vi.fn(() => emitter.removeAllListeners());
@@ -40,7 +42,7 @@ function makeMockStream(
 function makeMockStreamMultiBlock(
   blocks: string[],
   tokenDelayMs: number,
-  usageMock = { input_tokens: 10, output_tokens: 20 }
+  usageMock = DEFAULT_USAGE
 ) {
   const emitter = new EventEmitter() as any;
   emitter.abort = vi.fn(() => emitter.removeAllListeners());
@@ -95,6 +97,7 @@ describe("streamWithIdleTimeout", () => {
     expect(result.text).toBe("Hello world");
     expect(result.input_tokens).toBe(10);
     expect(result.output_tokens).toBe(20);
+    expect(result.thinking_tokens).toBe(0);
   });
 
   it("concatenates multiple text blocks from finalMessage", async () => {
@@ -138,6 +141,7 @@ describe("streamWithIdleTimeout", () => {
   });
 
   it("throws StreamIdleTimeoutError when tokens stop arriving", async () => {
+    const IDLE_MS = 1000;
     const emitter = new EventEmitter() as any;
     emitter.abort = vi.fn(() => emitter.removeAllListeners());
 
@@ -153,11 +157,11 @@ describe("streamWithIdleTimeout", () => {
     const promise = streamWithIdleTimeout(
       mockClient,
       { model: "test", max_tokens: 100, messages: [] },
-      { idleTimeoutMs: 1000, deadlineMs: 60000 }
+      { idleTimeoutMs: IDLE_MS, deadlineMs: 60000 }
     );
 
     const assertion = expect(promise).rejects.toThrow(StreamIdleTimeoutError);
-    await vi.advanceTimersByTimeAsync(1200);
+    await vi.advanceTimersByTimeAsync(IDLE_MS + 200);
     await assertion;
     expect(emitter.abort).toHaveBeenCalled();
   });
@@ -192,7 +196,7 @@ describe("streamWithIdleTimeout", () => {
       await new Promise((r) => setTimeout(r, 100));
       emitter.emit("finalMessage", {
         content: [{ type: "text" as const, text: "result" }],
-        usage: { input_tokens: 5, output_tokens: 10 },
+        usage: { input_tokens: 5, output_tokens: 10, thinking_tokens: 42 },
       });
       emitter.emit("end");
     })();
@@ -210,6 +214,7 @@ describe("streamWithIdleTimeout", () => {
     await vi.runAllTimersAsync();
     const result = await promise;
     expect(result.text).toBe("result");
+    expect(result.thinking_tokens).toBe(42);
   });
 
   it("resets idle timer on contentBlock events", async () => {
@@ -294,6 +299,65 @@ describe("streamWithIdleTimeout", () => {
     );
     await vi.advanceTimersByTimeAsync(200);
     await assertion;
+  });
+
+  it("retries on transient errors when maxRetries is set", async () => {
+    let callCount = 0;
+    const mockClient = {
+      messages: {
+        stream: vi.fn(() => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: emit error
+            const emitter = new EventEmitter() as any;
+            emitter.abort = vi.fn(() => emitter.removeAllListeners());
+            setTimeout(() => emitter.emit("error", new Error("503 Service Unavailable")), 0);
+            return emitter;
+          }
+          // Second call: succeed
+          return makeMockStream(["ok"], 0);
+        }),
+      },
+    } as any;
+
+    const promise = streamWithIdleTimeout(
+      mockClient,
+      { model: "test", max_tokens: 100, messages: [] },
+      { idleTimeoutMs: 5000, deadlineMs: 10000, maxRetries: 1 }
+    );
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+    expect(result.text).toBe("ok");
+    expect(callCount).toBe(2);
+  });
+
+  it("does not retry on StreamIdleTimeoutError", async () => {
+    const IDLE_MS = 500;
+    let callCount = 0;
+    const mockClient = {
+      messages: {
+        stream: vi.fn(() => {
+          callCount++;
+          const emitter = new EventEmitter() as any;
+          emitter.abort = vi.fn(() => emitter.removeAllListeners());
+          // Emit one token then go idle
+          setTimeout(() => emitter.emit("text", "x", "x"), 10);
+          return emitter;
+        }),
+      },
+    } as any;
+
+    const promise = streamWithIdleTimeout(
+      mockClient,
+      { model: "test", max_tokens: 100, messages: [] },
+      { idleTimeoutMs: IDLE_MS, deadlineMs: 60000, maxRetries: 2 }
+    );
+
+    const assertion = expect(promise).rejects.toThrow(StreamIdleTimeoutError);
+    await vi.advanceTimersByTimeAsync(IDLE_MS + 200);
+    await assertion;
+    expect(callCount).toBe(1); // No retry
   });
 
   it("enforces hard deadline even when tokens keep arriving", async () => {

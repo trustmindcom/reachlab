@@ -80,7 +80,7 @@ Return the combined post as plain text (no JSON, no markdown headers). Use line 
     tool_calls: null,
     input_tokens: combineResult.input_tokens,
     output_tokens: combineResult.output_tokens,
-    thinking_tokens: 0,
+    thinking_tokens: combineResult.thinking_tokens,
     duration_ms: duration,
   });
 
@@ -124,7 +124,7 @@ Return only the tightened post as plain text.`;
         tool_calls: null,
         input_tokens: tightenResult.input_tokens,
         output_tokens: tightenResult.output_tokens,
-        thinking_tokens: 0,
+        thinking_tokens: tightenResult.thinking_tokens,
         duration_ms: tightenDuration,
       });
 

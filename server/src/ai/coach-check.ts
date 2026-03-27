@@ -114,7 +114,7 @@ async function runCoachCheck(
   const prompt = buildCoachCheckPrompt(draft, rules, insights);
 
   const start = Date.now();
-  const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
+  const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 4000,
     system: "You are a writing quality coach. Return valid JSON only.",
@@ -131,7 +131,7 @@ async function runCoachCheck(
     tool_calls: null,
     input_tokens,
     output_tokens,
-    thinking_tokens: 0,
+    thinking_tokens,
     duration_ms: duration,
   });
 
@@ -178,7 +178,7 @@ Do NOT fabricate personal stories, fake company names, made-up metrics, or inven
 Return ONLY the revised draft as plain text (no JSON, no markdown fences).`;
 
   const start = Date.now();
-  const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
+  const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 2000,
     system: "You are a concise LinkedIn post editor. Return only the revised draft text.",
@@ -195,7 +195,7 @@ Return ONLY the revised draft as plain text (no JSON, no markdown fences).`;
     tool_calls: null,
     input_tokens,
     output_tokens,
-    thinking_tokens: 0,
+    thinking_tokens,
     duration_ms: duration,
   });
 

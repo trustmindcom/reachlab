@@ -261,7 +261,7 @@ Return JSON only:
       messages.push({ role: "user", content: userContent });
 
       const start = Date.now();
-      const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
+      const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
         model: MODELS.SONNET,
         max_tokens: 4000,
         system: systemPrompt,
@@ -278,7 +278,7 @@ Return JSON only:
         tool_calls: null,
         input_tokens,
         output_tokens,
-        thinking_tokens: 0,
+        thinking_tokens,
         duration_ms: duration,
       });
 

@@ -38,7 +38,7 @@ function makeMockStream(responseText: string) {
     emitter.emit("text", responseText, responseText);
     emitter.emit("finalMessage", {
       content: [{ type: "text", text: responseText }],
-      usage: { input_tokens: 100, output_tokens: 200 },
+      usage: { input_tokens: 100, output_tokens: 200, thinking_tokens: 0 },
     });
     emitter.emit("end");
   }, 0);
@@ -50,7 +50,7 @@ function makeMockClient(responseText: string): any {
     messages: {
       create: vi.fn().mockResolvedValue({
         content: [{ type: "text", text: responseText }],
-        usage: { input_tokens: 100, output_tokens: 200 },
+        usage: { input_tokens: 100, output_tokens: 200, thinking_tokens: 0 },
       }),
       stream: vi.fn(() => makeMockStream(responseText)),
     },

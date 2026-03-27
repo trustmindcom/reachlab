@@ -58,7 +58,7 @@ export async function generateDrafts(
   const draftPromises = Object.entries(VARIATION_INSTRUCTIONS).map(
     async ([variationType, instruction]): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
       const start = Date.now();
-      const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
+      const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
         model: MODELS.SONNET,
         max_tokens: 2000,
         system: assembled.system,
@@ -89,7 +89,7 @@ Return JSON:
         tool_calls: null,
         input_tokens,
         output_tokens,
-        thinking_tokens: 0,
+        thinking_tokens,
         duration_ms: duration,
       });
 

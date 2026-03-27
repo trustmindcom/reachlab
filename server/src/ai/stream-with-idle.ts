@@ -19,6 +19,7 @@ export interface StreamResult {
   text: string;
   input_tokens: number;
   output_tokens: number;
+  thinking_tokens: number;
 }
 
 /**
@@ -35,16 +36,41 @@ export interface StreamResult {
 export async function streamWithIdleTimeout(
   client: Anthropic,
   params: MessageStreamParams,
-  opts?: { idleTimeoutMs?: number; deadlineMs?: number }
+  opts?: { idleTimeoutMs?: number; deadlineMs?: number; maxRetries?: number }
 ): Promise<StreamResult> {
   const idleTimeoutMs = opts?.idleTimeoutMs ?? 30_000;
   const deadlineMs = opts?.deadlineMs ?? 300_000; // 5 minutes
+  const maxRetries = opts?.maxRetries ?? 0;
 
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await _streamOnce(client, params, idleTimeoutMs, deadlineMs);
+    } catch (err: any) {
+      lastError = err;
+      // Don't retry on our own timeout errors — the model is likely stuck
+      if (
+        err instanceof StreamIdleTimeoutError ||
+        err instanceof StreamDeadlineError
+      ) {
+        throw err;
+      }
+      if (attempt < maxRetries) continue;
+    }
+  }
+  throw lastError;
+}
+
+function _streamOnce(
+  client: Anthropic,
+  params: MessageStreamParams,
+  idleTimeoutMs: number,
+  deadlineMs: number
+): Promise<StreamResult> {
   return new Promise<StreamResult>((resolve, reject) => {
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
     let settled = false;
-    let firstEventReceived = false;
 
     function cleanup() {
       if (idleTimer) clearTimeout(idleTimer);
@@ -61,13 +87,15 @@ export async function streamWithIdleTimeout(
     function resetIdleTimer() {
       if (idleTimer) clearTimeout(idleTimer);
       if (settled) return;
-      firstEventReceived = true;
       idleTimer = setTimeout(() => {
-        // IMPORTANT: settle (reject) BEFORE aborting so our
-        // StreamIdleTimeoutError wins the race, not the SDK's
-        // APIUserAbortError which stream.abort() would trigger.
-        settle(() => reject(new StreamIdleTimeoutError(idleTimeoutMs)));
-        stream.abort();
+        // settle (reject) BEFORE aborting so our StreamIdleTimeoutError
+        // wins the race, not the SDK's APIUserAbortError. Abort is inside
+        // the callback so it only runs when we actually settle (not when
+        // the stream already completed successfully).
+        settle(() => {
+          reject(new StreamIdleTimeoutError(idleTimeoutMs));
+          stream.abort();
+        });
       }, idleTimeoutMs);
     }
 
@@ -75,13 +103,15 @@ export async function streamWithIdleTimeout(
 
     // Do NOT start the idle timer here. During TTFB (cold start,
     // OpenRouter routing) there are legitimately no events. The idle
-    // timer starts on the first text/thinking/contentBlockStart event.
+    // timer starts on the first text/thinking/contentBlock event.
 
     // Hard deadline — catches "one token per 29s" pathology and
     // also covers the TTFB window the idle timer intentionally skips.
     deadlineTimer = setTimeout(() => {
-      settle(() => reject(new StreamDeadlineError(deadlineMs)));
-      stream.abort();
+      settle(() => {
+        reject(new StreamDeadlineError(deadlineMs));
+        stream.abort();
+      });
     }, deadlineMs);
 
     // Reset idle timer on text deltas
@@ -104,15 +134,17 @@ export async function streamWithIdleTimeout(
     stream.on("finalMessage", (message) => {
       // Concatenate ALL text blocks, not just the first one
       const text = message.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b as { type: "text"; text: string }).text)
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
         .join("");
 
+      const usage = message.usage as unknown as Record<string, number>;
       settle(() =>
         resolve({
           text,
-          input_tokens: message.usage.input_tokens,
-          output_tokens: message.usage.output_tokens,
+          input_tokens: usage.input_tokens ?? 0,
+          output_tokens: usage.output_tokens ?? 0,
+          thinking_tokens: usage.thinking_tokens ?? 0,
         })
       );
     });
