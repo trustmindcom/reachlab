@@ -43,19 +43,14 @@ export function getProgressMetrics(
 
     // Use weighted ER as primary metric
     const ers = rows
-      .map((r) => ((r.comments * 5 + r.reposts * 3 + (r.saves ?? 0) * 3 + (r.sends ?? 0) * 3 + r.reactions * 1) / r.impressions) * 100)
-      .sort((a, b) => a - b);
-    const impressions = rows.map((r) => r.impressions).sort((a, b) => a - b);
+      .map((r) => computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions))
+      .filter((v): v is number => v !== null);
+    const impressions = rows.map((r) => r.impressions);
     const comments = rows.map((r) => r.comments);
 
-    const med = (arr: number[]) => {
-      const mid = Math.floor(arr.length / 2);
-      return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
-    };
-
     return {
-      median_er: Math.round(med(ers) * 100) / 100,
-      median_impressions: Math.round(med(impressions)),
+      median_er: Math.round((median(ers) ?? 0) * 100) / 100,
+      median_impressions: Math.round(median(impressions) ?? 0),
       total_posts: rows.length,
       avg_comments: Math.round((comments.reduce((a, b) => a + b, 0) / comments.length) * 10) / 10,
     };
@@ -95,34 +90,23 @@ export function getCategoryPerformance(db: Database.Database, personaId: number)
   const groups: Record<string, { ers: number[]; impressions: number[]; interactions: number[] }> = {};
   for (const r of rows) {
     if (!groups[r.category]) groups[r.category] = { ers: [], impressions: [], interactions: [] };
-    const wer = ((r.comments * 5 + r.reposts * 3 + (r.saves ?? 0) * 3 + (r.sends ?? 0) * 3 + r.reactions * 1) / r.impressions) * 100;
-    groups[r.category].ers.push(wer);
+    const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
+    if (wer !== null) groups[r.category].ers.push(wer);
     groups[r.category].impressions.push(r.impressions);
     groups[r.category].interactions.push(r.reactions + r.comments + r.reposts);
   }
 
   // Compute overall median weighted ER for status classification
   const allErs = rows
-    .map((r) => ((r.comments * 5 + r.reposts * 3 + (r.saves ?? 0) * 3 + (r.sends ?? 0) * 3 + r.reactions * 1) / r.impressions) * 100)
-    .sort((a, b) => a - b);
-  const overallMedianEr =
-    allErs.length > 0
-      ? allErs.length % 2
-        ? allErs[Math.floor(allErs.length / 2)]
-        : (allErs[Math.floor(allErs.length / 2) - 1] + allErs[Math.floor(allErs.length / 2)]) / 2
-      : 0;
-
-  const med = (arr: number[]) => {
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  };
+    .map((r) => computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions))
+    .filter((v): v is number => v !== null);
+  const overallMedianEr = median(allErs) ?? 0;
 
   const results: CategoryPerformance[] = [];
   for (const [category, data] of Object.entries(groups)) {
-    const medianEr = Math.round(med(data.ers) * 100) / 100;
-    const medianImpressions = Math.round(med(data.impressions));
-    const medianInteractions = Math.round(med(data.interactions));
+    const medianEr = Math.round((median(data.ers) ?? 0) * 100) / 100;
+    const medianImpressions = Math.round(median(data.impressions) ?? 0);
+    const medianInteractions = Math.round(median(data.interactions) ?? 0);
     const postCount = data.ers.length;
 
     let status: CategoryPerformance["status"] = "normal";
@@ -242,8 +226,7 @@ export function getSparklineData(
 
   return rows.map((r) => ({
     date: r.published_at,
-    // Use weighted ER as primary sparkline metric
-    er: Math.round(((r.comments * 5 + r.reposts * 3 + (r.saves ?? 0) * 3 + (r.sends ?? 0) * 3 + r.reactions * 1) / r.impressions) * 10000) / 100,
+    er: Math.round((computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions) ?? 0) * 100) / 100,
     impressions: r.impressions,
     comments: r.comments,
     comment_ratio: r.reactions > 0 ? Math.round((r.comments / r.reactions) * 100) / 100 : 0,

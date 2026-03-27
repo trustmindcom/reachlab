@@ -192,10 +192,10 @@ export function getLatestAnalysisGaps(db: Database.Database, personaId: number):
     .prepare(
       `SELECT ag.* FROM ai_analysis_gaps ag
        LEFT JOIN ai_runs ar ON ar.id = ag.run_id
-       WHERE ar.persona_id = ? OR ag.run_id IS NULL
+       WHERE ar.persona_id = ? OR (ag.run_id IS NULL AND ? = 1)
        ORDER BY ag.times_flagged DESC, ag.last_seen_at DESC`
     )
-    .all(personaId) as AnalysisGapRow[];
+    .all(personaId, personaId) as AnalysisGapRow[];
 }
 
 // ── prompt suggestions (stored in ai_overview) ─────────────
