@@ -102,7 +102,7 @@ IMPORTANT:
 - Do NOT manufacture insights from noise. Fewer high-confidence principles are better than many speculative ones.
 - Each pattern should be supported by at least 2 changes. One-off edits are more likely incidental.`
     }],
-  }, requestOptions ?? { timeout: 90_000, maxRetries: 1 });
+  }, { timeout: 90_000, maxRetries: 1, ...requestOptions });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
