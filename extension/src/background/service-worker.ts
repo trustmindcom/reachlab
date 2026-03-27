@@ -20,10 +20,13 @@ const SYNC_HOURS = [9, 21]; // 9 AM and 9 PM local time
 const SYNC_WINDOW_MS = 45 * 60 * 1000; // 45-minute window after target hour
 const LIGHT_SYNC_RECENT_POSTS = 5; // Evening sync: only scrape metrics for this many recent posts
 const BATCH_SIZE = 25;
-const PACING_MIN_MS = 1000;
-const PACING_MAX_MS = 3000;
-const BACKFILL_PACING_MIN_MS = 2000;
-const BACKFILL_PACING_MAX_MS = 5000;
+const PACING_MIN_MS = 3000;
+const PACING_MAX_MS = 6000;
+const BACKFILL_PACING_MIN_MS = 4000;
+const BACKFILL_PACING_MAX_MS = 8000;
+const LONG_PAUSE_EVERY_N = 12; // Take a longer break every N page loads
+const LONG_PAUSE_MIN_MS = 10000;
+const LONG_PAUSE_MAX_MS = 20000;
 const METRIC_DECAY_DAYS = 30;
 const OFFLINE_QUEUE_MAX_BYTES = 5 * 1024 * 1024; // 5MB cap
 
@@ -150,8 +153,17 @@ async function getSyncStatus() {
   };
 }
 
+// Gaussian-like delay: averages of two uniform randoms cluster around the center
+// (triangular distribution), which is more human than flat uniform random.
+let pageLoadCount = 0;
 function randomDelay(minMs: number, maxMs: number): Promise<void> {
-  const ms = minMs + Math.random() * (maxMs - minMs);
+  pageLoadCount++;
+  // Every N page loads, take a longer pause to simulate natural browsing breaks
+  if (pageLoadCount % LONG_PAUSE_EVERY_N === 0) {
+    const ms = LONG_PAUSE_MIN_MS + (Math.random() + Math.random()) / 2 * (LONG_PAUSE_MAX_MS - LONG_PAUSE_MIN_MS);
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  const ms = minMs + (Math.random() + Math.random()) / 2 * (maxMs - minMs);
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -234,10 +246,17 @@ async function trySync(manual = false) {
     return; // Server not running
   }
 
+  // Add 0-10 minute jitter so auto-syncs don't always start at the exact same time
+  if (!manual) {
+    const jitterMs = Math.random() * 10 * 60 * 1000;
+    await new Promise((r) => setTimeout(r, jitterMs));
+  }
+
   await startSync();
 }
 
 async function startSync() {
+  pageLoadCount = 0; // Reset pacing counter for fresh sync session
   // Fetch persona list from server
   let personas: SyncPersona[] = [];
   try {

@@ -651,9 +651,12 @@ function PersonaSettings() {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.linkedin.com/company/acme-corp"
+                placeholder="https://www.linkedin.com/company/12345678/"
                 className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
               />
+              <p className="text-xs text-text-muted mt-1">
+                Use the admin URL with the numeric ID. Find it at your page's admin dashboard: linkedin.com/company/<strong>12345678</strong>/admin/dashboard
+              </p>
             </div>
             {error && <p className="text-xs text-negative">{error}</p>}
             <div className="flex items-center gap-3">
