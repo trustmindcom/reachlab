@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
 import { createDbClient } from "../db/client.js";
 import { listSources, sourceExists, insertSource, getSource, updateSource, deleteSource, getTaxonomyNames } from "../db/source-queries.js";
-import { createRun, completeRun, failRun, getRunCost, getSetting, upsertSetting } from "../db/ai-queries.js";
+import { createRun, completeRun, failRun, getRunCost, getPersonaSetting, upsertPersonaSetting } from "../db/ai-queries.js";
 import { createClient } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { discoverTopics } from "../ai/discovery.js";
@@ -25,14 +25,14 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
 
     try {
       // Pass previously discovered topics so the LLM avoids repeating them
-      const prevRaw = getSetting(db, "last_discovery_labels");
+      const prevRaw = getPersonaSetting(db, personaId, "last_discovery_labels");
       const previousLabels = prevRaw ? JSON.parse(prevRaw) as string[] : [];
 
-      const result = await discoverTopics(client, db, logger, previousLabels);
+      const result = await discoverTopics(client, db, personaId, logger, previousLabels);
 
       // Store this round's labels for next time
       const allLabels = result.categories.flatMap(c => c.topics.map(t => t.label));
-      upsertSetting(db, "last_discovery_labels", JSON.stringify(allLabels));
+      upsertPersonaSetting(db, personaId, "last_discovery_labels", JSON.stringify(allLabels));
 
       completeRun(db, runId, getRunCost(db, runId));
 

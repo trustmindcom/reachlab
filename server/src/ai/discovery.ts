@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import { MODELS } from "./client.js";
 import { AiLogger } from "./logger.js";
 import { fetchAllFeeds, type RssItem } from "./rss-fetcher.js";
+import { getPersonaSetting } from "../db/ai-queries.js";
 
 export interface DiscoveryTopic {
   label: string;
@@ -81,18 +82,17 @@ export function parseClusteringResponse(text: string): DiscoveryResult {
 export async function discoverTopics(
   client: Anthropic,
   db: Database.Database,
+  personaId: number,
   logger: AiLogger,
   previousLabels?: string[]
 ): Promise<DiscoveryResult> {
-  const rssItems = await fetchAllFeeds(db);
+  const rssItems = await fetchAllFeeds(db, personaId);
 
   // Build author context from taxonomy (what they've written about) + writing prompt
   const topics = db
     .prepare("SELECT name FROM ai_taxonomy ORDER BY name")
     .all() as { name: string }[];
-  const writingPrompt = db
-    .prepare("SELECT value FROM settings WHERE key = 'writing_prompt'")
-    .get() as { value: string } | undefined;
+  const writingPromptValue = getPersonaSetting(db, personaId, "writing_prompt");
 
   const contextParts: string[] = [];
   if (topics.length > 0) {
@@ -100,8 +100,8 @@ export async function discoverTopics(
     contextParts.push(`This creator's primary topics (from their post history): ${topics.map((t) => t.name).join(", ")}`);
     contextParts.push(`EVERY major theme above must be covered by at least one category in the output. Do not let a single theme dominate all categories.`);
   }
-  if (writingPrompt?.value) {
-    contextParts.push(`Creator's writing brief:\n${writingPrompt.value}`);
+  if (writingPromptValue) {
+    contextParts.push(`Creator's writing brief:\n${writingPromptValue}`);
   }
   const authorContext = contextParts.length > 0 ? contextParts.join("\n\n") : undefined;
 

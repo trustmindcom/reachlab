@@ -9,6 +9,8 @@ import {
   saveWritingPromptHistory,
   getWritingPromptHistory,
   clearPromptSuggestions,
+  getPersonaSetting,
+  upsertPersonaSetting,
 } from "../db/ai-queries.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
@@ -135,8 +137,9 @@ export function registerSettingsRoutes(
 
   // ── Writing prompt ─────────────────────────────────────────
 
-  app.get("/api/settings/writing-prompt", async () => {
-    const text = getSetting(db, "writing_prompt");
+  app.get("/api/settings/writing-prompt", async (request) => {
+    const personaId = getPersonaId(request);
+    const text = getPersonaSetting(db, personaId, "writing_prompt");
     return { text: text ?? null };
   });
 
@@ -147,7 +150,7 @@ export function registerSettingsRoutes(
       return reply.status(400).send({ error: "text is required" });
     }
     const source = body.source ?? "manual_edit";
-    upsertSetting(db, "writing_prompt", body.text);
+    upsertPersonaSetting(db, personaId, "writing_prompt", body.text);
     saveWritingPromptHistory(db, personaId, {
       prompt_text: body.text,
       source,
@@ -155,7 +158,7 @@ export function registerSettingsRoutes(
     });
     // Clear prompt suggestions so applied suggestions don't reappear
     if (source === "ai_suggestion") {
-      clearPromptSuggestions(db);
+      clearPromptSuggestions(db, personaId);
     }
     return { ok: true };
   });
@@ -167,22 +170,24 @@ export function registerSettingsRoutes(
 
   // ── Auto-refresh settings ────────────────────────────────
 
-  app.get("/api/settings/auto-refresh", async () => {
-    const schedule = getSetting(db, "auto_interpret_schedule") ?? "weekly";
-    const postThreshold = getSetting(db, "auto_interpret_post_threshold") ?? "5";
+  app.get("/api/settings/auto-refresh", async (request) => {
+    const personaId = getPersonaId(request);
+    const schedule = getPersonaSetting(db, personaId, "auto_interpret_schedule") ?? "weekly";
+    const postThreshold = getPersonaSetting(db, personaId, "auto_interpret_post_threshold") ?? "5";
     return { schedule, post_threshold: parseInt(postThreshold, 10) };
   });
 
   app.put("/api/settings/auto-refresh", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const body = validateBody(autoRefreshBody, request.body);
 
     if (body.schedule !== undefined) {
-      upsertSetting(db, "auto_interpret_schedule", body.schedule);
+      upsertPersonaSetting(db, personaId, "auto_interpret_schedule", body.schedule);
     }
 
     if (body.post_threshold !== undefined) {
       const n = Math.max(1, Math.min(50, Math.round(body.post_threshold)));
-      upsertSetting(db, "auto_interpret_post_threshold", String(n));
+      upsertPersonaSetting(db, personaId, "auto_interpret_post_threshold", String(n));
     }
 
     return { ok: true };

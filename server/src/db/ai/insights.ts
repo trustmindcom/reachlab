@@ -214,8 +214,9 @@ export function getLatestPromptSuggestions(db: Database.Database, personaId: num
   }
 }
 
-export function clearPromptSuggestions(db: Database.Database): void {
+export function clearPromptSuggestions(db: Database.Database, personaId: number): void {
   db.prepare(
-    "UPDATE ai_overview SET prompt_suggestions_json = NULL WHERE id = (SELECT MAX(id) FROM ai_overview)"
-  ).run();
+    `UPDATE ai_overview SET prompt_suggestions_json = NULL
+     WHERE id = (SELECT MAX(ao.id) FROM ai_overview ao JOIN ai_runs ar ON ao.run_id = ar.id WHERE ar.persona_id = ?)`
+  ).run(personaId);
 }

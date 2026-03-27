@@ -20,7 +20,7 @@ import {
   getTopicPerformance,
   getHookPerformance,
   getImageSubtypePerformance,
-  getSetting,
+  getPersonaSetting,
   getRunCost,
   getRunsNeedingCostBackfill,
   backfillRunCost,
@@ -238,8 +238,8 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     const running = getRunningRun(db, personaId);
     const lastFullRun = getLastFullRun(db, personaId);
 
-    const schedule = getSetting(db, "auto_interpret_schedule") ?? "weekly";
-    const postThreshold = parseInt(getSetting(db, "auto_interpret_post_threshold") ?? "5", 10);
+    const schedule = getPersonaSetting(db, personaId, "auto_interpret_schedule") ?? "weekly";
+    const postThreshold = parseInt(getPersonaSetting(db, personaId, "auto_interpret_post_threshold") ?? "5", 10);
 
     // Compute next auto-regen time
     let nextAutoRegen: string | null = null;

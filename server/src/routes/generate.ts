@@ -28,7 +28,7 @@ import {
   type Story,
   type Draft,
 } from "../db/generate-queries.js";
-import { createRun, completeRun, failRun, getRunCost, getSetting } from "../db/ai-queries.js";
+import { createRun, completeRun, failRun, getRunCost, getPersonaSetting } from "../db/ai-queries.js";
 import { streamWithIdleTimeout } from "../ai/stream-with-idle.js";
 import { createClient, MODELS } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
@@ -568,7 +568,7 @@ Return JSON only:
     const ruleTexts = rules.filter(r => r.enabled).map(r => r.rule_text);
 
     // Get current writing prompt so the LLM can suggest specific edits
-    const writingPromptValue = getSetting(db, "writing_prompt");
+    const writingPromptValue = getPersonaSetting(db, personaId, "writing_prompt");
 
     // Mark as in-progress so the UI can show a spinner and recover if user navigates away
     startRetro(db, Number(id), body.published_text.trim());

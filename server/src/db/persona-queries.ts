@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { getPersonaSetting, upsertPersonaSetting } from "./ai-queries.js";
 
 export interface Persona {
   id: number;
@@ -44,6 +45,21 @@ export function createPersona(
       SELECT category, rule_text, example_text, sort_order, enabled, ?
       FROM generation_rules WHERE persona_id = 1
     `).run(personaId);
+
+    // Fork persona-scoped settings from persona 1
+    const PERSONA_SCOPED_KEYS = [
+      'writing_prompt',
+      'auto_interpret_schedule',
+      'auto_interpret_post_threshold',
+    ];
+    for (const key of PERSONA_SCOPED_KEYS) {
+      const value = getPersonaSetting(db, 1, key);
+      if (value !== null) {
+        upsertPersonaSetting(db, personaId, key, value);
+      }
+    }
+    // Discovery labels always init as empty for new personas — no analysis history
+    upsertPersonaSetting(db, personaId, 'last_discovery_labels', '[]');
 
     return getPersona(db, personaId)!;
   })();

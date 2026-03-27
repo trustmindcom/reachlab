@@ -56,14 +56,14 @@ async function fetchFeed(url: string, sourceName: string): Promise<RssItem[]> {
   }
 }
 
-export function getEnabledSources(db: Database.Database): RssSource[] {
+export function getEnabledSources(db: Database.Database, personaId: number): RssSource[] {
   return db
-    .prepare("SELECT * FROM research_sources WHERE enabled = 1")
-    .all() as RssSource[];
+    .prepare("SELECT * FROM research_sources WHERE enabled = 1 AND persona_id = ?")
+    .all(personaId) as RssSource[];
 }
 
-export async function fetchAllFeeds(db: Database.Database): Promise<RssItem[]> {
-  const sources = getEnabledSources(db);
+export async function fetchAllFeeds(db: Database.Database, personaId: number): Promise<RssItem[]> {
+  const sources = getEnabledSources(db, personaId);
   if (sources.length === 0) {
     throw new Error("No RSS sources configured");
   }

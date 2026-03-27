@@ -21,7 +21,7 @@ export type { RecommendationInput } from "./ai/recommendations.js";
 export { getProgressMetrics, getCategoryPerformance, getEngagementQuality, getSparklineData, getTopicPerformance, getHookPerformance, getImageSubtypePerformance, getPostCountWithMetrics, getPostCountSinceRun } from "./ai/deep-dive.js";
 
 // settings
-export { getSetting, upsertSetting, deleteSetting, saveWritingPromptHistory, getWritingPromptHistory } from "./ai/settings.js";
+export { getSetting, upsertSetting, deleteSetting, saveWritingPromptHistory, getWritingPromptHistory, getPersonaSetting, upsertPersonaSetting } from "./ai/settings.js";
 export type { WritingPromptHistoryRow } from "./ai/settings.js";
 
 // Re-export shared types that consumers import through this barrel

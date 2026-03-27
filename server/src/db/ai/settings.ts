@@ -30,6 +30,33 @@ export function deleteSetting(db: Database.Database, key: string): void {
   db.prepare("DELETE FROM settings WHERE key = ?").run(key);
 }
 
+// ── persona_settings ──────────────────────────────────────
+
+const VALID_PERSONA_SETTING_KEYS = new Set([
+  'writing_prompt',
+  'auto_interpret_schedule',
+  'auto_interpret_post_threshold',
+  'last_discovery_labels',
+]);
+
+export function getPersonaSetting(db: Database.Database, personaId: number, key: string): string | null {
+  const row = db.prepare(
+    'SELECT value FROM persona_settings WHERE persona_id = ? AND key = ?'
+  ).get(personaId, key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export function upsertPersonaSetting(db: Database.Database, personaId: number, key: string, value: string): void {
+  if (!VALID_PERSONA_SETTING_KEYS.has(key)) {
+    throw new Error(`Invalid persona setting key: ${key}. Valid keys: ${[...VALID_PERSONA_SETTING_KEYS].join(', ')}`);
+  }
+  db.prepare(`
+    INSERT INTO persona_settings (persona_id, key, value, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT (persona_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(personaId, key, value);
+}
+
 // ── writing_prompt_history ─────────────────────────────────
 
 export function saveWritingPromptHistory(

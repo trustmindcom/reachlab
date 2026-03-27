@@ -29,6 +29,7 @@ import {
   upsertOverview,
   getPostCountWithMetrics,
   getSetting,
+  getPersonaSetting,
   upsertAnalysisGap,
   getRecentFeedbackWithReasons,
 } from "../db/ai-queries.js";
@@ -188,7 +189,7 @@ export async function runFullPipeline(
 
     // Step 3: Build stats report
     const timezone = getSetting(db, "timezone") ?? "UTC";
-    const writingPrompt = getSetting(db, "writing_prompt");
+    const writingPrompt = getPersonaSetting(db, personaId, "writing_prompt");
     const statsReport = buildStatsReport(db, timezone, writingPrompt);
 
     // Step 4: Build system prompt (read knowledge base from file)

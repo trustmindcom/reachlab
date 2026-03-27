@@ -7,6 +7,7 @@ import {
   updateGeneration,
   getRules,
 } from "../db/generate-queries.js";
+import { getPersonaSetting } from "../db/ai-queries.js";
 
 function firstNLines(text: string, n: number): string {
   return text.split("\n").slice(0, n).join("\n");
@@ -74,11 +75,7 @@ export async function runAutoRetro(
   const rules = getRules(db, personaId)
     .filter((r) => r.enabled)
     .map((r) => r.rule_text);
-  const writingPrompt = (
-    db
-      .prepare("SELECT value FROM settings WHERE key = 'writing_prompt'")
-      .get() as { value: string } | undefined
-  )?.value;
+  const writingPrompt = getPersonaSetting(db, personaId, "writing_prompt") ?? undefined;
 
   for (const postId of postIds) {
     const post = db

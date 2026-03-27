@@ -21,7 +21,7 @@ import {
   getPostCountInWindow,
   getTopExamplePosts,
 } from "../db/queries.js";
-import { getSetting, upsertSetting, deleteSetting, getLastFullRun } from "../db/ai-queries.js";
+import { upsertSetting, deleteSetting, getLastFullRun } from "../db/ai-queries.js";
 import { ingestPayloadSchema } from "../schemas.js";
 import { getPersonaId } from "../utils.js";
 
@@ -247,7 +247,7 @@ export function registerIngestRoutes(
         import("../ai/orchestrator.js"),
         import("../db/ai-queries.js"),
         import("../ai/client.js"),
-      ]).then(([{ runTaggingPipeline, runFullPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun, getSetting, getUntaggedPostIds }, { createClient }]) => {
+      ]).then(([{ runTaggingPipeline, runFullPipeline }, { getPostCountWithMetrics, getLatestCompletedRun, getRunningRun, getPersonaSetting, getUntaggedPostIds }, { createClient }]) => {
         // Skip if nothing to do: no new posts upserted AND no untagged posts
         const untaggedIds = getUntaggedPostIds(db, personaId);
         if (postsUpserted === 0 && untaggedIds.length === 0) return;
@@ -260,7 +260,7 @@ export function registerIngestRoutes(
         // Always run cheap tagging pipeline on sync
         runTaggingPipeline(client, db, personaId, "sync_tagging").then(() => {
           // After tagging, check if full interpretation should run
-          const schedule = getSetting(db, "auto_interpret_schedule") ?? "weekly";
+          const schedule = getPersonaSetting(db, personaId, "auto_interpret_schedule") ?? "weekly";
           if (schedule === "off") return;
 
           // Only consider full pipeline runs (not tagging-only)
@@ -270,7 +270,7 @@ export function registerIngestRoutes(
           if (newPosts < 1) return; // No new posts, skip
 
           // Check post threshold
-          const postThreshold = parseInt(getSetting(db, "auto_interpret_post_threshold") ?? "5", 10);
+          const postThreshold = parseInt(getPersonaSetting(db, personaId, "auto_interpret_post_threshold") ?? "5", 10);
           const postThresholdMet = newPosts >= postThreshold;
 
           // Check time threshold
