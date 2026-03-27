@@ -40,6 +40,9 @@ const VALID_PERSONA_SETTING_KEYS = new Set([
 ]);
 
 export function getPersonaSetting(db: Database.Database, personaId: number, key: string): string | null {
+  if (!VALID_PERSONA_SETTING_KEYS.has(key)) {
+    throw new Error(`Invalid persona setting key: ${key}. Valid keys: ${[...VALID_PERSONA_SETTING_KEYS].join(', ')}`);
+  }
   const row = db.prepare(
     'SELECT value FROM persona_settings WHERE persona_id = ? AND key = ?'
   ).get(personaId, key) as { value: string } | undefined;

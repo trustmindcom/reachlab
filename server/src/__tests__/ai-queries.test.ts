@@ -33,6 +33,8 @@ import {
   getUnclassifiedImagePosts,
   getSetting,
   upsertSetting,
+  getPersonaSetting,
+  upsertPersonaSetting,
   saveWritingPromptHistory,
   getWritingPromptHistory,
   upsertAnalysisGap,
@@ -758,6 +760,37 @@ describe("AI queries", () => {
       expect(getSetting(db, "timezone")).toBe("America/New_York");
       upsertSetting(db, "timezone", "America/Los_Angeles");
       expect(getSetting(db, "timezone")).toBe("America/Los_Angeles");
+    });
+  });
+
+  // ── persona_settings ─────────────────────────────────────
+
+  describe("persona_settings", () => {
+    it("returns null for unset key", () => {
+      expect(getPersonaSetting(db, PERSONA_ID, "auto_interpret_post_threshold")).toBeNull();
+    });
+
+    it("upserts and retrieves a persona setting", () => {
+      upsertPersonaSetting(db, PERSONA_ID, "auto_interpret_schedule", "daily");
+      expect(getPersonaSetting(db, PERSONA_ID, "auto_interpret_schedule")).toBe("daily");
+      upsertPersonaSetting(db, PERSONA_ID, "auto_interpret_schedule", "weekly");
+      expect(getPersonaSetting(db, PERSONA_ID, "auto_interpret_schedule")).toBe("weekly");
+    });
+
+    it("isolates settings across personas", () => {
+      db.prepare("INSERT OR IGNORE INTO personas (id, name, linkedin_url, type) VALUES (2, 'Test Page', 'https://linkedin.com/company/test', 'company_page')").run();
+      upsertPersonaSetting(db, PERSONA_ID, "auto_interpret_schedule", "daily");
+      upsertPersonaSetting(db, 2, "auto_interpret_schedule", "weekly");
+      expect(getPersonaSetting(db, PERSONA_ID, "auto_interpret_schedule")).toBe("daily");
+      expect(getPersonaSetting(db, 2, "auto_interpret_schedule")).toBe("weekly");
+    });
+
+    it("throws on invalid key for upsert", () => {
+      expect(() => upsertPersonaSetting(db, PERSONA_ID, "invalid_key", "val")).toThrow("Invalid persona setting key");
+    });
+
+    it("throws on invalid key for read", () => {
+      expect(() => getPersonaSetting(db, PERSONA_ID, "invalid_key")).toThrow("Invalid persona setting key");
     });
   });
 

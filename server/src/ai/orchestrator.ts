@@ -257,7 +257,7 @@ export async function runFullPipeline(
       }
 
       // Store recommendations (with dedup against existing unresolved ones)
-      const existingHeadlines = getUnresolvedRecommendationHeadlines(db, 1);
+      const existingHeadlines = getUnresolvedRecommendationHeadlines(db, personaId);
       for (const rec of analysis.recommendations) {
         if (isDuplicateRecommendation(rec.headline, existingHeadlines)) {
           continue;
