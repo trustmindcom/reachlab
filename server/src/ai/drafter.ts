@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type Database from "better-sqlite3";
 import { MODELS } from "./client.js";
+import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import { AiLogger } from "./logger.js";
 import { assemblePrompt } from "./prompt-assembler.js";
 import type { Story, Draft } from "../db/generate-queries.js";
@@ -57,7 +58,7 @@ export async function generateDrafts(
   const draftPromises = Object.entries(VARIATION_INSTRUCTIONS).map(
     async ([variationType, instruction]): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
       const start = Date.now();
-      const response = await client.messages.create({
+      const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
         model: MODELS.SONNET,
         max_tokens: 2000,
         system: assembled.system,
@@ -76,11 +77,9 @@ Return JSON:
 }`,
           },
         ],
-      }, { timeout: 90_000, maxRetries: 1 });
+      });
 
       const duration = Date.now() - start;
-      const text =
-        response.content[0].type === "text" ? response.content[0].text : "";
 
       logger.log({
         step: `draft_${variationType}`,
@@ -88,8 +87,8 @@ Return JSON:
         input_messages: JSON.stringify([{ role: "user", content: instruction }]),
         output_text: text,
         tool_calls: null,
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
+        input_tokens,
+        output_tokens,
         thinking_tokens: 0,
         duration_ms: duration,
       });
@@ -110,8 +109,8 @@ Return JSON:
           word_count: parsed.word_count ?? 0,
           structure_label: parsed.structure_label ?? variationType,
         },
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
+        input_tokens,
+        output_tokens,
       };
     }
   );

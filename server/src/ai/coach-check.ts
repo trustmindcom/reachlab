@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./client.js";
+import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import { AiLogger } from "./logger.js";
 import type { GenerationRule, CoachingInsight } from "../db/generate-queries.js";
 
@@ -113,16 +114,14 @@ async function runCoachCheck(
   const prompt = buildCoachCheckPrompt(draft, rules, insights);
 
   const start = Date.now();
-  const response = await client.messages.create({
+  const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 4000,
     system: "You are a writing quality coach. Return valid JSON only.",
     messages: [{ role: "user", content: prompt }],
-  }, { timeout: 90_000, maxRetries: 1 });
+  });
 
   const duration = Date.now() - start;
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
 
   logger.log({
     step: stepName,
@@ -130,8 +129,8 @@ async function runCoachCheck(
     input_messages: JSON.stringify([{ role: "user", content: prompt }]),
     output_text: text,
     tool_calls: null,
-    input_tokens: response.usage.input_tokens,
-    output_tokens: response.usage.output_tokens,
+    input_tokens,
+    output_tokens,
     thinking_tokens: 0,
     duration_ms: duration,
   });
@@ -179,16 +178,14 @@ Do NOT fabricate personal stories, fake company names, made-up metrics, or inven
 Return ONLY the revised draft as plain text (no JSON, no markdown fences).`;
 
   const start = Date.now();
-  const response = await client.messages.create({
+  const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 2000,
     system: "You are a concise LinkedIn post editor. Return only the revised draft text.",
     messages: [{ role: "user", content: prompt }],
-  }, { timeout: 90_000, maxRetries: 1 });
+  });
 
   const duration = Date.now() - start;
-  const text =
-    response.content[0].type === "text" ? response.content[0].text : "";
 
   logger.log({
     step: "coach_self_fix",
@@ -196,8 +193,8 @@ Return ONLY the revised draft as plain text (no JSON, no markdown fences).`;
     input_messages: JSON.stringify([{ role: "user", content: prompt }]),
     output_text: text,
     tool_calls: null,
-    input_tokens: response.usage.input_tokens,
-    output_tokens: response.usage.output_tokens,
+    input_tokens,
+    output_tokens,
     thinking_tokens: 0,
     duration_ms: duration,
   });

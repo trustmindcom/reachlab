@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+import { EventEmitter } from "events";
 import { initDatabase } from "../db/index.js";
 import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
@@ -30,6 +31,20 @@ const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-ai-modules.
 let db: ReturnType<typeof initDatabase>;
 let logger: AiLogger;
 
+function makeMockStream(responseText: string) {
+  const emitter = new EventEmitter() as any;
+  emitter.abort = vi.fn(() => emitter.removeAllListeners());
+  setTimeout(() => {
+    emitter.emit("text", responseText, responseText);
+    emitter.emit("finalMessage", {
+      content: [{ type: "text", text: responseText }],
+      usage: { input_tokens: 100, output_tokens: 200 },
+    });
+    emitter.emit("end");
+  }, 0);
+  return emitter;
+}
+
 function makeMockClient(responseText: string): any {
   return {
     messages: {
@@ -37,6 +52,7 @@ function makeMockClient(responseText: string): any {
         content: [{ type: "text", text: responseText }],
         usage: { input_tokens: 100, output_tokens: 200 },
       }),
+      stream: vi.fn(() => makeMockStream(responseText)),
     },
   };
 }
@@ -102,10 +118,9 @@ describe("drafter", () => {
     expect(result.drafts[0].type).toBe("contrarian");
     expect(result.drafts[1].type).toBe("operator");
     expect(result.drafts[2].type).toBe("future");
-    expect(client.messages.create).toHaveBeenCalledTimes(3);
-    expect(client.messages.create).toHaveBeenCalledWith(
-      expect.objectContaining({ model: expect.any(String) }),
-      expect.objectContaining({ timeout: 90_000, maxRetries: 1 })
+    expect(client.messages.stream).toHaveBeenCalledTimes(3);
+    expect(client.messages.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) })
     );
   });
 });
@@ -123,7 +138,7 @@ describe("combiner", () => {
     expect(result.final_draft).toContain("Hook A");
     expect(result.final_draft).toContain("Body A");
     expect(result.input_tokens).toBe(0);
-    expect(client.messages.create).not.toHaveBeenCalled();
+    expect(client.messages.stream).not.toHaveBeenCalled();
   });
 
   it("combines multiple drafts via LLM", async () => {
@@ -131,10 +146,9 @@ describe("combiner", () => {
     const result = await combineDrafts(client, logger, drafts, [0, 2], "Focus on the contrarian hook");
     expect(result.final_draft).toContain("Combined post");
     expect(result.input_tokens).toBe(100);
-    expect(client.messages.create).toHaveBeenCalledOnce();
-    expect(client.messages.create).toHaveBeenCalledWith(
-      expect.objectContaining({ model: expect.any(String) }),
-      expect.objectContaining({ timeout: 90_000, maxRetries: 1 })
+    expect(client.messages.stream).toHaveBeenCalledOnce();
+    expect(client.messages.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ model: expect.any(String) })
     );
   });
 });

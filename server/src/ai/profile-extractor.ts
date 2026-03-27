@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./client.js";
+import { streamWithIdleTimeout } from "./stream-with-idle.js";
 
 export interface ExtractedProfile {
   profile_text: string;
@@ -23,7 +24,7 @@ export async function extractProfile(
   client: Anthropic,
   transcript: string
 ): Promise<ExtractedProfile> {
-  const response = await client.messages.create({
+  const { text } = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 2000,
     system: `You are a profile extraction expert for a LinkedIn ghostwriting tool. Given an interview transcript, extract what makes this person's writing perspective distinctive. Focus on their opinions, audience, topics, and voice — not biographical facts.`,
@@ -60,9 +61,7 @@ Return JSON with two fields:
 Return valid JSON only. No markdown fences.`,
       },
     ],
-  }, { timeout: 90_000, maxRetries: 1 });
-
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  });
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "");
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {

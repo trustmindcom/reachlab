@@ -29,6 +29,7 @@ import {
   type Draft,
 } from "../db/generate-queries.js";
 import { createRun, completeRun, failRun, getRunCost, getSetting } from "../db/ai-queries.js";
+import { streamWithIdleTimeout } from "../ai/stream-with-idle.js";
 import { createClient, MODELS } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
@@ -260,15 +261,14 @@ Return JSON only:
       messages.push({ role: "user", content: userContent });
 
       const start = Date.now();
-      const response = await client.messages.create({
+      const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
         model: MODELS.SONNET,
         max_tokens: 4000,
         system: systemPrompt,
         messages,
-      }, { timeout: 90_000, maxRetries: 1 });
+      });
 
       const duration = Date.now() - start;
-      const text = response.content[0].type === "text" ? response.content[0].text : "";
 
       logger.log({
         step: "chat_revision",
@@ -276,8 +276,8 @@ Return JSON only:
         input_messages: JSON.stringify(messages.slice(-1)),
         output_text: text,
         tool_calls: null,
-        input_tokens: response.usage.input_tokens,
-        output_tokens: response.usage.output_tokens,
+        input_tokens,
+        output_tokens,
         thinking_tokens: 0,
         duration_ms: duration,
       });

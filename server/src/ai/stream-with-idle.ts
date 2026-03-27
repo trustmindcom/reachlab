@@ -31,11 +31,6 @@ export interface StreamResult {
  * @param opts.deadlineMs - Hard deadline for the entire call (default 5 min).
  *   Protects against a model that emits one token per 29s, which would never
  *   trigger idle timeout but still run forever.
- *
- * NOTE: When using this function, pass `timeout: 0` (or a value higher than
- * deadlineMs) in `params` to prevent the SDK's built-in connection timeout
- * (default 90s in `createClient`) from racing with and killing the stream
- * before the deadline fires.
  */
 export async function streamWithIdleTimeout(
   client: Anthropic,

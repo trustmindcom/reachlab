@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./client.js";
+import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import type { RetroChange, RetroRuleSuggestion, RetroPromptEdit, RetroAnalysis } from "@reachlab/shared";
 
 export type { RetroChange, RetroRuleSuggestion, RetroPromptEdit, RetroAnalysis };
@@ -10,7 +11,6 @@ export async function analyzeRetro(
   publishedText: string,
   existingRules: string[],
   currentWritingPrompt?: string,
-  requestOptions?: { timeout?: number; maxRetries?: number }
 ): Promise<{ analysis: RetroAnalysis; input_tokens: number; output_tokens: number }> {
   const rulesBlock = existingRules.length > 0
     ? `\nEXISTING GENERATION RULES (don't suggest duplicates of these):\n${existingRules.map((r, i) => `${i + 1}. ${r}`).join("\n")}\n`
@@ -20,7 +20,7 @@ export async function analyzeRetro(
     ? `\nCURRENT WRITING PROMPT (suggest specific edits to this text — what to remove, what to add, what to replace):\n---\n${currentWritingPrompt}\n---\n`
     : "";
 
-  const response = await client.messages.create({
+  const { text, input_tokens, output_tokens } = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 3000,
     system: `You are a senior developmental editor with deep experience analyzing how authors revise their own writing. Your specialty is distinguishing between changes that reflect genuine editorial preferences versus incidental rewording.
@@ -102,9 +102,8 @@ IMPORTANT:
 - Do NOT manufacture insights from noise. Fewer high-confidence principles are better than many speculative ones.
 - Each pattern should be supported by at least 2 changes. One-off edits are more likely incidental.`
     }],
-  }, { timeout: 90_000, maxRetries: 1, ...requestOptions });
+  });
 
-  const text = response.content[0].type === "text" ? response.content[0].text : "";
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
@@ -114,7 +113,7 @@ IMPORTANT:
   const analysis = JSON.parse(jsonMatch[0]) as RetroAnalysis;
   return {
     analysis,
-    input_tokens: response.usage.input_tokens,
-    output_tokens: response.usage.output_tokens,
+    input_tokens,
+    output_tokens,
   };
 }

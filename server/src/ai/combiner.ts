@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { MODELS } from "./client.js";
+import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import { AiLogger } from "./logger.js";
 import type { Draft } from "../db/generate-queries.js";
 import { type DraftLength, LENGTH_RANGES } from "./drafter.js";
@@ -61,16 +62,15 @@ ${draftsText}
 Return the combined post as plain text (no JSON, no markdown headers). Use line breaks between paragraphs.`;
 
   const start = Date.now();
-  const response = await client.messages.create({
+  const combineResult = await streamWithIdleTimeout(client, {
     model: MODELS.SONNET,
     max_tokens: 2000,
     ...(systemPrompt ? { system: systemPrompt } : {}),
     messages: [{ role: "user", content: prompt }],
-  }, { timeout: 90_000, maxRetries: 1 });
+  });
 
   const duration = Date.now() - start;
-  let text =
-    response.content[0].type === "text" ? response.content[0].text : "";
+  let text = combineResult.text;
 
   logger.log({
     step: "combine",
@@ -78,14 +78,14 @@ Return the combined post as plain text (no JSON, no markdown headers). Use line 
     input_messages: JSON.stringify([{ role: "user", content: prompt }]),
     output_text: text,
     tool_calls: null,
-    input_tokens: response.usage.input_tokens,
-    output_tokens: response.usage.output_tokens,
+    input_tokens: combineResult.input_tokens,
+    output_tokens: combineResult.output_tokens,
     thinking_tokens: 0,
     duration_ms: duration,
   });
 
-  let totalInput = response.usage.input_tokens;
-  let totalOutput = response.usage.output_tokens;
+  let totalInput = combineResult.input_tokens;
+  let totalOutput = combineResult.output_tokens;
 
   // Tightening pass — if the combined draft exceeds the target by >20%
   if (draftLength) {
@@ -106,17 +106,13 @@ ${text}
 Return only the tightened post as plain text.`;
 
       const tightenStart = Date.now();
-      const tightenResponse = await client.messages.create({
+      const tightenResult = await streamWithIdleTimeout(client, {
         model: MODELS.SONNET,
         max_tokens: 2000,
         messages: [{ role: "user", content: tightenPrompt }],
-      }, { timeout: 90_000, maxRetries: 1 });
+      });
 
       const tightenDuration = Date.now() - tightenStart;
-      const tightenedText =
-        tightenResponse.content[0].type === "text"
-          ? tightenResponse.content[0].text
-          : "";
 
       logger.log({
         step: "combine_tighten",
@@ -124,17 +120,17 @@ Return only the tightened post as plain text.`;
         input_messages: JSON.stringify([
           { role: "user", content: tightenPrompt },
         ]),
-        output_text: tightenedText,
+        output_text: tightenResult.text,
         tool_calls: null,
-        input_tokens: tightenResponse.usage.input_tokens,
-        output_tokens: tightenResponse.usage.output_tokens,
+        input_tokens: tightenResult.input_tokens,
+        output_tokens: tightenResult.output_tokens,
         thinking_tokens: 0,
         duration_ms: tightenDuration,
       });
 
-      text = tightenedText;
-      totalInput += tightenResponse.usage.input_tokens;
-      totalOutput += tightenResponse.usage.output_tokens;
+      text = tightenResult.text;
+      totalInput += tightenResult.input_tokens;
+      totalOutput += tightenResult.output_tokens;
     }
   }
 
