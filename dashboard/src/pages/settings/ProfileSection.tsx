@@ -53,19 +53,19 @@ export default function ProfileSection() {
               value={profileText}
               onChange={(e) => setProfileText(e.target.value)}
               rows={6}
-              className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent resize-none"
+              className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
             />
             <div className="flex items-center gap-3">
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
               >
                 {saving ? "Saving..." : saved ? "Saved" : "Save"}
               </button>
               <button
                 onClick={() => setShowInterview(true)}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 rounded-md text-sm font-medium bg-surface-2 text-text-secondary hover:text-text-primary hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)] flex items-center gap-1.5"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />

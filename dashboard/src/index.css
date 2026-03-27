@@ -2,19 +2,19 @@
 @import "tailwindcss";
 
 @theme {
-  --color-surface-0: #0c0c14;
-  --color-surface-1: #12121e;
-  --color-surface-2: #1a1a2e;
-  --color-surface-3: #242440;
-  --color-border: #2a2a4a;
-  --color-text-primary: #ededed;
-  --color-text-secondary: #8888a8;
-  --color-text-muted: #5c5c78;
-  --color-accent: #0a66c2;
-  --color-accent-hover: #0d7de8;
-  --color-positive: #34d399;
-  --color-negative: #f87171;
-  --color-warning: #fbbf24;
+  --color-surface-0: oklch(0.13 0.02 280);
+  --color-surface-1: oklch(0.16 0.02 280);
+  --color-surface-2: oklch(0.20 0.02 280);
+  --color-surface-3: oklch(0.26 0.03 280);
+  --color-border: oklch(0.30 0.04 280);
+  --color-text-primary: oklch(0.94 0.00 0);
+  --color-text-secondary: oklch(0.62 0.03 280);
+  --color-text-muted: oklch(0.46 0.03 280);
+  --color-accent: oklch(0.50 0.14 250);
+  --color-accent-hover: oklch(0.56 0.16 250);
+  --color-positive: oklch(0.75 0.17 165);
+  --color-negative: oklch(0.67 0.18 25);
+  --color-warning: oklch(0.80 0.15 85);
   --font-sans: "DM Sans", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-serif: "Newsreader", Georgia, serif;
@@ -34,6 +34,8 @@
   --color-gen-border-1: rgba(255, 255, 255, 0.055);
   --color-gen-border-2: rgba(255, 255, 255, 0.09);
   --color-gen-border-3: rgba(255, 255, 255, 0.14);
+  --ease-snappy: cubic-bezier(0.2, 0, 0, 1);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
@@ -61,7 +63,7 @@ body::before {
 }
 
 .animate-fade-up {
-  animation: fadeUp 0.4s ease both;
+  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Generate page typography */
@@ -73,7 +75,7 @@ body::before {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-up-draft {
-  animation: fadeUpDraft 0.3s ease both;
+  animation: fadeUpDraft 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* Fade-in-up for discovery category stagger */
@@ -92,3 +94,13 @@ body::before {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+
+/* Keyboard focus only — hide focus ring for mouse users */
+*:focus:not(:focus-visible) { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-up-draft {
+    animation: none !important;
+  }
+}

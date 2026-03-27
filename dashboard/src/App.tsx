@@ -109,23 +109,26 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-surface-0 border-b border-border px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-surface-0/80 backdrop-blur-md border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <h1 className="text-lg font-semibold tracking-tight">
-            <span className="text-accent">Reach</span>Lab
+            <span className="font-extrabold text-accent">Reach</span><span className="font-light">Lab</span>
           </h1>
           <nav className="flex gap-1">
             {tabs.map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                className={`relative px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                   tab === t
-                    ? "bg-surface-3 text-text-primary"
+                    ? "text-text-primary"
                     : "text-text-secondary hover:text-text-primary hover:bg-surface-2"
                 }`}
               >
                 {t}
+                {tab === t && (
+                  <span className="absolute -bottom-[17px] left-1 right-1 h-0.5 bg-accent rounded-full" />
+                )}
               </button>
             ))}
           </nav>
@@ -133,7 +136,7 @@ export default function App() {
         <div className="flex items-center gap-3">
           <PersonaSwitcher />
           {health?.last_sync_at && (
-            <span className="text-xs text-text-muted font-mono">
+            <span className="text-xs text-text-muted font-mono tabular-nums bg-surface-2/60 px-2 py-0.5 rounded">
               Last sync: {new Date(health.last_sync_at).toLocaleString()}
             </span>
           )}

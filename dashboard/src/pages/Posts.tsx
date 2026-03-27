@@ -10,6 +10,7 @@ import {
 import { Line } from "react-chartjs-2";
 import { api, type Post, type MetricSnapshot } from "../api/client";
 import { useToast } from "../components/Toast";
+import { chartColors, chartGrid, chartTick } from "../lib/chartTheme";
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip);
 
@@ -145,7 +146,8 @@ export default function Posts() {
   };
 
   const showTags = total >= 10;
-  const TOTAL_COLS = showTags ? 9 : 7; // post + (category + topics if >=10 posts) + 6 sort cols
+  // Max visible columns varies by breakpoint; use a safe high number for colSpan
+  const TOTAL_COLS = showTags ? 9 : 7;
 
   return (
     <div className="space-y-4">
@@ -157,8 +159,8 @@ export default function Posts() {
       )}
 
       {/* Table */}
-      <div className="bg-surface-1 border border-border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm min-w-[900px]">
+      <div className="border border-border rounded-lg overflow-x-auto animate-fade-up">
+        <table className="w-full text-sm bg-surface-1">
           <thead>
             <tr className="text-text-muted text-xs uppercase tracking-wider border-b border-border">
               <th className="text-left px-4 py-3 font-medium sticky top-[57px] bg-surface-1 z-10 border-b border-border">
@@ -177,19 +179,22 @@ export default function Posts() {
                   </select>
                 </div>
               </th>
-              {showTags && <th className="text-left px-3 py-3 font-medium w-28 sticky top-[57px] bg-surface-1 z-10 border-b border-border">Category</th>}
-              {showTags && <th className="text-left px-3 py-3 font-medium w-36 sticky top-[57px] bg-surface-1 z-10 border-b border-border">Topics</th>}
-              {sortOptions.map((s) => (
-                <th
-                  key={s.value}
-                  onClick={() => toggleSort(s.value)}
-                  title={"title" in s ? s.title : undefined}
-                  className="text-right px-4 py-3 font-medium cursor-pointer hover:text-text-primary w-28 sticky top-[57px] bg-surface-1 z-10 border-b border-border"
-                >
-                  {s.label}
-                  {sortIndicator(s.value)}
-                </th>
-              ))}
+              {showTags && <th className="hidden xl:table-cell text-left px-3 py-3 font-medium w-28 sticky top-[57px] bg-surface-1 z-10 border-b border-border">Category</th>}
+              {showTags && <th className="hidden xl:table-cell text-left px-3 py-3 font-medium w-36 sticky top-[57px] bg-surface-1 z-10 border-b border-border">Topics</th>}
+              {sortOptions.map((s) => {
+                const isSecondary = s.value === "weighted_engagement" || s.value === "reactions" || s.value === "comments";
+                return (
+                  <th
+                    key={s.value}
+                    onClick={() => toggleSort(s.value)}
+                    title={"title" in s ? s.title : undefined}
+                    className={`text-right px-4 py-3 font-medium cursor-pointer hover:text-text-primary w-28 sticky top-[57px] bg-surface-1 z-10 border-b border-border ${isSecondary ? "hidden lg:table-cell" : ""}`}
+                  >
+                    {s.label}
+                    {sortIndicator(s.value)}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -198,7 +203,7 @@ export default function Posts() {
                 <tr
                   key={p.id}
                   onClick={() => handleSelect(p.id)}
-                  className={`border-b border-border/50 cursor-pointer transition-colors hover:bg-surface-2 ${
+                  className={`border-b border-border/50 cursor-pointer transition-colors duration-150 ease-[var(--ease-snappy)] hover:bg-surface-2 ${
                     selected === p.id ? "bg-surface-2 border-l-2 border-l-accent" : ""
                   }`}
                 >
@@ -215,7 +220,7 @@ export default function Posts() {
                   </td>
                   {/* Category */}
                   {showTags && (
-                    <td className="px-3 py-3 align-top">
+                    <td className="hidden xl:table-cell px-3 py-3 align-top">
                       {p.post_category && (
                         <span className="inline-block px-1.5 py-0.5 rounded text-[11px] text-text-secondary border border-border whitespace-nowrap">
                           {p.post_category.replace(/_/g, " ")}
@@ -225,7 +230,7 @@ export default function Posts() {
                   )}
                   {/* Topics */}
                   {showTags && (
-                    <td className="px-3 py-3 align-top">
+                    <td className="hidden xl:table-cell px-3 py-3 align-top">
                       <div className="flex flex-col gap-1">
                         {parseTopics(p.topics).map((topic) => (
                           <span key={topic} className="inline-block px-1.5 py-0.5 rounded text-[11px] text-text-muted whitespace-nowrap w-fit">
@@ -246,13 +251,13 @@ export default function Posts() {
                       ? (p.engagement_rate * 100).toFixed(1) + "%"
                       : "--"}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono">
+                  <td className="hidden lg:table-cell px-4 py-3 text-right font-mono">
                     {fmt(p.weighted_engagement)}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono">
+                  <td className="hidden lg:table-cell px-4 py-3 text-right font-mono">
                     {fmt(p.reactions)}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono">
+                  <td className="hidden lg:table-cell px-4 py-3 text-right font-mono">
                     {fmt(p.comments)}
                   </td>
                 </tr>
@@ -261,7 +266,7 @@ export default function Posts() {
                 {selected === p.id && selectedPost && (
                   <tr key={`${p.id}-detail`} className="border-b border-border/50">
                     <td colSpan={TOTAL_COLS} className="p-0">
-                      <div className="bg-surface-2/50 px-6 py-5 space-y-4">
+                      <div className="bg-surface-2/50 px-6 py-5 space-y-4 animate-fade-up" style={{ animationDuration: "0.25s" }}>
                         {/* Header */}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -342,16 +347,20 @@ export default function Posts() {
                         {/* Metrics grid */}
                         <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                           {[
-                            { label: "Impressions", value: fmt(selectedPost.impressions) },
-                            { label: "Reactions", value: fmt(selectedPost.reactions) },
-                            { label: "Comments", value: fmt(selectedPost.comments) },
-                            { label: "Reposts", value: fmt(selectedPost.reposts) },
-                            { label: "Engagement", value: selectedPost.engagement_rate != null ? (selectedPost.engagement_rate * 100).toFixed(1) + "%" : "--" },
-                            { label: "Saves", value: metrics.length > 0 ? fmt(metrics[metrics.length - 1]?.saves) : "--" },
+                            { label: "Impressions", value: fmt(selectedPost.impressions), primary: true },
+                            { label: "Engagement", value: selectedPost.engagement_rate != null ? (selectedPost.engagement_rate * 100).toFixed(1) + "%" : "--", primary: true },
+                            { label: "Reactions", value: fmt(selectedPost.reactions), primary: false },
+                            { label: "Comments", value: fmt(selectedPost.comments), primary: false },
+                            { label: "Reposts", value: fmt(selectedPost.reposts), primary: false },
+                            { label: "Saves", value: metrics.length > 0 ? fmt(metrics[metrics.length - 1]?.saves) : "--", primary: false },
                           ].map((stat) => (
-                            <div key={stat.label} className="bg-surface-1 rounded-md px-3 py-2 text-center">
+                            <div key={stat.label} className={
+                              stat.primary
+                                ? "bg-surface-1 border border-accent/15 rounded-md px-3 py-3 text-center"
+                                : "bg-surface-1 rounded-md px-3 py-2 text-center"
+                            }>
                               <div className="text-xs text-text-muted">{stat.label}</div>
-                              <div className="text-sm font-mono font-medium text-text-primary">{stat.value}</div>
+                              <div className={`font-mono font-medium text-text-primary tabular-nums ${stat.primary ? "text-base" : "text-sm"}`}>{stat.value}</div>
                             </div>
                           ))}
                         </div>
@@ -372,8 +381,8 @@ export default function Posts() {
                                     {
                                       label: "Impressions",
                                       data: metrics.map((m) => m.impressions ?? 0),
-                                      borderColor: "#0a66c2",
-                                      backgroundColor: "rgba(10, 102, 194, 0.1)",
+                                      borderColor: chartColors.accent,
+                                      backgroundColor: chartColors.accentBg,
                                       fill: true,
                                       tension: 0.3,
                                       pointRadius: 3,
@@ -385,8 +394,8 @@ export default function Posts() {
                                   maintainAspectRatio: false,
                                   plugins: { tooltip: {} },
                                   scales: {
-                                    x: { ticks: { color: "#8888a8" }, grid: { color: "#2a2a4a" } },
-                                    y: { ticks: { color: "#8888a8" }, grid: { color: "#2a2a4a" } },
+                                    x: { ticks: chartTick, grid: chartGrid },
+                                    y: { ticks: chartTick, grid: chartGrid },
                                   },
                                 }}
                               />
@@ -401,8 +410,12 @@ export default function Posts() {
             ))}
             {posts.length === 0 && (
               <tr>
-                <td colSpan={TOTAL_COLS} className="px-4 py-8 text-center text-text-muted">
-                  No posts found
+                <td colSpan={TOTAL_COLS} className="px-4 py-16 text-center">
+                  <svg className="w-10 h-10 text-text-muted/40 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V9a2 2 0 012-2h2a2 2 0 012 2v9a2 2 0 01-2 2h-2z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <p className="text-sm font-medium text-text-secondary">No posts yet</p>
+                  <p className="text-xs text-text-muted mt-1 [text-wrap:pretty]">Install the Chrome extension and visit LinkedIn to start syncing posts.</p>
                 </td>
               </tr>
             )}

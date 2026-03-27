@@ -229,10 +229,10 @@ export default function Settings() {
 
   return (
     <div className="space-y-8 max-w-3xl">
-      <h2 className="text-xl font-semibold">Settings</h2>
+      <h2 className="text-xl font-semibold [text-wrap:balance] animate-fade-up">Settings</h2>
 
       {/* ── Profile ─────────────────────────────────────────── */}
-      <section>
+      <section className="animate-fade-up" style={{ animationDelay: "60ms" }}>
         <SectionHeader title="Profile" description="Your identity for AI features" />
         <div className="bg-surface-1 border border-border rounded-lg p-5 space-y-4">
           <div>
@@ -255,13 +255,13 @@ export default function Settings() {
                 <button
                   onClick={() => fileInput.current?.click()}
                   disabled={photoLoading}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
                 >
                   {photoLoading ? "Uploading..." : "Replace"}
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium text-negative hover:bg-negative/10 transition-colors"
+                  className="px-3 py-1.5 rounded-md text-xs font-medium text-negative hover:bg-negative/10 transition-colors duration-150 ease-[var(--ease-snappy)]"
                 >
                   Remove
                 </button>
@@ -271,7 +271,7 @@ export default function Settings() {
             <button
               onClick={() => fileInput.current?.click()}
               disabled={photoLoading}
-              className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
             >
               {photoLoading ? "Uploading..." : "Upload Photo"}
             </button>
@@ -297,7 +297,7 @@ export default function Settings() {
       <PersonaSettings />
 
       {/* ── Writing ─────────────────────────────────────────── */}
-      <section>
+      <section className="animate-fade-up" style={{ animationDelay: "120ms" }}>
         <SectionHeader title="Writing" description="Your LinkedIn writing guidelines" />
         <div className="bg-surface-1 border border-border rounded-lg p-5 space-y-4">
           <div>
@@ -312,21 +312,21 @@ export default function Settings() {
             onChange={(e) => setPromptText(e.target.value)}
             rows={6}
             placeholder="e.g. Always start with a compelling question. Use short paragraphs. End with a call to action..."
-            className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent resize-none"
+            className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
           />
 
           <div className="flex items-center gap-3">
             <button
               onClick={handleSavePrompt}
               disabled={promptLoading}
-              className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
             >
               {promptLoading ? "Saving..." : promptSaved ? "Saved" : "Save Prompt"}
             </button>
             <button
               onClick={handleCopyPrompt}
               disabled={copyLoading || !promptText.trim()}
-              className="px-4 py-2 rounded-md text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded-md text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
               title="Copy your writing prompt with top performing posts as a style guide"
             >
               {copyLoading ? "Loading..." : copied ? "Copied!" : "Copy Prompt"}
@@ -337,7 +337,7 @@ export default function Settings() {
             <div className="space-y-2">
               <button
                 onClick={() => setHistoryOpen((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 <span className={`transition-transform ${historyOpen ? "rotate-90" : ""}`}>&#9654;</span>
                 Revision history ({promptHistory.length})
@@ -372,7 +372,7 @@ export default function Settings() {
       </section>
 
       {/* ── AI Analysis ─────────────────────────────────────── */}
-      <section>
+      <section className="animate-fade-up" style={{ animationDelay: "180ms" }}>
         <SectionHeader title="AI Analysis" description="Configure when the AI interprets your data" />
 
         {/* Schedule & Threshold */}
@@ -390,7 +390,7 @@ export default function Settings() {
                   <button
                     key={option}
                     onClick={() => handleScheduleChange(option)}
-                    className={`px-3.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                    className={`px-3.5 py-1.5 rounded text-xs font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                       schedule === option
                         ? "bg-accent text-white shadow-sm"
                         : "text-text-muted hover:text-text-primary"
@@ -414,7 +414,7 @@ export default function Settings() {
                   max={50}
                   value={postThreshold}
                   onChange={(e) => handleThresholdChange(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
-                  className="w-16 bg-surface-2 border border-border rounded-md px-2 py-1.5 text-sm text-text-primary text-center focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-16 bg-surface-2 border border-border rounded-md px-2 py-1.5 text-sm text-text-primary text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <span className="text-xs text-text-muted">posts</span>
               </div>
@@ -447,7 +447,7 @@ export default function Settings() {
             <div className="space-y-2">
               <button
                 onClick={() => setRunsOpen((v) => !v)}
-                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 <span className={`transition-transform ${runsOpen ? "rotate-90" : ""}`}>&#9654;</span>
                 Run history ({aiRuns.length})
@@ -514,7 +514,7 @@ export default function Settings() {
               </code>
               <button
                 onClick={() => setTokenVisible(!tokenVisible)}
-                className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
+                className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 {tokenVisible ? "Hide" : "Show"}
               </button>
@@ -546,7 +546,7 @@ export default function Settings() {
             await api.setSetting("onboarding_complete", "false");
             window.location.reload();
           }}
-          className="text-[12px] text-text-muted hover:text-text-primary transition-colors"
+          className="text-[12px] text-text-muted hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]"
         >
           Re-run setup wizard
         </button>
@@ -642,7 +642,7 @@ function PersonaSettings() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Acme Corp"
-                className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent"
               />
             </div>
             <div>
@@ -652,7 +652,7 @@ function PersonaSettings() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://www.linkedin.com/company/12345678/"
-                className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent"
               />
               <p className="text-xs text-text-muted mt-1">
                 Use the admin URL with the numeric ID. Find it at your page's admin dashboard: linkedin.com/company/<strong>12345678</strong>/admin/dashboard
@@ -663,13 +663,13 @@ function PersonaSettings() {
               <button
                 onClick={handleAdd}
                 disabled={saving}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
               >
                 {saving ? "Adding..." : "Add Persona"}
               </button>
               <button
                 onClick={() => { setShowForm(false); setError(null); setName(""); setUrl(""); }}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors"
+                className="px-4 py-2 rounded-md text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Cancel
               </button>
@@ -678,7 +678,7 @@ function PersonaSettings() {
         ) : (
           <button
             onClick={() => setShowForm(true)}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+            className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)]"
           >
             Add Company Page
           </button>
@@ -758,7 +758,7 @@ function ApiKeysManager() {
               value={values[k.key] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [k.key]: e.target.value }))}
               placeholder={k.configured ? "Paste to replace" : `${k.prefix}...`}
-              className="w-full bg-surface-2 border border-border rounded-md px-2.5 py-1.5 text-[12px] text-text-primary focus:outline-none focus:border-accent font-mono"
+              className="w-full bg-surface-2 border border-border rounded-md px-2.5 py-1.5 text-[12px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent font-mono"
             />
           </div>
         </div>

@@ -155,7 +155,7 @@ function KeyInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={config.configured ? "Already configured (paste to replace)" : `Paste your key (${config.prefix}...)`}
-        className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-accent font-mono"
+        className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-[13px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent font-mono"
       />
       <a
         href={config.url}

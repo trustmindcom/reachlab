@@ -33,7 +33,7 @@ export default function RuleSection({
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-gen-bg-2 hover:bg-gen-bg-3 transition-colors"
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-gen-bg-2 hover:bg-gen-bg-3 transition-colors duration-150 ease-[var(--ease-snappy)]"
       >
         <div className="flex items-center gap-3">
           <svg
@@ -54,7 +54,7 @@ export default function RuleSection({
               e.stopPropagation();
               masterToggle.onToggle(!masterToggle.enabled);
             }}
-            className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${
+            className={`w-9 h-5 rounded-full transition-colors duration-150 ease-[var(--ease-snappy)] relative cursor-pointer ${
               masterToggle.enabled ? "bg-gen-accent" : "bg-gen-bg-3"
             }`}
           >
@@ -92,7 +92,7 @@ export default function RuleSection({
                 }
               }}
               placeholder={`Add a ${categoryLabel} rule...`}
-              className="w-full bg-transparent text-[13px] text-gen-text-2 placeholder:text-gen-text-4 focus:outline-none"
+              className="w-full bg-transparent text-[13px] text-gen-text-2 placeholder:text-gen-text-4 focus-visible:outline-none"
             />
           </div>
         </div>

@@ -161,7 +161,7 @@ export default function ExtensionSetup({ onNext, onSkip }: ExtensionSetupProps) 
 
       <button
         onClick={onSkip}
-        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors"
+        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
       >
         I'll do this later
       </button>

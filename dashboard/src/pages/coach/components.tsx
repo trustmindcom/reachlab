@@ -154,7 +154,7 @@ export function TimingGrid({ slots }: { slots: TimingSlot[] }) {
     <div className="animate-fade-up" style={{ animationDelay: "360ms" }}>
       <button onClick={() => setTimingOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
         <span className={`text-[10px] text-text-muted transition-transform ${timingOpen ? "rotate-90" : ""}`}>&#9654;</span>
-        <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+        <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
           Best Times to Post
         </h3>
         <span className="text-[11px] text-text-muted">When does your audience engage most?</span>
@@ -268,13 +268,13 @@ export function PerformanceTable({
           {sorted.map((row) => (
             <tr
               key={row.name}
-              className={`border-b border-border/50 hover:bg-surface-2/50 transition-colors ${row.median_wer === bestWer ? "bg-positive/5" : ""}`}
+              className={`border-b border-border/50 hover:bg-surface-2/50 transition-colors duration-150 ease-[var(--ease-snappy)] ${row.median_wer === bestWer ? "bg-positive/5" : ""}`}
             >
               <td className="px-4 py-2.5 text-text-primary font-medium">{formatCategory(row.name)}</td>
-              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{row.post_count}</td>
-              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{row.median_wer.toFixed(1)}%</td>
-              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{fmtNum(row.median_impressions)}</td>
-              <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{row.median_comments.toFixed(1)}</td>
+              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-text-secondary">{row.post_count}</td>
+              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-text-secondary">{row.median_wer.toFixed(1)}%</td>
+              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-text-secondary">{fmtNum(row.median_impressions)}</td>
+              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-text-secondary">{row.median_comments.toFixed(1)}</td>
             </tr>
           ))}
         </tbody>

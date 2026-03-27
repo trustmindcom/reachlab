@@ -158,7 +158,7 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
 
               <button
                 onClick={handleStop}
-                className="w-full py-3 rounded-lg text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors border border-border"
+                className="w-full py-3 rounded-lg text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)] border border-border"
               >
                 End Interview
               </button>
@@ -190,7 +190,7 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
                   value={extractedText}
                   onChange={(e) => setExtractedText(e.target.value)}
                   rows={6}
-                  className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent resize-none"
+                  className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
                 />
                 <span className="text-xs text-text-muted">~{Math.ceil(extractedText.length / 4)} tokens</span>
               </div>
@@ -222,7 +222,7 @@ export default function InterviewModal({ onClose, onComplete }: InterviewModalPr
                 </button>
                 <button
                   onClick={() => { setPhase("pre"); }}
-                  className="px-4 py-3 rounded-lg text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors border border-border"
+                  className="px-4 py-3 rounded-lg text-sm font-medium bg-surface-2 text-text-primary hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)] border border-border"
                 >
                   Redo Interview
                 </button>

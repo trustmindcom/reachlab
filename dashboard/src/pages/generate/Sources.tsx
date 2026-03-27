@@ -76,12 +76,12 @@ export default function Sources() {
             onChange={(e) => { setUrlInput(e.target.value); setError(null); }}
             onKeyDown={(e) => { if (e.key === "Enter" && !adding) handleAdd(); }}
             placeholder="e.g. krebsonsecurity.com"
-            className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-2.5 text-[13px] text-gen-text-0 placeholder:text-gen-text-3 focus:outline-none focus:border-gen-accent"
+            className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-2.5 text-[13px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent"
           />
           <button
             onClick={handleAdd}
             disabled={!urlInput.trim() || adding}
-            className="px-5 py-2.5 bg-gen-accent text-white text-[13px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 bg-gen-accent text-white text-[13px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {adding ? "Finding..." : "Add"}
           </button>
@@ -114,7 +114,7 @@ export default function Sources() {
         {sources.map((source) => (
           <div
             key={source.id}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors ${
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors duration-150 ease-[var(--ease-snappy)] ${
               source.enabled
                 ? "bg-gen-bg-1 border-gen-border-1"
                 : "bg-gen-bg-0 border-gen-border-1 opacity-50"
@@ -123,7 +123,7 @@ export default function Sources() {
             {/* Toggle */}
             <button
               onClick={() => handleToggle(source)}
-              className={`w-8 h-[18px] rounded-full relative transition-colors flex-shrink-0 cursor-pointer ${
+              className={`w-8 h-[18px] rounded-full relative transition-colors duration-150 ease-[var(--ease-snappy)] flex-shrink-0 cursor-pointer ${
                 source.enabled ? "bg-gen-accent" : "bg-gen-bg-4"
               }`}
             >
@@ -143,7 +143,7 @@ export default function Sources() {
             {/* Delete */}
             <button
               onClick={() => handleDelete(source)}
-              className="text-gen-text-4 hover:text-red-400 transition-colors flex-shrink-0 cursor-pointer"
+              className="text-gen-text-4 hover:text-red-400 transition-colors duration-150 ease-[var(--ease-snappy)] flex-shrink-0 cursor-pointer"
               title="Remove source"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">

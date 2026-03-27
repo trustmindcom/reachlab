@@ -122,7 +122,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
               }
             }}
             placeholder="e.g. Lead with the contrarian hook, use the operator's examples, close with the future angle..."
-            className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-4 py-3 text-[14px] text-gen-text-1 placeholder:text-gen-text-3 resize-none h-20 focus:outline-none focus:border-gen-accent-border"
+            className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-4 py-3 text-[14px] text-gen-text-1 placeholder:text-gen-text-3 resize-none h-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
           />
         </div>
       )}
@@ -131,7 +131,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-gen-border-1">
         <button
           onClick={onBack}
-          className="text-[13px] text-gen-text-2 hover:text-gen-text-0 transition-colors"
+          className="text-[13px] text-gen-text-2 hover:text-gen-text-0 transition-colors duration-150 ease-[var(--ease-snappy)]"
         >
           Back to stories
         </button>
@@ -144,7 +144,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
           <button
             onClick={handleCombineAndReview}
             disabled={selectedCount === 0}
-            className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {actionLabel}
           </button>

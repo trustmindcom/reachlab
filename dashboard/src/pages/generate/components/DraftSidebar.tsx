@@ -38,7 +38,7 @@ export default function DraftSidebar({
               )}
               <button
                 onClick={() => onActivate(i)}
-                className={`w-full text-left pl-4 pr-3 py-3 rounded-lg transition-colors ${
+                className={`w-full text-left pl-4 pr-3 py-3 rounded-lg transition-colors duration-150 ease-[var(--ease-snappy)] ${
                   isActive ? "bg-gen-bg-2" : "hover:bg-gen-bg-2/50"
                 }`}
               >
@@ -62,7 +62,7 @@ export default function DraftSidebar({
                         e.stopPropagation();
                         onToggleInclude(i);
                       }}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-150 ease-[var(--ease-snappy)] ${
                         isIncluded ? "bg-gen-accent" : "bg-gen-bg-3"
                       }`}
                     >

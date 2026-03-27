@@ -64,8 +64,8 @@ export default function Timing() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Posting Time Analysis</h2>
-        <p className="text-sm text-text-secondary mt-1">
+        <h2 className="text-xl font-semibold [text-wrap:balance]">Posting Time Analysis</h2>
+        <p className="text-sm text-text-secondary mt-1 [text-wrap:pretty]">
           Color intensity shows average engagement rate for posts published at
           each day/hour
         </p>
@@ -77,11 +77,15 @@ export default function Timing() {
       </div>
 
       {slots.length === 0 ? (
-        <div className="bg-surface-1 border border-border rounded-lg p-12 text-center text-text-muted">
-          No timing data yet. Sync some posts first.
+        <div className="bg-surface-1 border border-border rounded-lg p-16 text-center animate-fade-up">
+          <svg className="w-10 h-10 text-text-muted/40 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" strokeLinecap="round" />
+          </svg>
+          <p className="text-sm font-medium text-text-secondary">No timing data yet</p>
+          <p className="text-xs text-text-muted mt-1 [text-wrap:pretty]">Sync at least a few posts to see when your audience engages most.</p>
         </div>
       ) : (
-        <div className="bg-surface-1 border border-border rounded-lg p-5 overflow-x-auto">
+        <div className="bg-surface-1 border border-border rounded-lg p-5 overflow-x-auto animate-fade-up">
           <table className="w-full">
             <thead>
               <tr>
@@ -107,7 +111,7 @@ export default function Timing() {
                     return (
                       <td key={hour} className="p-0.5">
                         <div
-                          className={`w-full aspect-square rounded-sm ${cellColor(slot)} transition-colors`}
+                          className={`w-full aspect-square rounded-sm ${cellColor(slot)} transition-colors duration-150 ease-[var(--ease-snappy)]`}
                           title={
                             slot
                               ? `${day} ${formatHour(hour)}: ${

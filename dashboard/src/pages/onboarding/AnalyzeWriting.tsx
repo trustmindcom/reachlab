@@ -190,7 +190,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
                 value={writingPrompt}
                 onChange={(e) => setWritingPrompt(e.target.value)}
                 rows={6}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-accent resize-none"
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
               />
               <button
                 onClick={savePrompt}

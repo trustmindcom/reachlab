@@ -110,7 +110,7 @@ export default function Rules() {
         <button
           onClick={handleReset}
           disabled={saving}
-          className="text-[12px] text-gen-text-3 hover:text-gen-text-1 transition-colors disabled:opacity-50"
+          className="text-[12px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
         >
           Reset to defaults
         </button>

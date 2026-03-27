@@ -108,7 +108,7 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
           {sources.map((s, i) => (
             <label
               key={i}
-              className="flex items-start gap-3 p-3 bg-surface-2 border border-border rounded-lg cursor-pointer hover:bg-surface-3 transition-colors"
+              className="flex items-start gap-3 p-3 bg-surface-2 border border-border rounded-lg cursor-pointer hover:bg-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               <input
                 type="checkbox"
@@ -135,7 +135,7 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
           onChange={(e) => setManualUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addManual()}
           placeholder="Add a website URL..."
-          className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+          className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent"
         />
         <button
           onClick={addManual}
@@ -156,7 +156,7 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
 
       <button
         onClick={onSkip}
-        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors"
+        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
       >
         Use default sources
       </button>

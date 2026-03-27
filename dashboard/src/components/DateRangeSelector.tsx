@@ -17,7 +17,7 @@ export default function DateRangeSelector({ selected, onChange }: Props) {
         <button
           key={r.label}
           onClick={() => onChange(r.days)}
-          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+          className={`px-3 py-1 rounded text-xs font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
             selected === r.days
               ? "bg-surface-3 text-text-primary"
               : "text-text-secondary hover:text-text-primary"

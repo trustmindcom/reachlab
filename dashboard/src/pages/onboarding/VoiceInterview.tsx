@@ -178,7 +178,7 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
               value={extractedText}
               onChange={(e) => setExtractedText(e.target.value)}
               rows={6}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-accent resize-none"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
             />
           </div>
           <button
@@ -192,7 +192,7 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
 
       <button
         onClick={onSkip}
-        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors"
+        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
       >
         Skip for now
       </button>

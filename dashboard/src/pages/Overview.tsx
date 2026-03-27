@@ -103,7 +103,7 @@ export default function Overview() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {syncWarnings.length > 0 && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm text-yellow-200">
           <span className="font-medium">Sync issue detected:</span>{" "}
@@ -119,18 +119,18 @@ export default function Overview() {
               {e.consecutive_count > 1 && ` (${e.consecutive_count} consecutive failures)`}
             </p>
           ))}
-          <p className="text-amber-200/50 text-xs mt-2">
+          <p className="text-amber-200/50 text-xs mt-2 [text-wrap:pretty]">
             This usually means LinkedIn changed their page structure. The extension may need an update.
           </p>
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Overview</h2>
+      <div className="flex items-center justify-between animate-fade-up">
+        <h2 className="text-xl font-semibold [text-wrap:balance]">Overview</h2>
         <div className="flex items-center gap-3">
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
           >
             {refreshing ? "Refreshing..." : "Refresh AI"}
           </button>
@@ -139,24 +139,34 @@ export default function Overview() {
       </div>
 
       {/* AI Summary Card */}
-      {aiOverview ? (
-        <div className="bg-gradient-to-r from-accent/10 via-accent/5 to-surface-1 border border-accent/20 rounded-lg p-5">
-          <h3 className="text-sm font-medium text-accent mb-2">AI Summary</h3>
-          <p className="text-sm text-text-primary leading-relaxed">
-            {aiOverview.summary_text}
-          </p>
-        </div>
-      ) : (
-        <div className="bg-surface-1 border border-border rounded-lg p-5 text-center">
-          <p className="text-sm text-text-muted">
-            AI insights are not available yet. Click{" "}
-            <strong>Refresh AI</strong> to generate your first analysis.
-          </p>
-        </div>
-      )}
+      <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
+        {aiOverview ? (
+          <div className="bg-surface-1 border-l-2 border-l-accent border border-border rounded-lg p-5">
+            <h3 className="text-sm font-medium text-accent mb-2">AI Summary</h3>
+            <p className="text-sm text-text-primary leading-relaxed [text-wrap:pretty]">
+              {aiOverview.summary_text}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-surface-1 border border-border rounded-lg p-8 text-center">
+            <svg className="w-8 h-8 text-accent/40 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <p className="text-sm font-medium text-text-secondary">AI insights not generated yet</p>
+            <p className="text-xs text-text-muted mt-1 mb-3 [text-wrap:pretty]">Click below to analyze your posts and generate personalized insights.</p>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 rounded-md text-sm font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
+            >
+              {refreshing ? "Generating..." : "Generate Insights"}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* KPI Cards with % change */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-up" style={{ animationDelay: "120ms" }}>
         <KPICard
           label="Impressions"
           value={fmt(overview?.total_impressions)}
@@ -165,6 +175,7 @@ export default function Overview() {
             prevOverview?.total_impressions,
             range,
           )}
+          variant="hero"
         />
         <KPICard
           label="Avg Engagement"
@@ -195,14 +206,14 @@ export default function Overview() {
         />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid md:grid-cols-2 gap-4 mt-8 animate-fade-up" style={{ animationDelay: "180ms" }}>
         {/* Top Performer Card */}
         {aiOverview?.top_performer_reason && (
           <div className="bg-positive/5 border border-positive/20 rounded-lg p-5">
             <h3 className="text-sm font-medium text-positive mb-2">
               Top Performer
             </h3>
-            <p className="text-sm text-text-primary leading-relaxed">
+            <p className="text-sm text-text-primary leading-relaxed [text-wrap:pretty]">
               {aiOverview.top_performer_reason}
             </p>
             {aiOverview.top_performer_post_id && (
@@ -231,7 +242,7 @@ export default function Overview() {
                   className="flex items-start gap-2 text-sm text-text-primary"
                 >
                   <span className="text-accent mt-0.5 shrink-0">&#8226;</span>
-                  <span>{insight}</span>
+                  <span className="[text-wrap:pretty]">{insight}</span>
                 </li>
               ))}
             </ul>

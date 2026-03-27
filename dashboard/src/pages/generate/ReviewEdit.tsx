@@ -142,7 +142,7 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
         {/* Editor panel */}
         <div className="flex-1 min-w-0">
           <div
-            className={`rounded-xl border transition-colors p-5 ${
+            className={`rounded-xl border transition-colors duration-150 ease-[var(--ease-snappy)] p-5 ${
               isFocused
                 ? "border-gen-accent/40 bg-gen-bg-1/50"
                 : "border-gen-border-1 bg-gen-bg-1/30 hover:border-gen-border-2"
@@ -154,7 +154,7 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
               onChange={(e) => setLocalDraft(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              className="w-full bg-transparent text-[15.5px] leading-[1.85] text-gen-text-1 resize-none focus:outline-none min-h-[300px]"
+              className="w-full bg-transparent text-[15.5px] leading-[1.85] text-gen-text-1 resize-none focus-visible:outline-none min-h-[300px]"
               style={{ fontFamily: "var(--font-sans)" }}
             />
           </div>
@@ -163,26 +163,26 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
           <div className="flex items-center justify-between mt-3">
             <div className="flex items-center gap-3">
               <span className="text-[12px] text-gen-text-3">{wordCount} words</span>
-              <button onClick={onBack} className="text-[12px] text-gen-text-3 hover:text-gen-text-1 transition-colors">
+              <button onClick={onBack} className="text-[12px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]">
                 Back to drafts
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={handleCopy} className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-1 text-[13px] font-medium rounded-[10px] hover:border-gen-border-3 transition-colors">
+              <button onClick={handleCopy} className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-1 text-[13px] font-medium rounded-[10px] hover:border-gen-border-3 transition-colors duration-150 ease-[var(--ease-snappy)]">
                 {copied ? "Copied!" : "Copy to clipboard"}
               </button>
-              <button onClick={handleOpenLinkedIn} className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors">
+              <button onClick={handleOpenLinkedIn} className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)]">
                 Open in LinkedIn
               </button>
               {onRetro && (
-                <button onClick={onRetro} className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-2 text-[13px] font-medium rounded-[10px] hover:border-gen-accent/40 hover:text-gen-accent transition-colors">
+                <button onClick={onRetro} className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-2 text-[13px] font-medium rounded-[10px] hover:border-gen-accent/40 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)]">
                   Post Retro
                 </button>
               )}
               <button
                 onClick={() => sendMessage(regeneratePrompt)}
                 disabled={loading}
-                className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-2 text-[13px] font-medium rounded-[10px] hover:border-gen-border-3 hover:text-gen-text-1 transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-2 text-[13px] font-medium rounded-[10px] hover:border-gen-border-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
               >
                 Regenerate
               </button>
@@ -216,12 +216,12 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
                   }
                 }}
                 placeholder={placeholderText}
-                className="flex-1 bg-gen-bg-2 border border-gen-border-2 rounded-lg px-3 py-2 text-[13px] text-gen-text-1 placeholder:text-gen-text-3 focus:outline-none focus:border-gen-accent-border"
+                className="flex-1 bg-gen-bg-2 border border-gen-border-2 rounded-lg px-3 py-2 text-[13px] text-gen-text-1 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
               />
               <button
                 onClick={() => { if (chatInput.trim()) sendMessage(chatInput); }}
                 disabled={!chatInput.trim() || loading}
-                className="px-4 py-2 bg-gen-accent text-white text-[12px] font-medium rounded-lg transition-colors disabled:opacity-40 disabled:bg-gen-bg-3 disabled:text-gen-text-3"
+                className="px-4 py-2 bg-gen-accent text-white text-[12px] font-medium rounded-lg transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:bg-gen-bg-3 disabled:text-gen-text-3"
               >
                 {loading ? "..." : "Send"}
               </button>

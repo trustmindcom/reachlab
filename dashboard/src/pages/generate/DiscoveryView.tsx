@@ -211,12 +211,12 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               onChange={(e) => setTopicInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleGoTopic(); }}
               placeholder="I want to write about..."
-              className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3 text-[14px] text-gen-text-0 placeholder:text-gen-text-3 focus:outline-none focus:border-gen-accent"
+              className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3 text-[14px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent"
             />
             <button
               onClick={handleGoTopic}
               disabled={!topicInput.trim()}
-              className="px-6 py-3 bg-gen-accent text-white text-[14px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-gen-accent text-white text-[14px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Go
             </button>
@@ -266,7 +266,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 <span className="text-gen-text-4">·</span>
                 <button
                   onClick={handleRefresh}
-                  className="text-[12px] text-gen-text-3 hover:text-gen-accent transition-colors cursor-pointer"
+                  className="text-[12px] text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer"
                 >
                   Find new topics
                 </button>
@@ -279,7 +279,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
             <div className="text-center py-10">
               <button
                 onClick={handleDiscover}
-                className="px-5 py-2.5 border border-gen-border-1 rounded-[10px] text-[13px] text-gen-text-2 hover:text-gen-text-0 hover:border-gen-border-2 transition-colors"
+                className="px-5 py-2.5 border border-gen-border-1 rounded-[10px] text-[13px] text-gen-text-2 hover:text-gen-text-0 hover:border-gen-border-2 transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Load trending topics
               </button>
@@ -297,7 +297,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
             </h2>
             <button
               onClick={handleBackToTopics}
-              className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors"
+              className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Back to topics
             </button>
@@ -337,7 +337,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 }}
                 rows={3}
                 placeholder='e.g. "We migrated off Heroku to AWS and it took 6 months longer than estimated..."'
-                className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[13px] text-gen-text-0 placeholder:text-gen-text-3 focus:outline-none focus:border-gen-accent resize-none"
+                className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[13px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
               />
             </div>
           )}
@@ -353,7 +353,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                   <button
                     key={len}
                     onClick={() => setGen((prev: any) => ({ ...prev, draftLength: len }))}
-                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors capitalize ${
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
                       gen.draftLength === len
                         ? "bg-gen-bg-0 text-gen-text-0 shadow-sm"
                         : "text-gen-text-3 hover:text-gen-text-1"
@@ -366,7 +366,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               <button
                 onClick={handleGenerateDrafts}
                 disabled={gen.selectedStoryIndex === null || loading}
-                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Generate drafts
               </button>

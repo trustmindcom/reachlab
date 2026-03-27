@@ -160,7 +160,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                     value={publishedText}
                     onChange={(e) => setPublishedText(e.target.value)}
                     placeholder="Paste the final version you published on LinkedIn..."
-                    className="w-full bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-primary leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-accent"
+                    className="w-full bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-primary leading-relaxed resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                     rows={16}
                     disabled={analyzing}
                   />
@@ -175,7 +175,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
               <button
                 onClick={handleAnalyze}
                 disabled={!publishedText.trim()}
-                className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
               >
                 Analyze Differences
               </button>
@@ -274,7 +274,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                         <button
                           onClick={() => handleAddRule(rule, i)}
                           disabled={applied}
-                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                             applied
                               ? "bg-positive/10 text-positive border border-positive/20"
                               : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
@@ -320,7 +320,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                         <button
                           onClick={() => handleApplyPromptEdit(edit, i)}
                           disabled={applied}
-                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                             applied
                               ? "bg-positive/10 text-positive border border-positive/20"
                               : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
@@ -340,7 +340,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           <button
             onClick={handleAnalyze}
             disabled={analyzing || !publishedText.trim()}
-            className="text-[12px] text-text-muted hover:text-accent transition-colors"
+            className="text-[12px] text-text-muted hover:text-accent transition-colors duration-150 ease-[var(--ease-snappy)]"
           >
             Re-analyze
           </button>

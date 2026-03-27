@@ -200,7 +200,7 @@ export default function Coach() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`relative px-5 py-2.5 text-[13px] font-medium transition-colors ${
+            className={`relative px-5 py-2.5 text-[13px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
               tab === t.key
                 ? "text-text-primary font-semibold"
                 : "text-text-secondary hover:text-text-primary"
@@ -236,7 +236,7 @@ export default function Coach() {
           <button
             onClick={() => handleRefresh(true)}
             disabled={refreshing}
-            className="px-3 py-1.5 rounded-md text-xs font-medium text-accent hover:bg-accent/8 transition-colors disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium text-accent hover:bg-accent/8 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
           >
             {refreshing ? "Regenerating..." : "Regenerate"}
           </button>
@@ -288,7 +288,7 @@ export default function Coach() {
                               <button
                                 onClick={() => handleApplyRetroEdit(retro.generation_id, i, edit)}
                                 disabled={applied}
-                                className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
+                                className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                                   applied
                                     ? "bg-positive/10 text-positive border border-positive/20"
                                     : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"

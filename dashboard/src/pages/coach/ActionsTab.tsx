@@ -65,12 +65,12 @@ export function ActionsTab({
             { label: "Median Impressions", current: progress.current.median_impressions, prev: progress.previous.median_impressions, fmt: (v: number | null) => fmtNum(v), sparkData: sparklinePoints.map((p) => p.impressions) },
             { label: "Posts", current: progress.current.total_posts, prev: progress.previous.total_posts, fmt: (v: number | null) => fmtNum(v), sparkData: [] as number[] },
             { label: "Avg Comments", current: progress.current.avg_comments, prev: progress.previous.avg_comments, fmt: (v: number | null) => v != null ? v.toFixed(1) : "--", sparkData: sparklinePoints.map((p) => p.comments) },
-          ].map((m) => (
-            <div key={m.label} className="bg-surface-1 border border-border rounded-lg p-4">
+          ].map((m, idx) => (
+            <div key={m.label} className={idx === 0 ? "bg-surface-1 border border-accent/20 rounded-lg p-5" : "bg-surface-1 border border-border rounded-lg p-4"}>
               <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">{m.label}</div>
               <div className="flex items-end justify-between gap-2">
                 <div>
-                  <div className="text-xl font-semibold font-mono tracking-tight">{m.fmt(m.current)}</div>
+                  <div className="text-xl font-semibold font-mono tracking-tight tabular-nums">{m.fmt(m.current)}</div>
                   {deltaLabel(m.current, m.prev) && (
                     <div className={`text-sm font-mono mt-0.5 ${deltaClass(m.current, m.prev)}`}>
                       {deltaLabel(m.current, m.prev)} vs prev 30d
@@ -193,13 +193,13 @@ export function ActionsTab({
                       onAcceptSuggestion(suggIdx, linkedSuggestion);
                       setAcceptedSuggestions((prev) => new Set([...prev, suggIdx]));
                     }}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/18 transition-colors"
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/18 transition-colors duration-150 ease-[var(--ease-snappy)]"
                   >
                     Apply to prompt
                   </button>
                   <button
                     onClick={() => setRejectedSuggestions((prev) => new Set([...prev, suggIdx]))}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-3 text-text-muted hover:text-text-secondary transition-colors"
+                    className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-3 text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
                   >
                     Dismiss
                   </button>
@@ -216,13 +216,13 @@ export function ActionsTab({
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => onResolve(rec.id, "accepted")}
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent border border-accent/15 hover:bg-accent/18 transition-colors"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent border border-accent/15 hover:bg-accent/18 transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Got it
               </button>
               <button
                 onClick={() => onResolve(rec.id, "dismissed")}
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-2 text-text-muted border border-border hover:text-text-secondary transition-colors"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-2 text-text-muted border border-border hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Dismiss
               </button>
@@ -275,13 +275,13 @@ export function ActionsTab({
                   onAcceptSuggestion(i, s);
                   setAcceptedSuggestions((prev) => new Set([...prev, i]));
                 }}
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/18 transition-colors"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/18 transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Apply to prompt
               </button>
               <button
                 onClick={() => setRejectedSuggestions((prev) => new Set([...prev, i]))}
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-3 text-text-muted hover:text-text-secondary transition-colors"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-surface-3 text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Dismiss
               </button>

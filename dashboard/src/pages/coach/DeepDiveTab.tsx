@@ -44,7 +44,7 @@ export function DeepDiveTab({
       <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
         <button onClick={() => setCategoriesOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
           <span className={`text-[10px] text-text-muted transition-transform ${categoriesOpen ? "rotate-90" : ""}`}>&#9654;</span>
-          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
             Content Opportunities
           </h3>
           <span className="text-[11px] text-text-muted">What should I write next?</span>
@@ -64,7 +64,7 @@ export function DeepDiveTab({
               </thead>
               <tbody>
                 {categories.map((cat) => (
-                  <tr key={cat.category} className="border-b border-border/50 hover:bg-surface-2/50 transition-colors">
+                  <tr key={cat.category} className="border-b border-border/50 hover:bg-surface-2/50 transition-colors duration-150 ease-[var(--ease-snappy)]">
                     <td className="px-4 py-2.5 text-text-primary font-medium">{formatCategory(cat.category)}</td>
                     <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{cat.post_count}</td>
                     <td className="px-4 py-2.5 text-right font-mono text-text-secondary">{cat.median_er?.toFixed(1)}%</td>
@@ -86,7 +86,7 @@ export function DeepDiveTab({
       <div className="animate-fade-up" style={{ animationDelay: "120ms" }}>
         <button onClick={() => setEngagementOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
           <span className={`text-[10px] text-text-muted transition-transform ${engagementOpen ? "rotate-90" : ""}`}>&#9654;</span>
-          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
             Engagement Quality
           </h3>
           <span className="text-[11px] text-text-muted">What kind of engagement am I getting?</span>
@@ -98,7 +98,7 @@ export function DeepDiveTab({
                 <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">Comment Ratio</div>
                 <div className="flex items-end justify-between gap-2">
                   <div>
-                    <div className="text-xl font-semibold font-mono tracking-tight">{engagement.comment_ratio?.toFixed(2) ?? "--"}</div>
+                    <div className="text-xl font-semibold font-mono tracking-tight tabular-nums">{engagement.comment_ratio?.toFixed(2) ?? "--"}</div>
                     <div className="text-[10px] text-text-muted mt-0.5">comments per reaction</div>
                   </div>
                   {sparklinePoints.length >= 2 && (
@@ -110,7 +110,7 @@ export function DeepDiveTab({
                 <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">Save Rate</div>
                 <div className="flex items-end justify-between gap-2">
                   <div>
-                    <div className="text-xl font-semibold font-mono tracking-tight">{engagement.save_rate?.toFixed(2) ?? "--"}%</div>
+                    <div className="text-xl font-semibold font-mono tracking-tight tabular-nums">{engagement.save_rate?.toFixed(2) ?? "--"}%</div>
                     <div className="text-[10px] text-text-muted mt-0.5">saves / impressions</div>
                   </div>
                   {sparklinePoints.length >= 2 && (
@@ -120,12 +120,12 @@ export function DeepDiveTab({
               </div>
               <div className="bg-surface-1 border border-border rounded-lg p-4">
                 <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">Repost Rate</div>
-                <div className="text-xl font-semibold font-mono tracking-tight">{engagement.repost_rate?.toFixed(2) ?? "--"}%</div>
+                <div className="text-xl font-semibold font-mono tracking-tight tabular-nums">{engagement.repost_rate?.toFixed(2) ?? "--"}%</div>
                 <div className="text-[10px] text-text-muted mt-0.5">reposts / impressions</div>
               </div>
               <div className="bg-surface-1 border border-border rounded-lg p-4">
                 <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1">Total Posts</div>
-                <div className="text-xl font-semibold font-mono tracking-tight">{engagement.total_posts}</div>
+                <div className="text-xl font-semibold font-mono tracking-tight tabular-nums">{engagement.total_posts}</div>
                 <div className="text-[10px] text-text-muted mt-0.5">with metrics</div>
               </div>
             </div>
@@ -136,13 +136,13 @@ export function DeepDiveTab({
               <div className="flex items-end gap-6">
                 <div>
                   <div className="text-sm text-text-muted mb-1">Standard ER</div>
-                  <div className="text-2xl font-semibold font-mono tracking-tight">{engagement.standard_er?.toFixed(2) ?? "--"}%</div>
+                  <div className="text-2xl font-semibold font-mono tracking-tight tabular-nums">{engagement.standard_er?.toFixed(2) ?? "--"}%</div>
                   <div className="text-[10px] text-text-muted">(reactions + comments + reposts) / impressions</div>
                 </div>
                 <div className="text-text-muted text-lg mb-1">vs</div>
                 <div>
                   <div className="text-sm text-accent mb-1 font-medium">Weighted ER</div>
-                  <div className="text-2xl font-semibold font-mono tracking-tight text-accent">{engagement.weighted_er?.toFixed(2) ?? "--"}%</div>
+                  <div className="text-2xl font-semibold font-mono tracking-tight tabular-nums text-accent">{engagement.weighted_er?.toFixed(2) ?? "--"}%</div>
                   <div className="text-[10px] text-text-muted">comments x5 + reposts x3 + saves x3 + sends x3 + reactions x1</div>
                 </div>
               </div>
@@ -164,7 +164,7 @@ export function DeepDiveTab({
         <div className="animate-fade-up" style={{ animationDelay: "180ms" }}>
           <button onClick={() => setTopicsOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
             <span className={`text-[10px] text-text-muted transition-transform ${topicsOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               Topic Performance
             </h3>
             <span className="text-[11px] text-text-muted">Which topics resonate most?</span>
@@ -183,7 +183,7 @@ export function DeepDiveTab({
         <div className="animate-fade-up" style={{ animationDelay: "240ms" }}>
           <button onClick={() => setHooksOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
             <span className={`text-[10px] text-text-muted transition-transform ${hooksOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               Hook &amp; Format Performance
             </h3>
             <span className="text-[11px] text-text-muted">What openings and formats work best?</span>
@@ -218,7 +218,7 @@ export function DeepDiveTab({
         <div className="animate-fade-up" style={{ animationDelay: "300ms" }}>
           <button onClick={() => setImageSubtypesOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
             <span className={`text-[10px] text-text-muted transition-transform ${imageSubtypesOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               Image Subtype Performance
             </h3>
           </button>

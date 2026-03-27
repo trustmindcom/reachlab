@@ -29,7 +29,7 @@ export default function RuleItem({ rule, onUpdate, onDelete }: RuleItemProps) {
           onChange={(e) => setEditText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSave()}
           autoFocus
-          className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-3 py-2 text-[13px] text-gen-text-1 focus:outline-none focus:border-gen-accent-border"
+          className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-3 py-2 text-[13px] text-gen-text-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
         />
         <input
           type="text"
@@ -37,7 +37,7 @@ export default function RuleItem({ rule, onUpdate, onDelete }: RuleItemProps) {
           onChange={(e) => setEditExample(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSave()}
           placeholder="Example (optional, italic)"
-          className="w-full bg-gen-bg-2 border border-gen-border-1 rounded-lg px-3 py-2 text-[12px] text-gen-text-2 italic placeholder:text-gen-text-4 focus:outline-none focus:border-gen-accent-border"
+          className="w-full bg-gen-bg-2 border border-gen-border-1 rounded-lg px-3 py-2 text-[12px] text-gen-text-2 italic placeholder:text-gen-text-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
         />
         <div className="flex gap-2">
           <button onClick={handleSave} className="text-[12px] text-gen-accent hover:underline">Save</button>

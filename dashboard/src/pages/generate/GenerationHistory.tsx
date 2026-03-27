@@ -66,7 +66,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-lg text-[13px] font-medium transition-colors capitalize ${
+            className={`px-3 py-1 rounded-lg text-[13px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
               filter === f
                 ? "bg-gen-accent-soft text-gen-accent border border-gen-accent-border"
                 : "text-gen-text-3 hover:text-gen-text-1 border border-transparent"
@@ -144,7 +144,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
               setOffset(newOffset);
               load(filter, newOffset);
             }}
-            className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors"
+            className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
           >
             Showing {items.length} of {total} generations · Load more
           </button>

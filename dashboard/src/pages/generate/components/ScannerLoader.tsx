@@ -13,13 +13,24 @@ interface Particle {
   maxLife: number;
   size: number;
   hue: number;
+  hueShift: number;       // degrees per frame — each particle drifts color
   orbit: number;
+  orbitAccel: number;      // orbit speed changes over time
   dist: number;
   angle: number;
   trail: { x: number; y: number; alpha: number }[];
   type: "swirl" | "spark" | "floater";
   pulsePhase: number;
   blur: number;
+}
+
+interface RingWave {
+  radius: number;
+  maxRadius: number;
+  alpha: number;
+  hue: number;
+  width: number;
+  speed: number;
 }
 
 export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoaderProps) {
@@ -42,7 +53,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const size = 280;
+    const size = 400;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -51,26 +62,38 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
     const cx = size / 2;
     const cy = size / 2;
     const particles: Particle[] = [];
+    const rings: RingWave[] = [];
     let frame = 0;
     let animId: number;
 
     const hues = [210, 240, 270, 190, 300, 175];
 
-    // Spawn particles of different types
+    // Global heartbeat — all particles feel this rhythm
+    const heartbeat = (t: number) => {
+      const fast = Math.sin(t * 1.8) * 0.5 + 0.5;          // main pulse
+      const slow = Math.sin(t * 0.4) * 0.3 + 0.7;          // slow swell
+      return fast * 0.6 + slow * 0.4;                        // blend
+    };
+
+    // Spawn particles
     const spawn = (type: Particle["type"]) => {
       const angle = Math.random() * Math.PI * 2;
       const hue = hues[Math.floor(Math.random() * hues.length)];
+      // Each particle gets its own hue drift rate (-0.3 to +0.3 deg/frame)
+      const hueShift = (Math.random() - 0.5) * 0.6;
 
       if (type === "swirl") {
-        const dist = 3 + Math.random() * 10;
+        const dist = 3 + Math.random() * 12;
         particles.push({
           x: cx + Math.cos(angle) * dist,
           y: cy + Math.sin(angle) * dist,
           life: 0,
-          maxLife: 100 + Math.random() * 160,
-          size: 1.0 + Math.random() * 2.5,
+          maxLife: 120 + Math.random() * 180,
+          size: 1.0 + Math.random() * 2.8,
           hue,
+          hueShift,
           orbit: (0.008 + Math.random() * 0.02) * (Math.random() > 0.5 ? 1 : -1),
+          orbitAccel: (Math.random() - 0.5) * 0.0002,
           dist,
           angle,
           trail: [],
@@ -79,16 +102,17 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           blur: 0,
         });
       } else if (type === "spark") {
-        // Fast-moving sparks that shoot outward and fade
-        const dist = 8 + Math.random() * 15;
+        const dist = 10 + Math.random() * 20;
         particles.push({
           x: cx + Math.cos(angle) * dist,
           y: cy + Math.sin(angle) * dist,
           life: 0,
-          maxLife: 30 + Math.random() * 40,
-          size: 0.5 + Math.random() * 1.2,
+          maxLife: 35 + Math.random() * 45,
+          size: 0.5 + Math.random() * 1.4,
           hue: hue + Math.random() * 30,
+          hueShift: hueShift * 2,   // sparks shift color faster
           orbit: (0.02 + Math.random() * 0.04) * (Math.random() > 0.5 ? 1 : -1),
+          orbitAccel: (Math.random() - 0.5) * 0.0005,
           dist,
           angle,
           trail: [],
@@ -97,40 +121,54 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           blur: 0,
         });
       } else {
-        // Floaters — large, blurry, slow-drifting orbs
-        const dist = 20 + Math.random() * 40;
+        const dist = 30 + Math.random() * 60;
         particles.push({
           x: cx + Math.cos(angle) * dist,
           y: cy + Math.sin(angle) * dist,
           life: 0,
-          maxLife: 180 + Math.random() * 200,
-          size: 8 + Math.random() * 16,
+          maxLife: 200 + Math.random() * 250,
+          size: 10 + Math.random() * 20,
           hue,
+          hueShift: hueShift * 0.5,  // floaters drift color slowly
           orbit: (0.002 + Math.random() * 0.005) * (Math.random() > 0.5 ? 1 : -1),
+          orbitAccel: (Math.random() - 0.5) * 0.00005,
           dist,
           angle,
           trail: [],
           type,
           pulsePhase: Math.random() * Math.PI * 2,
-          blur: 4 + Math.random() * 8,
+          blur: 5 + Math.random() * 10,
         });
       }
+    };
+
+    // Spawn a ring wave from the core
+    const spawnRing = () => {
+      rings.push({
+        radius: 6 + Math.random() * 4,
+        maxRadius: 100 + Math.random() * 80,
+        alpha: 0.18 + Math.random() * 0.08,
+        hue: hues[Math.floor(Math.random() * hues.length)],
+        width: 1.5 + Math.random() * 2,
+        speed: 0.3 + Math.random() * 1.2,   // some crawl, some shoot
+      });
     };
 
     const draw = () => {
       frame++;
       const t = frame * 0.005;
+      const hb = heartbeat(t);   // 0..1 global pulse
 
       ctx.clearRect(0, 0, size, size);
 
-      // ── Layer 1: Deep ambient nebula (slow, large, soft) ──
+      // ── Layer 1: Deep ambient nebula ──
       for (let i = 0; i < 5; i++) {
         const offset = (i * Math.PI * 2) / 5;
-        const bx = cx + Math.cos(t * 0.3 + offset) * (25 + i * 10);
-        const by = cy + Math.sin(t * 0.4 + offset) * (25 + i * 10);
-        const radius = 55 + Math.sin(t * 0.8 + i * 1.5) * 15;
+        const bx = cx + Math.cos(t * 0.3 + offset) * (35 + i * 14);
+        const by = cy + Math.sin(t * 0.4 + offset) * (35 + i * 14);
+        const radius = 75 + Math.sin(t * 0.8 + i * 1.5) * 20;
         const hue = 215 + i * 22 + Math.sin(t * 0.25 + i) * 15;
-        const alpha = 0.07 + Math.sin(t * 0.5 + i * 2) * 0.025;
+        const alpha = (0.06 + Math.sin(t * 0.5 + i * 2) * 0.02) * (0.8 + hb * 0.2);
 
         const grad = ctx.createRadialGradient(bx, by, 0, bx, by, radius);
         grad.addColorStop(0, `hsla(${hue},70%,60%,${alpha})`);
@@ -143,13 +181,13 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       // ── Layer 2: Morphing plasma blobs ──
       for (let i = 0; i < 6; i++) {
         const offset = (i * Math.PI * 2) / 6;
-        const bx = cx + Math.cos(t * (0.6 + i * 0.12) + offset) * (18 + i * 5);
-        const by = cy + Math.sin(t * (0.8 + i * 0.1) + offset) * (18 + i * 5);
-        const radius = 20 + i * 6 + Math.sin(t * 1.2 + i) * 5;
+        const bx = cx + Math.cos(t * (0.6 + i * 0.12) + offset) * (25 + i * 7);
+        const by = cy + Math.sin(t * (0.8 + i * 0.1) + offset) * (25 + i * 7);
+        const radius = (28 + i * 8 + Math.sin(t * 1.2 + i) * 6) * (0.9 + hb * 0.1);
 
         const blobHues = [210, 245, 275, 195, 305, 230];
-        const hue = blobHues[i] + Math.sin(t * 0.4 + i) * 20;
-        const alpha = 0.14 - i * 0.015;
+        const hue = blobHues[i] + Math.sin(t * 0.4 + i) * 25;
+        const alpha = 0.12 - i * 0.012;
 
         const grad = ctx.createRadialGradient(bx, by, 0, bx, by, radius);
         grad.addColorStop(0, `hsla(${hue},75%,65%,${alpha})`);
@@ -159,25 +197,47 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         ctx.fillRect(0, 0, size, size);
       }
 
-      // ── Layer 3: Floater particles (big blurry drifting orbs) ──
-      if (frame % 20 === 0) spawn("floater");
+      // ── Layer 3: Ring waves ──
+      if (frame % 90 === 0) spawnRing();
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const r = rings[i];
+        r.radius += r.speed + (r.radius / r.maxRadius) * r.speed * 0.5;
+        const progress = r.radius / r.maxRadius;
+        if (progress >= 1) { rings.splice(i, 1); continue; }
+
+        const alpha = r.alpha * (1 - progress) * (1 - progress);
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.beginPath();
+        ctx.arc(cx, cy, r.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `hsla(${r.hue + progress * 30},70%,70%,${alpha})`;
+        ctx.lineWidth = r.width * (1 - progress * 0.5);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // ── Layer 4: Floater particles ──
+      if (frame % 18 === 0) spawn("floater");
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         if (p.type !== "floater") continue;
         p.life++;
         if (p.life > p.maxLife) { particles.splice(i, 1); continue; }
 
+        // Hue drift
+        p.hue += p.hueShift;
+
+        p.orbit += p.orbitAccel;
         p.angle += p.orbit;
-        p.dist += Math.sin(t + p.pulsePhase) * 0.2;
+        p.dist += Math.sin(t + p.pulsePhase) * 0.25;
         p.x = cx + Math.cos(p.angle) * p.dist;
         p.y = cy + Math.sin(p.angle) * p.dist;
 
         const progress = p.life / p.maxLife;
-        // Fade in, hold, fade out
         const fadeIn = Math.min(1, progress / 0.15);
         const fadeOut = Math.max(0, 1 - Math.pow(Math.max(0, (progress - 0.6)) / 0.4, 2));
-        const alpha = fadeIn * fadeOut * 0.12;
-        const pulseSize = p.size * (1 + Math.sin(t * 2 + p.pulsePhase) * 0.3);
+        const alpha = fadeIn * fadeOut * 0.12 * (0.7 + hb * 0.3);
+        const pulseSize = p.size * (1 + Math.sin(t * 2 + p.pulsePhase) * 0.35) * (0.85 + hb * 0.15);
 
         ctx.save();
         ctx.filter = `blur(${p.blur}px)`;
@@ -190,81 +250,126 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         ctx.restore();
       }
 
-      // ── Layer 4: Swirling particles with trails ──
+      // ── Layer 5: Swirling particles with trails + constellation lines ──
       if (frame % 3 === 0) spawn("swirl");
+
+      // Collect visible swirl positions for constellation lines
+      const swirlPositions: { x: number; y: number; hue: number; alpha: number }[] = [];
+
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         if (p.type !== "swirl") continue;
         p.life++;
         if (p.life > p.maxLife) { particles.splice(i, 1); continue; }
 
-        // Store trail position
+        // Hue drift
+        p.hue += p.hueShift;
+
         const progress = p.life / p.maxLife;
         const trailAlpha = progress < 0.1
           ? progress / 0.1
           : 1 - Math.pow((progress - 0.1) / 0.9, 0.5);
         p.trail.push({ x: p.x, y: p.y, alpha: trailAlpha });
-        if (p.trail.length > 12) p.trail.shift();
+        if (p.trail.length > 16) p.trail.shift();
 
-        // Swirl outward with slight wobble
+        // Accelerating/decelerating orbit
+        p.orbit += p.orbitAccel;
         p.angle += p.orbit;
-        p.dist += 0.12 + (p.life / p.maxLife) * 0.35;
-        const wobble = Math.sin(t * 3 + p.pulsePhase) * 2;
+        p.dist += 0.12 + (p.life / p.maxLife) * 0.4;
+        const wobble = Math.sin(t * 3 + p.pulsePhase) * 2.5;
         p.x = cx + Math.cos(p.angle) * (p.dist + wobble);
         p.y = cy + Math.sin(p.angle) * (p.dist + wobble);
 
-        const currentSize = p.size * (1 - progress * 0.2) * (1 + Math.sin(t * 4 + p.pulsePhase) * 0.2);
+        // Heartbeat-driven size pulsing
+        const sizePulse = 1 + Math.sin(t * 4 + p.pulsePhase) * 0.25;
+        const hbSize = 0.85 + hb * 0.15;
+        const currentSize = p.size * (1 - progress * 0.2) * sizePulse * hbSize;
 
-        // Draw trail with gradient opacity
+        // Brightness boost during heartbeat peak
+        const brightnessBoost = hb * 0.15;
+
+        // Draw trail
         if (p.trail.length > 2) {
           ctx.save();
           ctx.globalCompositeOperation = "screen";
           for (let j = 1; j < p.trail.length; j++) {
-            const segAlpha = (j / p.trail.length) * trailAlpha * 0.25;
+            const segAlpha = (j / p.trail.length) * trailAlpha * 0.3;
+            const trailHue = p.hue - (p.trail.length - j) * p.hueShift * 2; // trail shows color history
             ctx.beginPath();
             ctx.moveTo(p.trail[j - 1].x, p.trail[j - 1].y);
             ctx.lineTo(p.trail[j].x, p.trail[j].y);
-            ctx.strokeStyle = `hsla(${p.hue},70%,65%,${segAlpha})`;
+            ctx.strokeStyle = `hsla(${trailHue},70%,${65 + brightnessBoost * 100}%,${segAlpha})`;
             ctx.lineWidth = currentSize * 0.5 * (j / p.trail.length);
             ctx.stroke();
           }
           ctx.restore();
         }
 
-        // Draw particle with pulsing glow
+        // Particle glow + core
         ctx.save();
         ctx.globalCompositeOperation = "screen";
-        // Outer glow
-        const glowSize = currentSize * 3;
+        const glowSize = currentSize * 3.5;
         const glowGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowSize);
-        glowGrad.addColorStop(0, `hsla(${p.hue},80%,75%,${trailAlpha * 0.15})`);
+        glowGrad.addColorStop(0, `hsla(${p.hue},80%,${75 + brightnessBoost * 100}%,${trailAlpha * 0.18})`);
         glowGrad.addColorStop(1, `hsla(${p.hue},80%,60%,0)`);
         ctx.fillStyle = glowGrad;
         ctx.fillRect(p.x - glowSize, p.y - glowSize, glowSize * 2, glowSize * 2);
-        // Core dot
         ctx.beginPath();
         ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue},75%,80%,${trailAlpha * 0.8})`;
+        ctx.fillStyle = `hsla(${p.hue},75%,${80 + brightnessBoost * 100}%,${trailAlpha * 0.85})`;
         ctx.fill();
+        ctx.restore();
+
+        if (trailAlpha > 0.2) {
+          swirlPositions.push({ x: p.x, y: p.y, hue: p.hue, alpha: trailAlpha });
+        }
+      }
+
+      // Constellation lines between nearby swirl particles
+      if (swirlPositions.length > 2) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        const maxDist = 50;
+        for (let i = 0; i < swirlPositions.length; i++) {
+          for (let j = i + 1; j < swirlPositions.length; j++) {
+            const a = swirlPositions[i];
+            const b = swirlPositions[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d < maxDist) {
+              const lineAlpha = (1 - d / maxDist) * Math.min(a.alpha, b.alpha) * 0.12;
+              const avgHue = (a.hue + b.hue) / 2;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.strokeStyle = `hsla(${avgHue},60%,70%,${lineAlpha})`;
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+          }
+        }
         ctx.restore();
       }
 
-      // ── Layer 5: Fast sparks ──
-      if (frame % 8 === 0) spawn("spark");
+      // ── Layer 6: Fast sparks ──
+      if (frame % 7 === 0) spawn("spark");
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         if (p.type !== "spark") continue;
         p.life++;
         if (p.life > p.maxLife) { particles.splice(i, 1); continue; }
 
+        p.hue += p.hueShift;
+        p.orbit += p.orbitAccel;
         p.angle += p.orbit;
-        p.dist += 0.8 + Math.random() * 0.5;
+        p.dist += 0.9 + Math.random() * 0.5;
         p.x = cx + Math.cos(p.angle) * p.dist;
         p.y = cy + Math.sin(p.angle) * p.dist;
 
         const progress = p.life / p.maxLife;
-        const alpha = (1 - progress) * 0.9;
-        const sparkSize = p.size * (1 - progress * 0.5);
+        const alpha = (1 - progress) * 0.9 * (0.7 + hb * 0.3);
+        const sparkSize = p.size * (1 - progress * 0.5) * (0.8 + hb * 0.2);
 
         ctx.save();
         ctx.globalCompositeOperation = "screen";
@@ -272,39 +377,40 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         ctx.arc(p.x, p.y, sparkSize, 0, Math.PI * 2);
         ctx.fillStyle = `hsla(${p.hue},85%,85%,${alpha})`;
         ctx.shadowColor = `hsla(${p.hue},90%,70%,${alpha * 0.6})`;
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 8;
         ctx.fill();
         ctx.restore();
       }
 
-      // ── Center core: bright breathing nucleus ──
+      // ── Center core: breathing nucleus with hue cycling ──
       const corePhase = frame * 0.025;
-      const breathe = Math.sin(corePhase) * 0.5 + 0.5; // 0..1 smooth
+      const breathe = hb;
+      const coreHue = 220 + Math.sin(t * 0.6) * 25;     // slowly cycles 195-245
       const coreAlpha = 0.5 + breathe * 0.4;
-      const coreSize = 8 + breathe * 4;
+      const coreSize = 10 + breathe * 6;
 
       // Outer diffuse glow
-      const outerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 5);
-      outerGlow.addColorStop(0, `hsla(220,80%,85%,${coreAlpha * 0.2})`);
-      outerGlow.addColorStop(0.3, `hsla(245,70%,65%,${coreAlpha * 0.08})`);
-      outerGlow.addColorStop(1, "hsla(250,60%,50%,0)");
+      const outerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize * 6);
+      outerGlow.addColorStop(0, `hsla(${coreHue},80%,85%,${coreAlpha * 0.2})`);
+      outerGlow.addColorStop(0.3, `hsla(${coreHue + 25},70%,65%,${coreAlpha * 0.08})`);
+      outerGlow.addColorStop(1, `hsla(${coreHue + 30},60%,50%,0)`);
       ctx.fillStyle = outerGlow;
-      ctx.fillRect(cx - coreSize * 5, cy - coreSize * 5, coreSize * 10, coreSize * 10);
+      ctx.fillRect(cx - coreSize * 6, cy - coreSize * 6, coreSize * 12, coreSize * 12);
 
       // Mid glow ring
-      const midGlow = ctx.createRadialGradient(cx, cy, coreSize * 0.8, cx, cy, coreSize * 2.5);
-      midGlow.addColorStop(0, `hsla(230,75%,80%,${coreAlpha * 0.3})`);
-      midGlow.addColorStop(1, "hsla(240,60%,60%,0)");
+      const midGlow = ctx.createRadialGradient(cx, cy, coreSize * 0.8, cx, cy, coreSize * 3);
+      midGlow.addColorStop(0, `hsla(${coreHue + 10},75%,80%,${coreAlpha * 0.3})`);
+      midGlow.addColorStop(1, `hsla(${coreHue + 20},60%,60%,0)`);
       ctx.fillStyle = midGlow;
       ctx.beginPath();
-      ctx.arc(cx, cy, coreSize * 2.5, 0, Math.PI * 2);
+      ctx.arc(cx, cy, coreSize * 3, 0, Math.PI * 2);
       ctx.fill();
 
       // Inner core
       const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize);
-      coreGrad.addColorStop(0, `hsla(215,60%,97%,${coreAlpha})`);
-      coreGrad.addColorStop(0.35, `hsla(225,70%,80%,${coreAlpha * 0.7})`);
-      coreGrad.addColorStop(1, "hsla(240,60%,60%,0)");
+      coreGrad.addColorStop(0, `hsla(${coreHue - 5},60%,97%,${coreAlpha})`);
+      coreGrad.addColorStop(0.35, `hsla(${coreHue + 5},70%,80%,${coreAlpha * 0.7})`);
+      coreGrad.addColorStop(1, `hsla(${coreHue + 15},60%,60%,0)`);
       ctx.fillStyle = coreGrad;
       ctx.beginPath();
       ctx.arc(cx, cy, coreSize, 0, Math.PI * 2);
@@ -322,7 +428,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       <canvas
         ref={canvasRef}
         className="mb-6"
-        style={{ width: 280, height: 280 }}
+        style={{ width: 400, height: 400 }}
       />
       <p
         key={msgIndex}

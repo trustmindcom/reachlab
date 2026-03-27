@@ -156,7 +156,7 @@ export function InsightsTab({
             className="flex items-center gap-2 mb-3 group"
           >
             <span className={`text-[10px] text-text-muted transition-transform ${changelogOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               What Changed
             </h3>
           </button>
@@ -188,7 +188,7 @@ export function InsightsTab({
             className="flex items-center gap-2 mb-3 group"
           >
             <span className={`text-[10px] text-text-muted transition-transform ${gapsOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors">
+            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               What's Limiting Analysis
             </h3>
             <span className="text-[11px] font-medium text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">{gaps.length}</span>
@@ -224,19 +224,19 @@ export function InsightsTab({
         <div className="animate-fade-up" style={{ animationDelay: "120ms" }}>
           <h3 className="text-[13px] font-semibold text-text-primary mb-3">Best Timing</h3>
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors">
+            <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)]">
               <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1.5">Best Days</div>
-              <div className="text-lg font-semibold font-mono tracking-tight">{timing.bestDays}</div>
+              <div className="text-lg font-semibold font-mono tracking-tight tabular-nums">{timing.bestDays}</div>
               <div className="text-[10px] font-mono text-positive mt-1">{timing.bestDayEr} median ER</div>
             </div>
-            <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors">
+            <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)]">
               <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1.5">Best Time</div>
-              <div className="text-lg font-semibold font-mono tracking-tight">{timing.bestTime}</div>
+              <div className="text-lg font-semibold font-mono tracking-tight tabular-nums">{timing.bestTime}</div>
               <div className="text-[10px] font-mono text-positive mt-1">{timing.bestTimeEr} median ER</div>
             </div>
-            <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors">
+            <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)]">
               <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1.5">Frequency</div>
-              <div className="text-lg font-semibold font-mono tracking-tight">{timing.frequency}</div>
+              <div className="text-lg font-semibold font-mono tracking-tight tabular-nums">{timing.frequency}</div>
               <div className="text-[10px] font-mono text-text-muted mt-1">current: {timing.currentFreq}</div>
             </div>
           </div>

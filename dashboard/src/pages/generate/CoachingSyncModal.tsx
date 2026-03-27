@@ -75,7 +75,7 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
                 {" · "}
                 <button
                   onClick={onViewHistory}
-                  className="text-gen-text-4 hover:text-gen-text-2 underline-offset-2 transition-colors cursor-pointer"
+                  className="text-gen-text-4 hover:text-gen-text-2 underline-offset-2 transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer"
                 >
                   View revision history
                 </button>
@@ -116,7 +116,7 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
               {page > 0 && (
                 <button
                   onClick={() => setPage((p) => p - 1)}
-                  className="text-[13px] font-medium text-gen-text-2 hover:text-gen-text-0 transition-colors cursor-pointer bg-transparent border-none p-2"
+                  className="text-[13px] font-medium text-gen-text-2 hover:text-gen-text-0 transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer bg-transparent border-none p-2"
                 >
                   ← Previous
                 </button>
