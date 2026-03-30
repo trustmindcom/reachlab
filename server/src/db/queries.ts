@@ -433,7 +433,7 @@ export function queryHealth(db: Database.Database, personaId: number) {
   const errorDetails = safeParseDetails(lastLog.error_details);
 
   return {
-    last_sync_at: lastLog.completed_at,
+    last_sync_at: lastLog.completed_at ? lastLog.completed_at + "Z" : null,
     sources: {
       posts: {
         status: mapStatus(lastLog.posts_status),

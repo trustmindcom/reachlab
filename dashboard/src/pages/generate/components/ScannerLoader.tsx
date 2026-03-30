@@ -22,6 +22,13 @@ interface Particle {
   type: "swirl" | "spark" | "floater";
   pulsePhase: number;
   blur: number;
+  squish: number;       // 0 = no squish, 0.08–0.2 = amount of deformation
+  squishSpeed: number;  // how fast the squish oscillates
+  squishAngle: number;  // rotation of the squish axis
+  satPulse: number;     // 0 = no sat pulse, 8–20 = range of saturation variation
+  satSpeed: number;     // oscillation rate for saturation
+  litPulse: number;     // 0 = no brightness pulse, 5–15 = range of lightness variation
+  litSpeed: number;     // oscillation rate for brightness
 }
 
 interface RingWave {
@@ -82,6 +89,20 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       // Each particle gets its own hue drift rate (-0.3 to +0.3 deg/frame)
       const hueShift = (Math.random() - 0.5) * 0.6;
 
+      // ~40% of swirls and ~30% of sparks get a rubbery squish
+      const willSquish = type === "swirl" ? Math.random() < 0.4
+        : type === "spark" ? Math.random() < 0.3
+        : false;
+      const squish = willSquish ? 0.08 + Math.random() * 0.14 : 0;       // 8–22% deformation
+      const squishSpeed = 1.5 + Math.random() * 3;                        // varied oscillation rates
+      const squishAngle = Math.random() * Math.PI;                        // random squish axis
+
+      // ~35% get saturation pulsing, ~30% get brightness pulsing (independent rolls)
+      const satPulse = Math.random() < 0.35 ? 8 + Math.random() * 12 : 0;   // ±8–20% sat range
+      const satSpeed = 0.8 + Math.random() * 2.2;                            // moderate oscillation
+      const litPulse = Math.random() < 0.30 ? 5 + Math.random() * 10 : 0;   // ±5–15% lightness range
+      const litSpeed = 0.6 + Math.random() * 2.4;                            // slightly different rates
+
       if (type === "swirl") {
         const dist = 3 + Math.random() * 12;
         particles.push({
@@ -100,6 +121,8 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           type,
           pulsePhase: Math.random() * Math.PI * 2,
           blur: 0,
+          squish, squishSpeed, squishAngle,
+          satPulse, satSpeed, litPulse, litSpeed,
         });
       } else if (type === "spark") {
         const dist = 10 + Math.random() * 20;
@@ -119,6 +142,8 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           type,
           pulsePhase: Math.random() * Math.PI * 2,
           blur: 0,
+          squish, squishSpeed, squishAngle,
+          satPulse, satSpeed, litPulse, litSpeed,
         });
       } else {
         const dist = 30 + Math.random() * 60;
@@ -138,6 +163,8 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           type,
           pulsePhase: Math.random() * Math.PI * 2,
           blur: 5 + Math.random() * 10,
+          squish: 0, squishSpeed: 0, squishAngle: 0,
+          satPulse, satSpeed, litPulse, litSpeed,
         });
       }
     };
@@ -288,6 +315,17 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         // Brightness boost during heartbeat peak
         const brightnessBoost = hb * 0.15;
 
+        // Per-particle saturation and lightness pulsing
+        const satOff = p.satPulse * Math.sin(t * p.satSpeed + p.pulsePhase * 1.7);
+        const litOff = p.litPulse * Math.sin(t * p.litSpeed + p.pulsePhase * 2.3);
+
+        // Base values with per-particle variation applied
+        const sat = 75 + satOff;       // trail/glow sat (base 70-80 range)
+        const satCore = 75 + satOff;   // core sat
+        const lit = 65 + litOff;       // trail lightness
+        const litGlow = 75 + litOff;   // glow inner lightness
+        const litCore = 80 + litOff;   // core lightness
+
         // Draw trail
         if (p.trail.length > 2) {
           ctx.save();
@@ -298,25 +336,40 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
             ctx.beginPath();
             ctx.moveTo(p.trail[j - 1].x, p.trail[j - 1].y);
             ctx.lineTo(p.trail[j].x, p.trail[j].y);
-            ctx.strokeStyle = `hsla(${trailHue},70%,${65 + brightnessBoost * 100}%,${segAlpha})`;
+            ctx.strokeStyle = `hsla(${trailHue},${sat - 5}%,${lit + brightnessBoost * 100}%,${segAlpha})`;
             ctx.lineWidth = currentSize * 0.5 * (j / p.trail.length);
             ctx.stroke();
           }
           ctx.restore();
         }
 
-        // Particle glow + core
+        // Particle glow + core (with optional rubbery squish)
         ctx.save();
         ctx.globalCompositeOperation = "screen";
+
+        // Compute squish deformation: stretches one axis, compresses the other
+        const sq = p.squish * Math.sin(t * p.squishSpeed + p.pulsePhase);
+        const scaleX = 1 + sq;
+        const scaleY = 1 - sq;
+
         const glowSize = currentSize * 3.5;
         const glowGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowSize);
-        glowGrad.addColorStop(0, `hsla(${p.hue},80%,${75 + brightnessBoost * 100}%,${trailAlpha * 0.18})`);
-        glowGrad.addColorStop(1, `hsla(${p.hue},80%,60%,0)`);
+        glowGrad.addColorStop(0, `hsla(${p.hue},${sat}%,${litGlow + brightnessBoost * 100}%,${trailAlpha * 0.18})`);
+        glowGrad.addColorStop(1, `hsla(${p.hue},${sat}%,60%,0)`);
         ctx.fillStyle = glowGrad;
         ctx.fillRect(p.x - glowSize, p.y - glowSize, glowSize * 2, glowSize * 2);
+
+        // Draw as ellipse when squishing, circle otherwise
         ctx.beginPath();
-        ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue},75%,${80 + brightnessBoost * 100}%,${trailAlpha * 0.85})`;
+        if (p.squish > 0) {
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.squishAngle);
+          ctx.scale(scaleX, scaleY);
+          ctx.arc(0, 0, currentSize, 0, Math.PI * 2);
+        } else {
+          ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
+        }
+        ctx.fillStyle = `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,${trailAlpha * 0.85})`;
         ctx.fill();
         ctx.restore();
 
@@ -371,12 +424,25 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         const alpha = (1 - progress) * 0.9 * (0.7 + hb * 0.3);
         const sparkSize = p.size * (1 - progress * 0.5) * (0.8 + hb * 0.2);
 
+        const sparkSatOff = p.satPulse * Math.sin(t * p.satSpeed + p.pulsePhase * 1.7);
+        const sparkLitOff = p.litPulse * Math.sin(t * p.litSpeed + p.pulsePhase * 2.3);
+        const sparkSat = 85 + sparkSatOff;
+        const sparkLit = 85 + sparkLitOff;
+
         ctx.save();
         ctx.globalCompositeOperation = "screen";
         ctx.beginPath();
-        ctx.arc(p.x, p.y, sparkSize, 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue},85%,85%,${alpha})`;
-        ctx.shadowColor = `hsla(${p.hue},90%,70%,${alpha * 0.6})`;
+        if (p.squish > 0) {
+          const sqSpark = p.squish * Math.sin(t * p.squishSpeed + p.pulsePhase);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.squishAngle);
+          ctx.scale(1 + sqSpark, 1 - sqSpark);
+          ctx.arc(0, 0, sparkSize, 0, Math.PI * 2);
+        } else {
+          ctx.arc(p.x, p.y, sparkSize, 0, Math.PI * 2);
+        }
+        ctx.fillStyle = `hsla(${p.hue},${sparkSat}%,${sparkLit}%,${alpha})`;
+        ctx.shadowColor = `hsla(${p.hue},${sparkSat + 5}%,${sparkLit - 15}%,${alpha * 0.6})`;
         ctx.shadowBlur = 8;
         ctx.fill();
         ctx.restore();

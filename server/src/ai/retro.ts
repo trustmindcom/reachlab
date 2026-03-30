@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { jsonrepair } from "jsonrepair";
 import { MODELS } from "./client.js";
 import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import type { RetroChange, RetroRuleSuggestion, RetroPromptEdit, RetroAnalysis } from "@reachlab/shared";
@@ -110,7 +111,7 @@ IMPORTANT:
     throw new Error("Retro analysis returned no valid JSON");
   }
 
-  const analysis = JSON.parse(jsonMatch[0]) as RetroAnalysis;
+  const analysis = JSON.parse(jsonrepair(jsonMatch[0])) as RetroAnalysis;
   return {
     analysis,
     input_tokens,

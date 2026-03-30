@@ -102,6 +102,9 @@ importers:
       fastify:
         specifier: ^5.0.0
         version: 5.8.4
+      jsonrepair:
+        specifier: ^3.13.3
+        version: 3.13.3
       rss-parser:
         specifier: ^3.13.0
         version: 3.13.0
@@ -1362,6 +1365,10 @@ packages:
   json5@2.2.3:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
+    hasBin: true
+
+  jsonrepair@3.13.3:
+    resolution: {integrity: sha512-BTznj0owIt2CBAH/LTo7+1I5pMvl1e1033LRl/HUowlZmJOIhzC0zbX5bxMngLkfT4WnzPP26QnW5wMr2g9tsQ==}
     hasBin: true
 
   light-my-request@6.6.0:
@@ -3011,6 +3018,8 @@ snapshots:
   json-schema-traverse@1.0.0: {}
 
   json5@2.2.3: {}
+
+  jsonrepair@3.13.3: {}
 
   light-my-request@6.6.0:
     dependencies:
