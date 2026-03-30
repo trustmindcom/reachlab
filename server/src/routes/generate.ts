@@ -71,6 +71,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
       const researchId = insertResearch(db, personaId, {
         post_type: "general",
+        topic,
         stories_json: JSON.stringify(result.stories),
         sources_json: JSON.stringify(result.sources_metadata),
         article_count: result.article_count,

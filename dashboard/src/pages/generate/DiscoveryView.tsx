@@ -34,6 +34,13 @@ const RESEARCH_MESSAGES = [
   "Building story cards...",
 ];
 
+const DRAFTS_MESSAGES = [
+  "Writing drafts...",
+  "Applying your voice...",
+  "Refining structure...",
+  "Polishing language...",
+];
+
 const CACHE_KEY = "reachlab_discovery_cache";
 
 function getCachedTopics(): DiscoveryCategory[] | null {
@@ -167,6 +174,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const handleGenerateDrafts = async () => {
     if (gen.selectedStoryIndex === null || gen.researchId === null) return;
     setLoading(true);
+    setActiveMessages(DRAFTS_MESSAGES);
     try {
       const res = await api.generateDrafts(gen.researchId, gen.selectedStoryIndex, gen.personalConnection || undefined, gen.draftLength);
       setGen((prev: any) => ({
@@ -196,7 +204,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
       )}
 
       {/* Loading state — scanner animation */}
-      {loading && !hasStories && (
+      {loading && (
         <ScannerLoader messages={activeMessages} />
       )}
 

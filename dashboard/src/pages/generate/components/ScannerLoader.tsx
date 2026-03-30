@@ -29,6 +29,8 @@ interface Particle {
   satSpeed: number;     // oscillation rate for saturation
   litPulse: number;     // 0 = no brightness pulse, 5–15 = range of lightness variation
   litSpeed: number;     // oscillation rate for brightness
+  blurPulse: number;    // 0 = no blur pulse, max blur radius in px
+  blurSpeed: number;    // oscillation rate for blur
 }
 
 interface RingWave {
@@ -103,6 +105,10 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       const litPulse = Math.random() < 0.30 ? 5 + Math.random() * 10 : 0;   // ±5–15% lightness range
       const litSpeed = 0.6 + Math.random() * 2.4;                            // slightly different rates
 
+      // ~66% get edge blur pulsing — oscillates between sharp and soft
+      const blurPulse = Math.random() < 0.66 ? 1.5 + Math.random() * 3 : 0; // 0–4.5px max blur
+      const blurSpeed = 0.5 + Math.random() * 2.0;                           // varied rates
+
       if (type === "swirl") {
         const dist = 3 + Math.random() * 12;
         particles.push({
@@ -123,6 +129,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           blur: 0,
           squish, squishSpeed, squishAngle,
           satPulse, satSpeed, litPulse, litSpeed,
+          blurPulse, blurSpeed,
         });
       } else if (type === "spark") {
         const dist = 10 + Math.random() * 20;
@@ -144,6 +151,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           blur: 0,
           squish, squishSpeed, squishAngle,
           satPulse, satSpeed, litPulse, litSpeed,
+          blurPulse, blurSpeed,
         });
       } else {
         const dist = 30 + Math.random() * 60;
@@ -165,6 +173,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           blur: 5 + Math.random() * 10,
           squish: 0, squishSpeed: 0, squishAngle: 0,
           satPulse, satSpeed, litPulse, litSpeed,
+          blurPulse, blurSpeed,
         });
       }
     };
@@ -343,7 +352,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
           ctx.restore();
         }
 
-        // Particle glow + core (with optional rubbery squish)
+        // Particle glow + core (with optional rubbery squish + soft edge pulse)
         ctx.save();
         ctx.globalCompositeOperation = "screen";
 
@@ -352,6 +361,11 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         const scaleX = 1 + sq;
         const scaleY = 1 - sq;
 
+        // Pulsing edge softness: 0 = sharp edge, 1 = fully diffused into glow
+        const softness = p.blurPulse > 0
+          ? Math.abs(Math.sin(t * p.blurSpeed + p.pulsePhase * 3.1)) * (p.blurPulse / 4.5)
+          : 0;
+
         const glowSize = currentSize * 3.5;
         const glowGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowSize);
         glowGrad.addColorStop(0, `hsla(${p.hue},${sat}%,${litGlow + brightnessBoost * 100}%,${trailAlpha * 0.18})`);
@@ -359,17 +373,32 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         ctx.fillStyle = glowGrad;
         ctx.fillRect(p.x - glowSize, p.y - glowSize, glowSize * 2, glowSize * 2);
 
-        // Draw as ellipse when squishing, circle otherwise
-        ctx.beginPath();
+        // Draw core with gradient-based soft edge instead of ctx.filter blur
+        // When softness is 0, the gradient is tight (sharp dot).
+        // When softness approaches 1, the core spreads into a wider, softer glow.
+        const coreSpread = currentSize * (1 + softness * 2.5);  // radius grows when soft
+        const coreAlpha = trailAlpha * (0.85 - softness * 0.45); // dimmer when diffused
+
         if (p.squish > 0) {
           ctx.translate(p.x, p.y);
           ctx.rotate(p.squishAngle);
           ctx.scale(scaleX, scaleY);
-          ctx.arc(0, 0, currentSize, 0, Math.PI * 2);
+          const softGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreSpread);
+          softGrad.addColorStop(0, `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,${coreAlpha})`);
+          softGrad.addColorStop(0.4 - softness * 0.25, `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,${coreAlpha * (0.8 - softness * 0.3)})`);
+          softGrad.addColorStop(1, `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,0)`);
+          ctx.fillStyle = softGrad;
+          ctx.beginPath();
+          ctx.arc(0, 0, coreSpread, 0, Math.PI * 2);
         } else {
-          ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
+          const softGrad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, coreSpread);
+          softGrad.addColorStop(0, `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,${coreAlpha})`);
+          softGrad.addColorStop(0.4 - softness * 0.25, `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,${coreAlpha * (0.8 - softness * 0.3)})`);
+          softGrad.addColorStop(1, `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,0)`);
+          ctx.fillStyle = softGrad;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, coreSpread, 0, Math.PI * 2);
         }
-        ctx.fillStyle = `hsla(${p.hue},${satCore}%,${litCore + brightnessBoost * 100}%,${trailAlpha * 0.85})`;
         ctx.fill();
         ctx.restore();
 
@@ -431,19 +460,35 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
 
         ctx.save();
         ctx.globalCompositeOperation = "screen";
-        ctx.beginPath();
+
+        // Soft edge pulse for sparks — gradient-based, no ctx.filter
+        const sparkSoft = p.blurPulse > 0
+          ? Math.abs(Math.sin(t * p.blurSpeed + p.pulsePhase * 3.1)) * (p.blurPulse / 4.5)
+          : 0;
+        const sparkSpread = sparkSize * (1 + sparkSoft * 2);
+        const sparkAlpha = alpha * (1 - sparkSoft * 0.35);
+
         if (p.squish > 0) {
           const sqSpark = p.squish * Math.sin(t * p.squishSpeed + p.pulsePhase);
           ctx.translate(p.x, p.y);
           ctx.rotate(p.squishAngle);
           ctx.scale(1 + sqSpark, 1 - sqSpark);
-          ctx.arc(0, 0, sparkSize, 0, Math.PI * 2);
+          const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, sparkSpread);
+          sg.addColorStop(0, `hsla(${p.hue},${sparkSat}%,${sparkLit}%,${sparkAlpha})`);
+          sg.addColorStop(0.5 - sparkSoft * 0.3, `hsla(${p.hue},${sparkSat}%,${sparkLit}%,${sparkAlpha * 0.6})`);
+          sg.addColorStop(1, `hsla(${p.hue},${sparkSat}%,${sparkLit}%,0)`);
+          ctx.fillStyle = sg;
+          ctx.beginPath();
+          ctx.arc(0, 0, sparkSpread, 0, Math.PI * 2);
         } else {
-          ctx.arc(p.x, p.y, sparkSize, 0, Math.PI * 2);
+          const sg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, sparkSpread);
+          sg.addColorStop(0, `hsla(${p.hue},${sparkSat}%,${sparkLit}%,${sparkAlpha})`);
+          sg.addColorStop(0.5 - sparkSoft * 0.3, `hsla(${p.hue},${sparkSat}%,${sparkLit}%,${sparkAlpha * 0.6})`);
+          sg.addColorStop(1, `hsla(${p.hue},${sparkSat}%,${sparkLit}%,0)`);
+          ctx.fillStyle = sg;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, sparkSpread, 0, Math.PI * 2);
         }
-        ctx.fillStyle = `hsla(${p.hue},${sparkSat}%,${sparkLit}%,${alpha})`;
-        ctx.shadowColor = `hsla(${p.hue},${sparkSat + 5}%,${sparkLit - 15}%,${alpha * 0.6})`;
-        ctx.shadowBlur = 8;
         ctx.fill();
         ctx.restore();
       }
