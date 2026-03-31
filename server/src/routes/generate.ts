@@ -782,6 +782,12 @@ Return JSON only:
     // Update status to published
     updateGeneration(db, Number(id), { status: "published" });
 
+    // Fire-and-forget: store retro patterns as editorial principles
+    import("../ai/retro.js").then(({ storeRetroAsPrinciples }) =>
+      storeRetroAsPrinciples(client, db, personaId, analysis, gen.post_type)
+        .catch(err => console.error("[Retro] Failed to store principles:", err))
+    );
+
     return { analysis, input_tokens, output_tokens };
   });
 

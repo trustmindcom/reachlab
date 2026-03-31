@@ -1,7 +1,14 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type Database from "better-sqlite3";
 import { jsonrepair } from "jsonrepair";
 import { MODELS } from "./client.js";
 import { streamWithIdleTimeout } from "./stream-with-idle.js";
+import {
+  pruneStaleEditorialPrinciples,
+  getEditorialPrinciples,
+  confirmPrinciple,
+  insertEditorialPrinciple,
+} from "../db/generate-queries.js";
 import type { RetroChange, RetroRuleSuggestion, RetroPromptEdit, RetroAnalysis } from "@reachlab/shared";
 
 export type { RetroChange, RetroRuleSuggestion, RetroPromptEdit, RetroAnalysis };
@@ -117,4 +124,55 @@ IMPORTANT:
     input_tokens,
     output_tokens,
   };
+}
+
+export async function storeRetroAsPrinciples(
+  client: Anthropic,
+  db: Database.Database,
+  personaId: number,
+  analysis: RetroAnalysis,
+  postCategory?: string,
+): Promise<void> {
+  pruneStaleEditorialPrinciples(db, personaId);
+  const existing = getEditorialPrinciples(db, personaId);
+
+  for (const pattern of analysis.patterns) {
+    if (existing.length === 0) {
+      insertEditorialPrinciple(db, personaId, {
+        principle_text: pattern,
+        source_post_type: postCategory,
+        source_context: analysis.summary,
+      });
+      continue;
+    }
+
+    // Use Haiku for semantic dedup against existing principles
+    const numberedList = existing.map((p, i) => `${i + 1}. ${p.principle_text}`).join("\n");
+    const { text } = await streamWithIdleTimeout(client, {
+      model: MODELS.HAIKU,
+      max_tokens: 50,
+      messages: [{
+        role: "user",
+        content: `Does this new editorial principle duplicate any existing one? Answer with just the number or "none".
+
+New principle: "${pattern}"
+
+Existing principles:
+${numberedList}`,
+      }],
+    });
+
+    const trimmed = text.trim().toLowerCase();
+    const matchNum = parseInt(trimmed, 10);
+
+    if (!isNaN(matchNum) && matchNum >= 1 && matchNum <= existing.length) {
+      confirmPrinciple(db, existing[matchNum - 1].id);
+    } else {
+      insertEditorialPrinciple(db, personaId, {
+        principle_text: pattern,
+        source_post_type: postCategory,
+        source_context: analysis.summary,
+      });
+    }
+  }
 }
