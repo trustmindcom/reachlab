@@ -77,15 +77,15 @@ export const sourceDiscoverBody = z.object({
 
 export const ghostwriteBody = z.object({
   generation_id: z.number().int().positive(),
-  message: z.string().trim().min(1),
-  current_draft: z.string().optional(),
+  message: z.string().trim().min(1).max(10000),
+  current_draft: z.string().max(50000).optional(),
 });
 
 export const selectionBody = z.object({
-  selected_draft_indices: z.array(z.number().int().min(0)),
-  combining_guidance: z.string().optional(),
+  selected_draft_indices: z.array(z.number().int().min(0)).max(10),
+  combining_guidance: z.string().max(5000).optional(),
 });
 
 export const draftSaveBody = z.object({
-  draft: z.string(),
+  draft: z.string().min(1).max(50000),
 });
