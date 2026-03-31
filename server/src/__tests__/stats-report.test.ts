@@ -162,46 +162,46 @@ describe("buildStatsReport", () => {
   });
 
   it("returns a non-empty string", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(typeof report).toBe("string");
     expect(report.length).toBeGreaterThan(100);
   });
 
   it("contains Overview section with post count", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(report).toContain("## 1. Overview");
     expect(report).toContain("3 posts");
   });
 
   it("uses standard ER formula — shows 2.8% for post-1", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(report).toContain("2.8%");
   });
 
   it("references posts by content, never by ID", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(report).not.toContain("sr-post-");
     expect(report).toContain("startup funding");
   });
 
   it("includes top 10 posts section", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(report).toContain("## 4. Top");
   });
 
   it("includes day-of-week section", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(report).toContain("## 7. Day-of-Week");
   });
 
   it("includes writing prompt when provided", () => {
-    const report = buildStatsReport(db, "America/New_York", "Always start with a question hook");
+    const report = buildStatsReport(db, 1, "America/New_York", "Always start with a question hook");
     expect(report).toContain("Always start with a question hook");
     expect(report).toContain("## 13. Author");
   });
 
   it("omits writing prompt section when null", () => {
-    const report = buildStatsReport(db, "America/New_York", null);
+    const report = buildStatsReport(db, 1, "America/New_York", null);
     expect(report).toContain("## 13. Author");
     expect(report).toContain("(none set");
   });

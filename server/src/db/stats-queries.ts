@@ -27,10 +27,16 @@ export interface DataAvailabilityCounts {
   followerDays: number;
 }
 
-export function getDataAvailabilityCounts(db: Database.Database): DataAvailabilityCounts {
-  const tagCount = (db.prepare("SELECT COUNT(*) as c FROM ai_tags").get() as { c: number }).c;
-  const topicCount = (db.prepare("SELECT COUNT(DISTINCT taxonomy_id) as c FROM ai_post_topics").get() as { c: number }).c;
-  const imageTagCount = (db.prepare("SELECT COUNT(DISTINCT post_id) as c FROM ai_image_tags").get() as { c: number }).c;
+export function getDataAvailabilityCounts(db: Database.Database, personaId: number): DataAvailabilityCounts {
+  const tagCount = (db.prepare(
+    "SELECT COUNT(*) as c FROM ai_tags WHERE post_id IN (SELECT id FROM posts WHERE persona_id = ?)"
+  ).get(personaId) as { c: number }).c;
+  const topicCount = (db.prepare(
+    "SELECT COUNT(DISTINCT taxonomy_id) as c FROM ai_post_topics WHERE post_id IN (SELECT id FROM posts WHERE persona_id = ?)"
+  ).get(personaId) as { c: number }).c;
+  const imageTagCount = (db.prepare(
+    "SELECT COUNT(DISTINCT post_id) as c FROM ai_image_tags WHERE post_id IN (SELECT id FROM posts WHERE persona_id = ?)"
+  ).get(personaId) as { c: number }).c;
   const followerDays = (db.prepare("SELECT COUNT(*) as c FROM follower_snapshots").get() as { c: number }).c;
   return { tagCount, topicCount, imageTagCount, followerDays };
 }
@@ -43,20 +49,21 @@ export interface ContentGaps {
   unclassifiedImageCount: number;
 }
 
-export function getContentGaps(db: Database.Database): ContentGaps {
-  const missingTextCount = (db.prepare("SELECT COUNT(*) as count FROM posts WHERE full_text IS NULL").get() as { count: number }).count;
-  const totalPostCount = (db.prepare("SELECT COUNT(*) as count FROM posts").get() as { count: number }).count;
+export function getContentGaps(db: Database.Database, personaId: number): ContentGaps {
+  const missingTextCount = (db.prepare("SELECT COUNT(*) as count FROM posts WHERE full_text IS NULL AND persona_id = ?").get(personaId) as { count: number }).count;
+  const totalPostCount = (db.prepare("SELECT COUNT(*) as count FROM posts WHERE persona_id = ?").get(personaId) as { count: number }).count;
   const unclassifiedImageCount = (db.prepare(
     `SELECT COUNT(*) as count FROM posts
      WHERE image_local_paths IS NOT NULL
+       AND persona_id = ?
        AND NOT EXISTS (SELECT 1 FROM ai_image_tags WHERE post_id = posts.id)`
-  ).get() as { count: number }).count;
+  ).get(personaId) as { count: number }).count;
   return { missingTextCount, totalPostCount, unclassifiedImageCount };
 }
 
 // ── Posts with latest metrics ─────────────────────────────
 
-export function loadPostsWithLatestMetrics(db: Database.Database): PostRow[] {
+export function loadPostsWithLatestMetrics(db: Database.Database, personaId: number): PostRow[] {
   return db.prepare(
     `SELECT
        p.id, p.hook_text, p.full_text, p.content_preview, p.content_type, p.published_at,
@@ -70,24 +77,24 @@ export function loadPostsWithLatestMetrics(db: Database.Database): PostRow[] {
      JOIN (
        SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id
      ) latest ON pm.id = latest.max_id
-     WHERE pm.impressions > 0
+     WHERE pm.impressions > 0 AND p.persona_id = ?
      ORDER BY p.published_at DESC`
-  ).all() as PostRow[];
+  ).all(personaId) as PostRow[];
 }
 
 // ── Follower data ─────────────────────────────────────────
 
-export function getLatestFollowerCount(db: Database.Database): number | null {
+export function getLatestFollowerCount(db: Database.Database, personaId: number): number | null {
   const row = db.prepare(
-    "SELECT total_followers FROM follower_snapshots ORDER BY date DESC LIMIT 1"
-  ).get() as { total_followers: number } | undefined;
+    "SELECT total_followers FROM follower_snapshots WHERE persona_id = ? ORDER BY date DESC LIMIT 1"
+  ).get(personaId) as { total_followers: number } | undefined;
   return row?.total_followers ?? null;
 }
 
-export function getFollowerSnapshots(db: Database.Database, limit: number): Array<{ date: string; total_followers: number }> {
+export function getFollowerSnapshots(db: Database.Database, personaId: number, limit: number): Array<{ date: string; total_followers: number }> {
   return db.prepare(
-    "SELECT date, total_followers FROM follower_snapshots ORDER BY date DESC LIMIT ?"
-  ).all(limit) as Array<{ date: string; total_followers: number }>;
+    "SELECT date, total_followers FROM follower_snapshots WHERE persona_id = ? ORDER BY date DESC LIMIT ?"
+  ).all(personaId, limit) as Array<{ date: string; total_followers: number }>;
 }
 
 // ── Performance data ──────────────────────────────────────
@@ -102,17 +109,18 @@ export interface TopicPerformanceRow {
   sends: number | null;
 }
 
-export function getTopicPerformanceData(db: Database.Database): TopicPerformanceRow[] {
+export function getTopicPerformanceData(db: Database.Database, personaId: number): TopicPerformanceRow[] {
   return db.prepare(
     `SELECT tax.name as topic,
             pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
      FROM ai_post_topics apt
      JOIN ai_taxonomy tax ON tax.id = apt.taxonomy_id
+     JOIN posts p ON p.id = apt.post_id
      JOIN post_metrics pm ON pm.post_id = apt.post_id
      JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
        ON pm.id = latest.max_id
-     WHERE pm.impressions > 0`
-  ).all() as TopicPerformanceRow[];
+     WHERE pm.impressions > 0 AND p.persona_id = ?`
+  ).all(personaId) as TopicPerformanceRow[];
 }
 
 export interface HookPerformanceRow {
@@ -126,16 +134,17 @@ export interface HookPerformanceRow {
   sends: number | null;
 }
 
-export function getHookPerformanceData(db: Database.Database): HookPerformanceRow[] {
+export function getHookPerformanceData(db: Database.Database, personaId: number): HookPerformanceRow[] {
   return db.prepare(
     `SELECT t.hook_type, t.format_style,
             pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
      FROM ai_tags t
+     JOIN posts p ON p.id = t.post_id
      JOIN post_metrics pm ON pm.post_id = t.post_id
      JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
        ON pm.id = latest.max_id
-     WHERE pm.impressions > 0`
-  ).all() as HookPerformanceRow[];
+     WHERE pm.impressions > 0 AND p.persona_id = ?`
+  ).all(personaId) as HookPerformanceRow[];
 }
 
 export interface ImageSubtypeRow {
@@ -148,15 +157,17 @@ export interface ImageSubtypeRow {
   sends: number | null;
 }
 
-export function getImageSubtypePerformanceData(db: Database.Database): ImageSubtypeRow[] {
+export function getImageSubtypePerformanceData(db: Database.Database, personaId: number): ImageSubtypeRow[] {
   return db.prepare(
     `SELECT ait.format as subtype,
             pm.impressions, pm.reactions, pm.comments, pm.reposts, pm.saves, pm.sends
      FROM ai_image_tags ait
+     JOIN posts p ON p.id = ait.post_id
      JOIN post_metrics pm ON pm.post_id = ait.post_id
      JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
        ON pm.id = latest.max_id
      WHERE pm.impressions > 0
-       AND ait.format IS NOT NULL`
-  ).all() as ImageSubtypeRow[];
+       AND ait.format IS NOT NULL
+       AND p.persona_id = ?`
+  ).all(personaId) as ImageSubtypeRow[];
 }

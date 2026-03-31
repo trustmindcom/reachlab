@@ -146,8 +146,8 @@ function assignQuadrants(posts: PostWithER[]): void {
 
 // ── DB loader ──────────────────────────────────────────────
 
-function loadPostsWithMetrics(db: Database.Database): PostWithER[] {
-  const rows = loadPostsWithLatestMetrics(db);
+function loadPostsWithMetrics(db: Database.Database, personaId: number): PostWithER[] {
+  const rows = loadPostsWithLatestMetrics(db, personaId);
 
   const posts = rows.map((r) => ({
     ...r,
@@ -178,13 +178,14 @@ const QUADRANT_LABELS: Record<string, string> = {
 
 function buildOverviewSection(
   db: Database.Database,
+  personaId: number,
   posts: PostWithER[],
   globalMedianER: number | null,
   globalMedianWER: number | null,
   globalIQR: number | null,
   timezone: string
 ): string {
-  const latestFollowers = getLatestFollowerCount(db);
+  const latestFollowers = getLatestFollowerCount(db, personaId);
 
   const dates = posts.map((p) => p.published_at).sort();
   const earliest = dates[0]
@@ -601,8 +602,8 @@ function buildFrequencySection(posts: PostWithER[]): string {
   return lines.join("\n");
 }
 
-function buildContentGapsSection(db: Database.Database): string {
-  const gaps = getContentGaps(db);
+function buildContentGapsSection(db: Database.Database, personaId: number): string {
+  const gaps = getContentGaps(db, personaId);
 
   const lines = ["## 12. Content Gaps (data quality notes)"];
 
@@ -633,8 +634,8 @@ function buildWritingPromptSection(writingPrompt: string | null): string {
 
 // ── New enrichment sections ─────────────────────────────────
 
-function buildDataAvailablePreamble(db: Database.Database): string {
-  const { tagCount, topicCount, imageTagCount, followerDays } = getDataAvailabilityCounts(db);
+function buildDataAvailablePreamble(db: Database.Database, personaId: number): string {
+  const { tagCount, topicCount, imageTagCount, followerDays } = getDataAvailabilityCounts(db, personaId);
 
   const lines = ["## 0. Data Available in This Report"];
   lines.push("This report includes the following enrichment data. Do NOT flag these as data or tool gaps:");
@@ -647,8 +648,8 @@ function buildDataAvailablePreamble(db: Database.Database): string {
   return lines.join("\n");
 }
 
-function buildTopicPerformanceSection(db: Database.Database): string {
-  const rows = getTopicPerformanceData(db);
+function buildTopicPerformanceSection(db: Database.Database, personaId: number): string {
+  const rows = getTopicPerformanceData(db, personaId);
 
   if (rows.length === 0) return "";
 
@@ -687,8 +688,8 @@ function buildTopicPerformanceSection(db: Database.Database): string {
   return lines.join("\n");
 }
 
-function buildHookPerformanceSection(db: Database.Database): string {
-  const rows = getHookPerformanceData(db);
+function buildHookPerformanceSection(db: Database.Database, personaId: number): string {
+  const rows = getHookPerformanceData(db, personaId);
 
   if (rows.length === 0) return "";
 
@@ -733,8 +734,8 @@ function buildHookPerformanceSection(db: Database.Database): string {
   return lines.join("\n");
 }
 
-function buildImageSubtypeSection(db: Database.Database): string {
-  const rows = getImageSubtypePerformanceData(db);
+function buildImageSubtypeSection(db: Database.Database, personaId: number): string {
+  const rows = getImageSubtypePerformanceData(db, personaId);
 
   if (rows.length === 0) return "";
 
@@ -760,8 +761,8 @@ function buildImageSubtypeSection(db: Database.Database): string {
   return lines.join("\n");
 }
 
-function buildFollowerGrowthSection(db: Database.Database): string {
-  const snapshots = getFollowerSnapshots(db, 90);
+function buildFollowerGrowthSection(db: Database.Database, personaId: number): string {
+  const snapshots = getFollowerSnapshots(db, personaId, 90);
 
   if (snapshots.length === 0) return "";
 
@@ -847,10 +848,11 @@ function formatPostLineDetailed(p: PostWithER, tz: string): string {
 
 export function buildStatsReport(
   db: Database.Database,
+  personaId: number,
   timezone: string,
   writingPrompt: string | null
 ): string {
-  const posts = loadPostsWithMetrics(db);
+  const posts = loadPostsWithMetrics(db, personaId);
   const validERs = posts.filter((p) => p.er !== null).map((p) => p.er!);
   const validWERs = posts.filter((p) => p.wer !== null).map((p) => p.wer!);
   const globalMedianER = median(validERs);
@@ -858,8 +860,8 @@ export function buildStatsReport(
   const globalIQR = iqr(validERs);
 
   const sections = [
-    buildDataAvailablePreamble(db),
-    buildOverviewSection(db, posts, globalMedianER, globalMedianWER, globalIQR, timezone),
+    buildDataAvailablePreamble(db, personaId),
+    buildOverviewSection(db, personaId, posts, globalMedianER, globalMedianWER, globalIQR, timezone),
     buildRecentVsBaselineSection(posts, timezone),
     buildFormatSection(posts),
     buildTopBottomSection(posts, timezone),
@@ -868,12 +870,12 @@ export function buildStatsReport(
     buildCommentQualitySection(posts),
     buildSavesSendsSection(posts),
     buildFrequencySection(posts),
-    buildContentGapsSection(db),
+    buildContentGapsSection(db, personaId),
     buildWritingPromptSection(writingPrompt),
-    buildTopicPerformanceSection(db),
-    buildHookPerformanceSection(db),
-    buildImageSubtypeSection(db),
-    buildFollowerGrowthSection(db),
+    buildTopicPerformanceSection(db, personaId),
+    buildHookPerformanceSection(db, personaId),
+    buildImageSubtypeSection(db, personaId),
+    buildFollowerGrowthSection(db, personaId),
   ];
 
   return sections.join("\n\n---\n\n");

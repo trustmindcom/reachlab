@@ -41,7 +41,8 @@ import { registerCoachingRoutes } from "./generate-coaching.js";
 import { registerSourceRoutes } from "./generate-sources.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
-import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody } from "../schemas/generate.js";
+import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
+import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt } from "../ai/ghostwriter.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -256,6 +257,11 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     }
 
     const personaId = getPersonaId(request);
+
+    // Persona ownership check
+    if (gen.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
     const client = getClient();
     const runId = createRun(db, personaId, "generate_chat", 0);
     const logger = new AiLogger(db, runId);
@@ -399,6 +405,146 @@ Return JSON only:
       }
       return { ...msg, display_content: msg.content };
     });
+  });
+
+  // ── Selection (persist draft picks) ──────────────────────
+
+  app.patch("/api/generate/:id/selection", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const genId = parseInt(id, 10);
+    if (isNaN(genId)) return reply.status(400).send({ error: "Invalid id" });
+
+    const gen = getGeneration(db, genId);
+    if (!gen) return reply.status(404).send({ error: "Generation not found" });
+
+    const personaId = getPersonaId(request);
+    if (gen.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
+
+    const { selected_draft_indices, combining_guidance } = validateBody(selectionBody, request.body);
+    const updates: Parameters<typeof updateGeneration>[2] = {
+      selected_draft_indices: JSON.stringify(selected_draft_indices),
+    };
+    if (combining_guidance !== undefined) {
+      updates.combining_guidance = combining_guidance;
+    }
+    updateGeneration(db, genId, updates);
+    return { ok: true };
+  });
+
+  // ── Draft auto-save ─────────────────────────────────────
+
+  app.patch("/api/generate/:id/draft", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const genId = parseInt(id, 10);
+    if (isNaN(genId)) return reply.status(400).send({ error: "Invalid id" });
+
+    const gen = getGeneration(db, genId);
+    if (!gen) return reply.status(404).send({ error: "Generation not found" });
+
+    const personaId = getPersonaId(request);
+    if (gen.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
+
+    const { draft } = validateBody(draftSaveBody, request.body);
+    updateGeneration(db, genId, { final_draft: draft });
+    return { ok: true };
+  });
+
+  // ── Ghostwriter chat ───────────────────────────────────
+
+  const activeGhostwriteRequests = new Set<number>();
+
+  app.post("/api/generate/ghostwrite", async (request, reply) => {
+    const personaId = getPersonaId(request);
+    const { generation_id, message, current_draft } = validateBody(ghostwriteBody, request.body);
+
+    // GUARD: generation exists
+    const gen = getGeneration(db, generation_id);
+    if (!gen) return reply.status(404).send({ error: "Generation not found" });
+
+    // GUARD: persona ownership
+    if (gen.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
+
+    // GUARD: concurrent request lock
+    if (activeGhostwriteRequests.has(generation_id)) {
+      return reply.status(429).send({ error: "Request already in progress" });
+    }
+    activeGhostwriteRequests.add(generation_id);
+
+    const client = getClient();
+    const runId = createRun(db, personaId, "ghostwriter", 0);
+    const logger = new AiLogger(db, runId);
+
+    try {
+      // Load history — consistent limit (20, matching restore)
+      const history = getGenerationMessages(db, generation_id, 20).reverse();
+      const messages: Array<{ role: "user" | "assistant"; content: string }> = history.map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      }));
+
+      // Build system prompt — simplified after first turn
+      const isFirstTurn = history.length === 0;
+      const drafts: Draft[] = gen.drafts_json ? JSON.parse(gen.drafts_json) : [];
+      const selectedIndices: number[] = gen.selected_draft_indices
+        ? JSON.parse(gen.selected_draft_indices)
+        : [];
+      const selectedDrafts = selectedIndices.map((i) => drafts[i]).filter(Boolean);
+      const research = gen.research_id ? getResearch(db, gen.research_id) : null;
+      const stories: Story[] = research?.stories_json ? JSON.parse(research.stories_json) : [];
+      const story = gen.selected_story_index != null ? stories[gen.selected_story_index] : null;
+      const storyContext = story ? `**${story.headline}**\n${story.summary}` : "";
+
+      const systemPrompt = isFirstTurn
+        ? buildFirstTurnPrompt(
+            selectedDrafts.length > 0 ? selectedDrafts : drafts,
+            gen.combining_guidance ?? message,
+            storyContext
+          )
+        : buildSubsequentTurnPrompt(storyContext);
+
+      // Add user message to the messages array for the API call (NOT yet persisted)
+      messages.push({ role: "user" as const, content: message });
+
+      const activeDraft = current_draft ?? gen.final_draft ?? "";
+
+      const result = await ghostwriterTurn(
+        client,
+        db,
+        personaId,
+        generation_id,
+        logger,
+        messages,
+        systemPrompt,
+        activeDraft
+      );
+
+      // Persist user message AFTER success (prevents orphaned messages on failure)
+      insertGenerationMessage(db, { generation_id, role: "user", content: message });
+
+      if (result.draft) {
+        updateGeneration(db, generation_id, { final_draft: result.draft });
+      }
+
+      completeRun(db, runId, getRunCost(db, runId));
+
+      return {
+        message: result.assistantMessage,
+        draft: result.draft,
+        change_summary: result.changeSummary,
+        tools_used: result.toolsUsed,
+      };
+    } catch (err: any) {
+      failRun(db, runId, err.message);
+      return reply.status(500).send({ error: err.message });
+    } finally {
+      activeGhostwriteRequests.delete(generation_id);
+    }
   });
 
   // ── Rules CRUD ───────────────────────────────────────────

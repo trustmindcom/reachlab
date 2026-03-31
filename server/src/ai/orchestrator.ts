@@ -190,7 +190,7 @@ export async function runFullPipeline(
     // Step 3: Build stats report
     const timezone = getSetting(db, "timezone") ?? "UTC";
     const writingPrompt = getPersonaSetting(db, personaId, "writing_prompt");
-    const statsReport = buildStatsReport(db, timezone, writingPrompt);
+    const statsReport = buildStatsReport(db, personaId, timezone, writingPrompt);
 
     // Step 4: Build system prompt (read knowledge base from file)
     const knowledgePath = path.join(__dirname, "linkedin-knowledge.md");
@@ -301,9 +301,10 @@ export async function runFullPipeline(
              ON pm.id = latest.max_id
            WHERE p.published_at >= datetime('now', '-30 days')
              AND pm.impressions > 0
+             AND p.persona_id = ?
            ORDER BY er DESC LIMIT 1`
         )
-        .get() as
+        .get(personaId) as
         | {
             id: string;
             preview: string | null;
@@ -320,23 +321,7 @@ export async function runFullPipeline(
       // Step 7: Haiku call for top performer reason with comparisons
       let topPerformerReason: string | null = null;
       if (topPerformer) {
-        // Fetch similar posts by content type for comparison
-        const similarPosts = db
-          .prepare(
-            `SELECT COALESCE(p.hook_text, SUBSTR(p.full_text, 1, 80), p.content_preview) as preview,
-                    pm.impressions, pm.reactions, pm.comments, pm.reposts, p.content_type,
-                    CAST((COALESCE(pm.reactions,0) + COALESCE(pm.comments,0) + COALESCE(pm.reposts,0)) AS REAL)
-                      / NULLIF(pm.impressions, 0) * 100 as er
-             FROM posts p
-             JOIN post_metrics pm ON pm.post_id = p.id
-             JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest
-               ON pm.id = latest.max_id
-             WHERE p.content_type = ? AND p.id != ? AND pm.impressions > 0
-             ORDER BY p.published_at DESC LIMIT 5`
-          )
-          .all(topPerformer.preview ? "video" : topPerformer.preview, topPerformer.id) as any[];
-
-        // Actually query by the top performer's content type
+        // Fetch similar posts by content type for comparison (same persona only)
         const comparisons = db
           .prepare(
             `SELECT COALESCE(p.hook_text, SUBSTR(p.full_text, 1, 80), p.content_preview) as preview,
@@ -349,9 +334,10 @@ export async function runFullPipeline(
                ON pm.id = latest.max_id
              WHERE p.content_type = (SELECT content_type FROM posts WHERE id = ?)
                AND p.id != ? AND pm.impressions > 0
+               AND p.persona_id = ?
              ORDER BY pm.impressions DESC LIMIT 5`
           )
-          .all(topPerformer.id, topPerformer.id) as { preview: string; impressions: number; er: number; contentType: string }[];
+          .all(topPerformer.id, topPerformer.id, personaId) as { preview: string; impressions: number; er: number; contentType: string }[];
 
         const topPerformerContentType = (db
           .prepare("SELECT content_type FROM posts WHERE id = ?")

@@ -53,6 +53,7 @@ export interface CoachCheckQuality {
 
 export interface GenerationRecord {
   id: number;
+  persona_id: number;
   research_id: number | null;
   post_type: string;
   selected_story_index: number | null;

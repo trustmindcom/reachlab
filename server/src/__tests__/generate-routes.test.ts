@@ -225,3 +225,176 @@ describe("POST /api/generate/discover", () => {
     expect(res.statusCode).toBe(500);
   });
 });
+
+describe("POST /api/generate/ghostwrite", () => {
+  it("returns 400 for missing message", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/generate/ghostwrite",
+      payload: { generation_id: 1 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("returns 404 for non-existent generation", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/generate/ghostwrite",
+      payload: { generation_id: 999999, message: "combine these" },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 403 for wrong persona", async () => {
+    // Create a generation for persona 1, then request as persona 2
+    const db = initDatabase(TEST_DB_PATH);
+    try {
+      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const researchId = insertResearch(db, 1, {
+        post_type: "general",
+        stories_json: "[]",
+      });
+      const genId = insertGeneration(db, 1, {
+        research_id: researchId,
+        post_type: "general",
+        selected_story_index: 0,
+        drafts_json: "[]",
+      });
+
+      // Close before inject so the app can use the DB
+      db.close();
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/generate/ghostwrite?personaId=2",
+        payload: { generation_id: genId, message: "combine" },
+      });
+      expect(res.statusCode).toBe(403);
+    } catch (e) {
+      db.close();
+      throw e;
+    }
+  });
+});
+
+describe("PATCH /api/generate/:id/selection", () => {
+  it("persists selection for owned generation", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    let genId: number;
+    try {
+      const { insertResearch, insertGeneration, getGeneration } = await import("../db/generate-queries.js");
+      const researchId = insertResearch(db, 1, {
+        post_type: "general",
+        stories_json: "[]",
+      });
+      genId = insertGeneration(db, 1, {
+        research_id: researchId,
+        post_type: "general",
+        selected_story_index: 0,
+        drafts_json: "[]",
+      });
+      db.close();
+    } catch (e) {
+      db.close();
+      throw e;
+    }
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/generate/${genId}/selection`,
+      payload: { selected_draft_indices: [0, 2], combining_guidance: "Make it punchy" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
+  it("returns 403 for wrong persona", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    let genId: number;
+    try {
+      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const researchId = insertResearch(db, 1, {
+        post_type: "general",
+        stories_json: "[]",
+      });
+      genId = insertGeneration(db, 1, {
+        research_id: researchId,
+        post_type: "general",
+        selected_story_index: 0,
+        drafts_json: "[]",
+      });
+      db.close();
+    } catch (e) {
+      db.close();
+      throw e;
+    }
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/generate/${genId}/selection?personaId=2`,
+      payload: { selected_draft_indices: [0] },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("PATCH /api/generate/:id/draft", () => {
+  it("saves draft for owned generation", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    let genId: number;
+    try {
+      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const researchId = insertResearch(db, 1, {
+        post_type: "general",
+        stories_json: "[]",
+      });
+      genId = insertGeneration(db, 1, {
+        research_id: researchId,
+        post_type: "general",
+        selected_story_index: 0,
+        drafts_json: "[]",
+      });
+      db.close();
+    } catch (e) {
+      db.close();
+      throw e;
+    }
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/generate/${genId}/draft`,
+      payload: { draft: "My updated draft text" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().ok).toBe(true);
+  });
+
+  it("returns 403 for wrong persona", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    let genId: number;
+    try {
+      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const researchId = insertResearch(db, 1, {
+        post_type: "general",
+        stories_json: "[]",
+      });
+      genId = insertGeneration(db, 1, {
+        research_id: researchId,
+        post_type: "general",
+        selected_story_index: 0,
+        drafts_json: "[]",
+      });
+      db.close();
+    } catch (e) {
+      db.close();
+      throw e;
+    }
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/generate/${genId}/draft?personaId=2`,
+      payload: { draft: "Sneaky draft" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});

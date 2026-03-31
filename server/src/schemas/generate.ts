@@ -74,3 +74,18 @@ export const sourceUpdateBody = z.object({
 export const sourceDiscoverBody = z.object({
   topics: z.array(z.string()).optional(),
 });
+
+export const ghostwriteBody = z.object({
+  generation_id: z.number().int().positive(),
+  message: z.string().trim().min(1),
+  current_draft: z.string().optional(),
+});
+
+export const selectionBody = z.object({
+  selected_draft_indices: z.array(z.number().int().min(0)),
+  combining_guidance: z.string().optional(),
+});
+
+export const draftSaveBody = z.object({
+  draft: z.string(),
+});
