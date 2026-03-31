@@ -51,6 +51,7 @@ export default function App() {
   const hasErrors = health?.sources
     ? Object.values(health.sources).some((s) => s.status === "error")
     : false;
+  const analysisDown = health?.analysis?.status === "failing";
 
   // Still loading
   if (keysConfigured === null || onboardingComplete === null) {
@@ -92,7 +93,7 @@ export default function App() {
     <ToastProvider>
     <PersonaProvider>
     <div className="min-h-screen">
-      {/* Alert banner */}
+      {/* Alert banners */}
       {hasErrors && health && (
         <div className="bg-negative/10 border-b border-negative/30 px-6 py-3 text-sm text-negative flex items-center gap-2">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -104,6 +105,16 @@ export default function App() {
               .filter(([, s]) => s.status === "error")
               .map(([name]) => name)
               .join(", ")}
+          </span>
+        </div>
+      )}
+      {analysisDown && (
+        <div className="bg-warning/10 border-b border-warning/30 px-6 py-3 text-sm text-warning flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 10.5a.75.75 0 110-1.5.75.75 0 010 1.5zM8.75 4.5v4a.75.75 0 01-1.5 0v-4a.75.75 0 011.5 0z" />
+          </svg>
+          <span>
+            AI analysis has failed {health!.analysis!.consecutive_failures} times in a row — insights and coaching are not updating.
           </span>
         </div>
       )}

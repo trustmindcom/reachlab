@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type Database from "better-sqlite3";
+import { jsonrepair } from "jsonrepair";
 import { MODELS } from "./client.js";
 import { AiLogger } from "./logger.js";
 import {
@@ -123,7 +124,7 @@ Return at most 3 changes. If nothing needs changing, return {"changes": []}.`;
     return { changes: [], input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens };
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as { changes: CoachingChangeProposal[] };
+  const parsed = JSON.parse(jsonrepair(jsonMatch[0])) as { changes: CoachingChangeProposal[] };
 
   return {
     changes: parsed.changes.slice(0, 3),

@@ -251,6 +251,12 @@ export interface HealthData {
     followers: { status: "ok" | "error"; last_success: string | null; error?: string };
     profile: { status: "ok" | "error"; last_success: string | null; error?: string };
   };
+  analysis?: {
+    status: "ok" | "failing" | "no_runs";
+    last_success: string | null;
+    consecutive_failures: number;
+    last_error?: string | null;
+  };
 }
 
 // ── Generate Pipeline Types ─────────────────────────────────

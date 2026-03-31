@@ -457,6 +457,32 @@ export function queryHealth(db: Database.Database, personaId: number) {
           : {}),
       },
     },
+    analysis: getAnalysisHealth(db, personaId),
+  };
+}
+
+function getAnalysisHealth(db: Database.Database, personaId: number) {
+  // Check last 5 auto runs for this persona
+  const recentRuns = db.prepare(
+    `SELECT status, error, started_at FROM ai_runs
+     WHERE persona_id = ? AND triggered_by = 'auto'
+     ORDER BY started_at DESC LIMIT 5`
+  ).all(personaId) as { status: string; error: string | null; started_at: string }[];
+
+  if (recentRuns.length === 0) {
+    return { status: "no_runs" as const, last_success: null, consecutive_failures: 0 };
+  }
+
+  const lastSuccess = recentRuns.find(r => r.status === "completed");
+  const consecutiveFailures = recentRuns.findIndex(r => r.status === "completed");
+  const failCount = consecutiveFailures === -1 ? recentRuns.length : consecutiveFailures;
+  const lastError = recentRuns.find(r => r.status === "failed")?.error ?? null;
+
+  return {
+    status: failCount >= 3 ? "failing" as const : "ok" as const,
+    last_success: lastSuccess?.started_at ? lastSuccess.started_at + "Z" : null,
+    consecutive_failures: failCount,
+    last_error: failCount > 0 ? lastError : null,
   };
 }
 

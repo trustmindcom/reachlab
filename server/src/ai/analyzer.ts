@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { jsonrepair } from "jsonrepair";
 import type { AiLogger } from "./logger.js";
 import { MODELS } from "./client.js";
 
@@ -47,11 +48,16 @@ export interface AnalysisOutputSchema {
 
 function parseAnalysisJSON(text: string): AnalysisOutputSchema {
   try {
-    return JSON.parse(text);
+    return JSON.parse(jsonrepair(text));
   } catch {
     const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (!match) throw new Error("LLM response is not valid JSON");
-    return JSON.parse(match[1]!);
+    if (!match) {
+      // Try extracting any JSON object from the response
+      const objMatch = text.match(/\{[\s\S]*\}/);
+      if (!objMatch) throw new Error("LLM response is not valid JSON");
+      return JSON.parse(jsonrepair(objMatch[0]));
+    }
+    return JSON.parse(jsonrepair(match[1]!));
   }
 }
 
