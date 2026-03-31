@@ -327,6 +327,13 @@ export interface GenCombineResponse {
   quality: GenCoachCheckQuality;
 }
 
+export interface GhostwriteResponse {
+  message: string;
+  draft: string | null;
+  change_summary: string | null;
+  tools_used: string[];
+}
+
 
 export interface GenRule {
   id?: number;
@@ -662,6 +669,39 @@ export const api = {
     }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<GenCombineResponse>;
+    }),
+
+  ghostwrite: (generationId: number, message: string, currentDraft?: string) =>
+    fetch(withPersonaId(`/api/generate/ghostwrite`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generation_id: generationId, message, current_draft: currentDraft }),
+    }).then(async (r) => {
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `API error: ${r.status}`);
+      }
+      return r.json() as Promise<GhostwriteResponse>;
+    }),
+
+  saveSelection: (generationId: number, indices: number[], guidance?: string) =>
+    fetch(withPersonaId(`/api/generate/${generationId}/selection`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ selected_draft_indices: indices, combining_guidance: guidance }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json();
+    }),
+
+  saveDraft: (generationId: number, draft: string) =>
+    fetch(withPersonaId(`/api/generate/${generationId}/draft`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json();
     }),
 
   // ── Generate Rules ────────────────────────────────────────

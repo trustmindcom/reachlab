@@ -51,7 +51,7 @@ interface DraftVariationsProps {
 
 export default function DraftVariations({ gen, setGen, loading, setLoading, onBack, onNext }: DraftVariationsProps) {
   const [activeDraft, setActiveDraft] = useState(0);
-  const [reviseFeedback, setReviseFeedback] = useState("");
+  const [reviseFeedback, setReviseFeedback] = useState(gen.combiningGuidance ?? "");
   const [loaderMessages, setLoaderMessages] = useState(COMBINING_MESSAGES);
 
   const selectedCount = gen.selectedDraftIndices.length;
@@ -87,23 +87,31 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
 
   const handleCombineAndReview = async () => {
     if (gen.generationId === null || selectedCount === 0) return;
-    setLoaderMessages(COMBINING_MESSAGES);
     setLoading(true);
     try {
-      const res = await api.generateCombine(
+      // 1. Persist selection to DB
+      await api.saveSelection(
         gen.generationId,
         gen.selectedDraftIndices,
-        gen.combiningGuidance || undefined
+        reviseFeedback || gen.combiningGuidance || undefined
       );
-      setGen((prev: any) => ({
-        ...prev,
-        originalDraft: res.final_draft,
-        finalDraft: res.final_draft,
-        qualityGate: res.quality,
-      }));
+
+      // 2. Set sentinel final_draft so restore works even if AI asks before drafting
+      const firstDraft = gen.drafts[gen.selectedDraftIndices[0]];
+      if (firstDraft) {
+        const sentinel = `${firstDraft.hook}\n\n${firstDraft.body}\n\n${firstDraft.closing}`;
+        await api.saveDraft(gen.generationId, sentinel);
+        setGen((prev: any) => ({
+          ...prev,
+          finalDraft: sentinel,
+          originalDraft: sentinel,
+          combiningGuidance: reviseFeedback || prev.combiningGuidance,
+        }));
+      }
+
       onNext();
     } catch (err) {
-      console.error("Combine failed:", err);
+      console.error("Failed:", err);
     } finally {
       setLoading(false);
     }

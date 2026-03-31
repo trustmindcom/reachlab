@@ -3,6 +3,7 @@ import SubTabBar, { type GenerateSubTab } from "./generate/SubTabBar";
 import DiscoveryView from "./generate/DiscoveryView";
 import DraftVariations from "./generate/DraftVariations";
 import ReviewEdit from "./generate/ReviewEdit";
+import GhostwriterChat from "./generate/GhostwriterChat";
 import Rules from "./generate/Rules";
 import Sources from "./generate/Sources";
 import GenerationHistory from "./generate/GenerationHistory";
@@ -205,12 +206,15 @@ export default function Generate() {
           />
         )}
         {subTab === "Generate" && step === 3 && (
-          <ReviewEdit
+          <GhostwriterChat
             gen={gen}
             setGen={setGen}
             loading={loading}
             setLoading={setLoading}
-            onBack={() => setStep(2)}
+            onBack={() => {
+              setGen(prev => ({ ...prev, finalDraft: "", originalDraft: "", chatMessages: [] }));
+              setStep(2);
+            }}
             onRetro={() => setStep(4)}
           />
         )}
