@@ -33,7 +33,7 @@ import { streamWithIdleTimeout } from "../ai/stream-with-idle.js";
 import { createClient, MODELS } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
-import { generateDrafts } from "../ai/drafter.js";
+import { generateDrafts, reviseDrafts } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
 import { coachCheck } from "../ai/coach-check.js";
 import { analyzeRetro } from "../ai/retro.js";
@@ -41,7 +41,7 @@ import { registerCoachingRoutes } from "./generate-coaching.js";
 import { registerSourceRoutes } from "./generate-sources.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
-import { researchBody, draftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody } from "../schemas/generate.js";
+import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody } from "../schemas/generate.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -143,6 +143,42 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       completeRun(db, runId, getRunCost(db, runId));
 
       return { generation_id: generationId, drafts: result.drafts };
+    } catch (err: any) {
+      failRun(db, runId, err.message);
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // ── Revise Drafts ────────────────────────────────────────
+
+  app.post("/api/generate/revise-drafts", async (request, reply) => {
+    const personaId = getPersonaId(request);
+    const { generation_id, feedback } = validateBody(reviseDraftsBody, request.body);
+
+    const generation = getGeneration(db, generation_id);
+    if (!generation) {
+      return reply.status(404).send({ error: "Generation not found" });
+    }
+
+    const currentDrafts: Draft[] = JSON.parse(generation.drafts_json!);
+    const client = getClient();
+    const runId = createRun(db, personaId, "revise_drafts", 0);
+    const logger = new AiLogger(db, runId);
+
+    try {
+      const result = await reviseDrafts(
+        client, db, personaId, logger,
+        currentDrafts, feedback,
+        (generation as any).draft_length
+      );
+
+      updateGeneration(db, generation_id, {
+        drafts_json: JSON.stringify(result.drafts),
+      });
+
+      completeRun(db, runId, getRunCost(db, runId));
+
+      return { drafts: result.drafts };
     } catch (err: any) {
       failRun(db, runId, err.message);
       return reply.status(500).send({ error: err.message });

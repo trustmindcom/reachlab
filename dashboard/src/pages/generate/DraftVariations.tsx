@@ -4,6 +4,14 @@ import DraftSidebar from "./components/DraftSidebar";
 import DraftReader from "./components/DraftReader";
 import ScannerLoader from "./components/ScannerLoader";
 
+const REVISING_MESSAGES = [
+  "Reading your feedback...",
+  "Rethinking the approach...",
+  "Rewriting drafts...",
+  "Applying your direction...",
+  "Polishing revisions...",
+];
+
 const COMBINING_MESSAGES = [
   "Analyzing draft structures...",
   "Identifying strongest hooks...",
@@ -43,9 +51,30 @@ interface DraftVariationsProps {
 
 export default function DraftVariations({ gen, setGen, loading, setLoading, onBack, onNext }: DraftVariationsProps) {
   const [activeDraft, setActiveDraft] = useState(0);
+  const [reviseFeedback, setReviseFeedback] = useState("");
+  const [loaderMessages, setLoaderMessages] = useState(COMBINING_MESSAGES);
 
   const selectedCount = gen.selectedDraftIndices.length;
   const showGuidance = selectedCount >= 2;
+
+  const handleRevise = async () => {
+    if (!reviseFeedback.trim() || gen.generationId === null) return;
+    setLoaderMessages(REVISING_MESSAGES);
+    setLoading(true);
+    try {
+      const res = await api.reviseDrafts(gen.generationId, reviseFeedback.trim());
+      setGen((prev: any) => ({
+        ...prev,
+        drafts: res.drafts,
+        selectedDraftIndices: [],
+      }));
+      setReviseFeedback("");
+    } catch (err) {
+      console.error("Revise failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleToggleInclude = (index: number) => {
     setGen((prev: any) => {
@@ -59,6 +88,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
 
   const handleCombineAndReview = async () => {
     if (gen.generationId === null || selectedCount === 0) return;
+    setLoaderMessages(COMBINING_MESSAGES);
     setLoading(true);
     try {
       const res = await api.generateCombine(
@@ -83,7 +113,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
   const actionLabel = selectedCount <= 1 ? "Review" : "Combine & review";
 
   if (loading) {
-    return <ScannerLoader messages={COMBINING_MESSAGES} interval={2000} />;
+    return <ScannerLoader messages={loaderMessages} interval={2000} />;
   }
 
   return (
@@ -126,6 +156,29 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
           />
         </div>
       )}
+
+      {/* Revise feedback */}
+      <div className="mt-4 px-1">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={reviseFeedback}
+            onChange={(e) => setReviseFeedback(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleRevise();
+            }}
+            placeholder="Not quite right? Say what to change and regenerate all three..."
+            className="flex-1 bg-gen-bg-2 border border-gen-border-2 rounded-lg px-4 py-2.5 text-[13px] text-gen-text-1 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
+          />
+          <button
+            onClick={handleRevise}
+            disabled={!reviseFeedback.trim()}
+            className="px-4 py-2.5 bg-gen-accent text-white text-[13px] font-medium rounded-lg hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            Revise
+          </button>
+        </div>
+      </div>
 
       {/* Bottom bar */}
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-gen-border-1">

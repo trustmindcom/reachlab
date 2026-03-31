@@ -13,6 +13,11 @@ export const draftsBody = z.object({
   length: z.enum(["short", "medium", "long"]).optional(),
 });
 
+export const reviseDraftsBody = z.object({
+  generation_id: z.number().int().positive(),
+  feedback: z.string().trim().min(1).max(2000),
+});
+
 export const combineBody = z.object({
   generation_id: z.number().int().positive(),
   selected_drafts: z.array(z.number().int().min(0)),

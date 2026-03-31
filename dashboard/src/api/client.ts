@@ -622,6 +622,16 @@ export const api = {
       return r.json() as Promise<GenDraftsResponse>;
     }),
 
+  reviseDrafts: (generationId: number, feedback: string) =>
+    fetch(withPersonaId(`/api/generate/revise-drafts`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generation_id: generationId, feedback }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<GenDraftsResponse>;
+    }),
+
   generateChat: (generationId: number, message: string, editedDraft?: string) =>
     fetch(withPersonaId(`/api/generate/chat`), {
       method: "POST",

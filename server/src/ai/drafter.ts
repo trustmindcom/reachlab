@@ -127,3 +127,100 @@ Return JSON:
     output_tokens: totalOutput,
   };
 }
+
+/**
+ * Revise all 3 drafts based on user feedback about what they do/don't like.
+ */
+export async function reviseDrafts(
+  client: Anthropic,
+  db: Database.Database,
+  personaId: number,
+  logger: AiLogger,
+  currentDrafts: Draft[],
+  feedback: string,
+  length?: DraftLength
+): Promise<DraftResult> {
+  const assembled = assemblePrompt(db, personaId, "");
+  const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
+
+  const draftPromises = currentDrafts.map(
+    async (draft, i): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
+      const start = Date.now();
+      const currentDraftText = `HOOK: ${draft.hook}\n\nBODY: ${draft.body}\n\nCLOSING: ${draft.closing}`;
+
+      const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
+        model: MODELS.SONNET,
+        max_tokens: 2000,
+        system: assembled.system,
+        messages: [
+          {
+            role: "user",
+            content: `Here is a ${draft.type} draft variation I generated:
+
+${currentDraftText}
+
+The user reviewed all three drafts and gave this feedback:
+"${feedback}"
+
+Rewrite this ${draft.type} variation to address the feedback. Keep the same variation style (${VARIATION_INSTRUCTIONS[draft.type] ? draft.type : "general"}) but incorporate what the user wants changed.${lengthContext}
+
+Return JSON:
+{
+  "hook": "string — the opening 1-2 sentences that stop the scroll",
+  "body": "string — the main content, use \\n for line breaks",
+  "closing": "string — the closing question or reflection",
+  "word_count": number,
+  "structure_label": "string — brief description like 'Contrarian take with personal evidence'"
+}`,
+          },
+        ],
+      });
+
+      const duration = Date.now() - start;
+
+      logger.log({
+        step: `revise_${draft.type}`,
+        model: MODELS.SONNET,
+        input_messages: JSON.stringify([{ role: "user", content: `Revise ${draft.type}: ${feedback}` }]),
+        output_text: text,
+        tool_calls: null,
+        input_tokens,
+        output_tokens,
+        thinking_tokens,
+        duration_ms: duration,
+      });
+
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error(`Revised draft ${draft.type} response did not contain valid JSON`);
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        draft: {
+          type: draft.type,
+          hook: parsed.hook,
+          body: parsed.body,
+          closing: parsed.closing,
+          word_count: parsed.word_count ?? 0,
+          structure_label: parsed.structure_label ?? draft.type,
+        },
+        input_tokens,
+        output_tokens,
+      };
+    }
+  );
+
+  const results = await Promise.all(draftPromises);
+  const drafts = results.map((r) => r.draft);
+  const totalInput = results.reduce((sum, r) => sum + r.input_tokens, 0);
+  const totalOutput = results.reduce((sum, r) => sum + r.output_tokens, 0);
+
+  return {
+    drafts,
+    prompt_snapshot: assembled.system,
+    input_tokens: totalInput,
+    output_tokens: totalOutput,
+  };
+}

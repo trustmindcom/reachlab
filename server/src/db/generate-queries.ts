@@ -260,13 +260,14 @@ export function updateGeneration(
     total_cost_cents: number;
     prompt_snapshot: string;
     published_text: string;
+    drafts_json: string;
   }>
 ): void {
   const ALLOWED_COLUMNS = new Set([
     "selected_draft_indices", "combining_guidance", "final_draft",
     "quality_gate_json", "status", "matched_post_id",
     "total_input_tokens", "total_output_tokens", "total_cost_cents",
-    "prompt_snapshot", "published_text",
+    "prompt_snapshot", "published_text", "drafts_json",
   ]);
   const sets: string[] = ["updated_at = CURRENT_TIMESTAMP"];
   const params: any[] = [];
