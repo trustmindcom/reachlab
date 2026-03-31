@@ -115,6 +115,7 @@ export async function ghostwriterTurn(
     const remainingMs = Math.min(API_TIMEOUT_MS, TURN_DEADLINE_MS - elapsed);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), remainingMs);
+    const iterStart = Date.now();
 
     let response: Anthropic.Messages.Message;
     try {
@@ -145,7 +146,7 @@ export async function ghostwriterTurn(
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
       thinking_tokens: 0,
-      duration_ms: Date.now() - turnStart,
+      duration_ms: Date.now() - iterStart,
     });
 
     if (response.stop_reason !== "tool_use") break;
