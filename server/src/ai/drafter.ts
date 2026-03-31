@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type Database from "better-sqlite3";
+import { jsonrepair } from "jsonrepair";
 import { MODELS } from "./client.js";
 import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import { AiLogger } from "./logger.js";
@@ -99,7 +100,7 @@ Return JSON:
         throw new Error(`Draft ${variationType} response did not contain valid JSON`);
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonrepair(jsonMatch[0]));
       return {
         draft: {
           type: variationType as Draft["type"],
@@ -196,7 +197,7 @@ Return JSON:
         throw new Error(`Revised draft ${draft.type} response did not contain valid JSON`);
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonrepair(jsonMatch[0]));
       return {
         draft: {
           type: draft.type,

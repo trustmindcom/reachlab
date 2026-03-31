@@ -77,11 +77,22 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
 
     const hues = [210, 240, 270, 190, 300, 175];
 
-    // Global heartbeat — all particles feel this rhythm
+    // Global heartbeat — layered breathing with asymmetric inhale/exhale
     const heartbeat = (t: number) => {
-      const fast = Math.sin(t * 1.8) * 0.5 + 0.5;          // main pulse
-      const slow = Math.sin(t * 0.4) * 0.3 + 0.7;          // slow swell
-      return fast * 0.6 + slow * 0.4;                        // blend
+      // Primary breath: fast inhale (rise), slow exhale (fall) via power curve
+      const rawBreath = Math.sin(t * 1.2);
+      const breath = rawBreath > 0
+        ? Math.pow(rawBreath, 0.6)              // quick inhale — snaps up
+        : -Math.pow(-rawBreath, 1.8) * 0.7;     // slow exhale — eases down gently
+      const primary = breath * 0.5 + 0.5;       // normalize to 0..1
+
+      // Secondary: deep slow swell, like a tide underneath
+      const deep = Math.sin(t * 0.25) * 0.3 + 0.7;
+
+      // Tertiary: subtle irregularity so it never feels mechanical
+      const flutter = Math.sin(t * 3.7) * 0.08 + Math.sin(t * 5.3) * 0.04;
+
+      return Math.max(0, Math.min(1, primary * 0.55 + deep * 0.35 + flutter + 0.1));
     };
 
     // Spawn particles
@@ -196,6 +207,13 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       const hb = heartbeat(t);   // 0..1 global pulse
 
       ctx.clearRect(0, 0, size, size);
+
+      // Global breathing scale — whole canvas gently expands/contracts
+      const breathScale = 1 + (hb - 0.5) * 0.04; // ±2% scale
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(breathScale, breathScale);
+      ctx.translate(-cx, -cy);
 
       // ── Layer 1: Deep ambient nebula ──
       for (let i = 0; i < 5; i++) {
@@ -527,6 +545,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       ctx.arc(cx, cy, coreSize, 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.restore(); // end global breathing scale
       animId = requestAnimationFrame(draw);
     };
 

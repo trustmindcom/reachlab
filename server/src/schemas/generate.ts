@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const researchBody = z.object({
-  topic: z.string().trim().min(1).max(500),
+  topic: z.string().trim().min(1),
   avoid: z.array(z.string().max(500)).max(50).optional(),
   sources: z.array(z.string()).optional(),
 });
