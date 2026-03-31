@@ -85,6 +85,19 @@ export interface CoachingChange {
   decided_at: string | null;
 }
 
+export interface EditorialPrinciple {
+  id: number;
+  persona_id: number;
+  principle_text: string;
+  source_post_type: string | null;
+  source_context: string | null;
+  frequency: number;
+  confidence: number;
+  last_confirmed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Rules ──────────────────────────────────────────────────
 
 export function getRules(db: Database.Database, personaId: number): GenerationRule[] {
@@ -657,6 +670,70 @@ export function markRetroApplied(db: Database.Database, generationId: number): v
 
 export function getCoachingChange(db: Database.Database, id: number): any | undefined {
   return db.prepare("SELECT * FROM coaching_change_log WHERE id = ?").get(id);
+}
+
+// ── Active generation (auto-restore) ────────────────────
+
+// ── Editorial Principles ──────────────────────────────────
+
+export function insertEditorialPrinciple(
+  db: Database.Database,
+  personaId: number,
+  data: { principle_text: string; source_post_type?: string; source_context?: string; confidence?: number }
+): number {
+  const result = db
+    .prepare(
+      `INSERT INTO editorial_principles (persona_id, principle_text, source_post_type, source_context, confidence)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(personaId, data.principle_text, data.source_post_type ?? null, data.source_context ?? null, data.confidence ?? 0.5);
+  return Number(result.lastInsertRowid);
+}
+
+export function getEditorialPrinciples(
+  db: Database.Database,
+  personaId: number,
+  postType?: string
+): EditorialPrinciple[] {
+  if (postType) {
+    return db
+      .prepare(
+        `SELECT * FROM editorial_principles
+         WHERE persona_id = ? AND (source_post_type = ? OR source_post_type IS NULL)
+         ORDER BY confidence DESC, frequency DESC
+         LIMIT 10`
+      )
+      .all(personaId, postType) as EditorialPrinciple[];
+  }
+  return db
+    .prepare(
+      `SELECT * FROM editorial_principles
+       WHERE persona_id = ?
+       ORDER BY confidence DESC, frequency DESC
+       LIMIT 10`
+    )
+    .all(personaId) as EditorialPrinciple[];
+}
+
+export function confirmPrinciple(db: Database.Database, id: number): void {
+  db.prepare(
+    `UPDATE editorial_principles
+     SET frequency = frequency + 1,
+         confidence = MIN(1.0, confidence + 0.1),
+         updated_at = CURRENT_TIMESTAMP,
+         last_confirmed_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(id);
+}
+
+export function pruneStaleEditorialPrinciples(db: Database.Database, personaId: number): number {
+  const result = db
+    .prepare(
+      `DELETE FROM editorial_principles
+       WHERE persona_id = ? AND frequency <= 1 AND created_at < datetime('now', '-30 days')`
+    )
+    .run(personaId);
+  return result.changes;
 }
 
 // ── Active generation (auto-restore) ────────────────────

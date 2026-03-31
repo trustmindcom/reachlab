@@ -28,6 +28,10 @@ import {
   insertGenerationMessage,
   getGenerationMessages,
   getActiveGeneration,
+  insertEditorialPrinciple,
+  getEditorialPrinciples,
+  confirmPrinciple,
+  pruneStaleEditorialPrinciples,
 } from "../db/generate-queries.js";
 import { initDatabase } from "../db/index.js";
 
@@ -366,5 +370,95 @@ describe("getActiveGeneration", () => {
     if (active) {
       expect(active.id).not.toBe(genId);
     }
+  });
+});
+
+describe("editorial principles", () => {
+  it("inserts and retrieves principles", () => {
+    const id = insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "Always lead with a concrete example",
+      source_post_type: "news",
+      source_context: "Top posts use concrete openings",
+    });
+    expect(id).toBeGreaterThan(0);
+
+    const principles = getEditorialPrinciples(db, PERSONA_ID);
+    expect(principles.length).toBeGreaterThanOrEqual(1);
+    const found = principles.find((p) => p.id === id);
+    expect(found).toBeDefined();
+    expect(found!.principle_text).toBe("Always lead with a concrete example");
+    expect(found!.frequency).toBe(1);
+    expect(found!.confidence).toBeCloseTo(0.5);
+  });
+
+  it("filters by post_type including null source_post_type", () => {
+    // Insert a principle with no post type (applies to all)
+    const genericId = insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "Keep paragraphs short",
+      confidence: 0.9,
+    });
+    // Insert a principle specific to "topic"
+    const topicId = insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "Topic posts need a strong hook",
+      source_post_type: "topic",
+      confidence: 0.8,
+    });
+    // Insert a principle specific to "news" (should NOT appear for "topic" filter)
+    insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "News posts should cite sources",
+      source_post_type: "news",
+      confidence: 0.7,
+    });
+
+    const topicPrinciples = getEditorialPrinciples(db, PERSONA_ID, "topic");
+    const ids = topicPrinciples.map((p) => p.id);
+    expect(ids).toContain(genericId); // null source_post_type included
+    expect(ids).toContain(topicId); // matching source_post_type included
+    // news-specific principle should not appear
+    expect(topicPrinciples.every((p) => p.source_post_type !== "news" || p.source_post_type === null)).toBe(true);
+  });
+
+  it("confirm increments frequency and confidence", () => {
+    const id = insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "Use active voice",
+      confidence: 0.5,
+    });
+    confirmPrinciple(db, id);
+
+    const principles = getEditorialPrinciples(db, PERSONA_ID);
+    const found = principles.find((p) => p.id === id)!;
+    expect(found.frequency).toBe(2);
+    expect(found.confidence).toBeCloseTo(0.6);
+    expect(found.last_confirmed_at).not.toBeNull();
+  });
+
+  it("confidence caps at 1.0", () => {
+    const id = insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "Cap test principle",
+      confidence: 0.95,
+    });
+    // Confirm twice: 0.95 -> 1.0 (capped), then still 1.0
+    confirmPrinciple(db, id);
+    confirmPrinciple(db, id);
+
+    const principles = getEditorialPrinciples(db, PERSONA_ID);
+    const found = principles.find((p) => p.id === id)!;
+    expect(found.confidence).toBe(1.0);
+    expect(found.frequency).toBe(3);
+  });
+
+  it("prune removes stale principles", () => {
+    const id = insertEditorialPrinciple(db, PERSONA_ID, {
+      principle_text: "Stale principle to prune",
+    });
+    // Make it old: set created_at to 31 days ago
+    db.prepare("UPDATE editorial_principles SET created_at = datetime('now', '-31 days') WHERE id = ?").run(id);
+
+    const pruned = pruneStaleEditorialPrinciples(db, PERSONA_ID);
+    expect(pruned).toBeGreaterThanOrEqual(1);
+
+    // Verify it's gone
+    const principles = getEditorialPrinciples(db, PERSONA_ID);
+    expect(principles.find((p) => p.id === id)).toBeUndefined();
   });
 });
