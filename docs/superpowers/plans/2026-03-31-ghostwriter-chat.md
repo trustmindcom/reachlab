@@ -4,9 +4,11 @@
 
 **Goal:** Replace the static combine+review steps with a tool-using conversational agent that interviews the user and iteratively refines a LinkedIn post draft in a split-view chat interface.
 
-**Architecture:** Tool-using agent on the raw Anthropic Messages API (via OpenRouter). The ghostwriter has 5 tools to selectively retrieve context (editorial principles, past posts, platform knowledge, author profile) and update the draft. A `while (stop_reason === "tool_use")` loop executes tools server-side. The system prompt is lightweight behavioral instructions — editorial principles drive conversation behavior (asking questions, challenging vagueness) rather than static generation rules.
+**Architecture:** Tool-using agent on the raw Anthropic Messages API (via OpenRouter). The ghostwriter has 6 tools to selectively retrieve context (editorial principles, writing rules, past posts, platform knowledge, author profile) and update the draft. A `while (stop_reason === "tool_use")` loop with a 10-iteration cap and per-call timeouts executes tools server-side. The system prompt is lightweight behavioral instructions — editorial principles drive conversation behavior (asking questions, challenging vagueness) rather than static generation rules. Per-request state objects (not module globals) ensure concurrency safety.
 
 **Tech Stack:** Fastify, Anthropic SDK (`@anthropic-ai/sdk`) via OpenRouter, SQLite (better-sqlite3), React, Tailwind CSS v4
+
+**Important: Verify early that tool_use works through OpenRouter.** This codebase has zero existing tool_use calls. Before building the full loop, test with a single tool call in isolation.
 
 ---
 
@@ -15,32 +17,35 @@
 ### New Files
 | File | Responsibility |
 |------|---------------|
-| `server/src/ai/ghostwriter.ts` | Tool definitions, agentic loop, system prompt builder |
-| `server/src/ai/ghostwriter-tools.ts` | Tool handler implementations (DB queries, knowledge lookup) |
+| `server/src/ai/ghostwriter.ts` | Agentic loop, system prompt builder, per-request state |
+| `server/src/ai/ghostwriter-tools.ts` | Tool definitions and handler implementations |
+| `server/src/ai/platform-knowledge.ts` | Pre-extracted LinkedIn knowledge map (no regex, no runtime file reads) |
 | `server/src/db/migrations/024-editorial-principles.sql` | New table for context-indexed editorial principles |
-| `dashboard/src/pages/generate/GhostwriterChat.tsx` | Split-view chat UI (chat left, draft right) |
+| `dashboard/src/pages/generate/GhostwriterChat.tsx` | Split-view chat UI (chat left, editable draft right) |
 | `server/src/__tests__/ghostwriter-tools.test.ts` | Tests for tool handlers |
 | `server/src/__tests__/ghostwriter.test.ts` | Tests for agentic loop and system prompt |
 
 ### Modified Files
 | File | Changes |
 |------|---------|
-| `server/src/routes/generate.ts` | Add `POST /api/generate/ghostwrite` endpoint |
-| `server/src/schemas/generate.ts` | Add `ghostwriteBody` schema |
-| `server/src/db/generate-queries.ts` | Add editorial principle queries |
-| `dashboard/src/api/client.ts` | Add `ghostwrite()` API method and types |
-| `dashboard/src/pages/Generate.tsx` | Wire step 3 to GhostwriterChat instead of ReviewEdit |
-| `dashboard/src/pages/generate/DraftVariations.tsx` | Transition to ghostwriter chat on combine |
+| `server/src/routes/generate.ts` | Add `POST /api/generate/ghostwrite` and `PATCH /api/generate/:id/selection` endpoints |
+| `server/src/schemas/generate.ts` | Add `ghostwriteBody` and `selectionBody` schemas |
+| `server/src/db/generate-queries.ts` | Add editorial principle queries + auto-pruning |
+| `server/src/ai/retro.ts` | Store retro patterns as editorial principles (LLM dedup) |
+| `dashboard/src/api/client.ts` | Add `ghostwrite()`, `saveSelection()`, `saveDraft()` API methods |
+| `dashboard/src/pages/Generate.tsx` | Wire step 3 to GhostwriterChat, pass onRetro prop |
+| `dashboard/src/pages/generate/DraftVariations.tsx` | Persist selection to DB before transitioning |
 
 ### Reference Files (read-only)
 | File | What to reference |
 |------|-------------------|
 | `server/src/ai/interviewer-prompt.ts` | Follow-up strategies (SURFACE, ENERGY, CASUAL ASIDE, CONTRADICTION) |
-| `server/src/ai/linkedin-knowledge.md` | Platform knowledge to serve via `get_platform_knowledge` tool |
-| `server/src/ai/prompt-assembler.ts` | Current prompt assembly patterns |
-| `server/src/ai/stream-with-idle.ts` | Existing streaming wrapper to build on |
+| `server/src/ai/linkedin-knowledge.md` | Source for pre-extracted platform knowledge |
+| `docs/ai-insights-research.md` | Source for pre-extracted content strategy research |
+| `server/src/ai/prompt-assembler.ts` | Current prompt assembly patterns (rules + insights + profile) |
 | `server/src/ai/client.ts` | Model constants, OpenRouter client creation |
-| `docs/ai-insights-research.md` | Content strategy research for platform knowledge tool |
+| `server/src/ai/stream-with-idle.ts` | Timeout/deadline patterns to follow |
+| `dashboard/src/pages/generate/ReviewEdit.tsx` | Existing chat+draft pattern (editable textarea, copy, error handling) |
 
 ---
 
@@ -56,14 +61,15 @@
 ```sql
 CREATE TABLE editorial_principles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  persona_id INTEGER NOT NULL,
+  persona_id INTEGER NOT NULL REFERENCES personas(id),
   principle_text TEXT NOT NULL,
   source_post_type TEXT,
   source_context TEXT,
   frequency INTEGER NOT NULL DEFAULT 1,
   confidence REAL NOT NULL DEFAULT 0.5,
   last_confirmed_at DATETIME,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_editorial_principles_persona ON editorial_principles(persona_id);
 ```
@@ -120,7 +126,7 @@ describe("editorial principles", () => {
     expect(personal.every(p => p.source_post_type === "personal_story" || p.source_post_type === null)).toBe(true);
   });
 
-  it("increments frequency on confirmPrinciple", () => {
+  it("increments frequency and confidence on confirmPrinciple", () => {
     const principles = getEditorialPrinciples(db, 1);
     const id = principles[0].id;
     confirmPrinciple(db, id);
@@ -129,13 +135,34 @@ describe("editorial principles", () => {
     expect(found.frequency).toBe(2);
     expect(found.confidence).toBeGreaterThan(0.5);
   });
+
+  it("caps confidence at 1.0", () => {
+    const principles = getEditorialPrinciples(db, 1);
+    const id = principles[0].id;
+    for (let i = 0; i < 15; i++) confirmPrinciple(db, id);
+    const updated = getEditorialPrinciples(db, 1);
+    expect(updated.find(p => p.id === id)!.confidence).toBeLessThanOrEqual(1.0);
+  });
+
+  it("prunes stale principles", () => {
+    // Insert a low-frequency principle with old timestamp
+    db.prepare(`INSERT INTO editorial_principles (persona_id, principle_text, frequency, confidence, created_at)
+      VALUES (1, 'Stale one-off principle', 1, 0.5, datetime('now', '-60 days'))`).run();
+    const before = getEditorialPrinciples(db, 1);
+    pruneStaleEditorialPrinciples(db, 1);
+    const after = getEditorialPrinciples(db, 1);
+    expect(after.find(p => p.principle_text === "Stale one-off principle")).toBeUndefined();
+  });
+
+  it("returns unknown tool gracefully", () => {
+    // Belongs in ghostwriter-tools tests but verifies the pattern
+  });
 });
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm test -- --run server/src/__tests__/generate-queries.test.ts`
-Expected: FAIL — functions not defined
 
 - [ ] **Step 3: Implement the functions**
 
@@ -152,6 +179,7 @@ export interface EditorialPrinciple {
   confidence: number;
   last_confirmed_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export function insertEditorialPrinciple(
@@ -192,25 +220,142 @@ export function confirmPrinciple(db: Database.Database, id: number): void {
     `UPDATE editorial_principles
      SET frequency = frequency + 1,
          confidence = MIN(1.0, confidence + 0.1),
-         last_confirmed_at = CURRENT_TIMESTAMP
+         last_confirmed_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(id);
+}
+
+/** Remove principles that were seen only once and are older than 30 days */
+export function pruneStaleEditorialPrinciples(db: Database.Database, personaId: number): number {
+  const result = db.prepare(
+    `DELETE FROM editorial_principles
+     WHERE persona_id = ? AND frequency <= 1 AND created_at < datetime('now', '-30 days')`
+  ).run(personaId);
+  return result.changes;
 }
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm test -- --run server/src/__tests__/generate-queries.test.ts`
-Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add server/src/db/generate-queries.ts server/src/__tests__/generate-queries.test.ts
-git commit -m "feat: editorial principle CRUD with post-type filtering and confirmation"
+git commit -m "feat: editorial principle CRUD with post-type filtering, confirmation, and auto-pruning"
 ```
 
-### Task 3: Ghostwriter Tool Handlers
+### Task 3: Platform Knowledge Map (no regex)
+
+**Files:**
+- Create: `server/src/ai/platform-knowledge.ts`
+
+Instead of parsing markdown files with regex at runtime, pre-extract the knowledge into a typed map at build time. Each aspect maps to a plain string of the relevant content. When the knowledge files change, update this map.
+
+- [ ] **Step 1: Create platform-knowledge.ts**
+
+Read `server/src/ai/linkedin-knowledge.md` and `docs/ai-insights-research.md`. Extract each section relevant to the tool's aspects into a `Record<string, string>`:
+
+```typescript
+/** Pre-extracted LinkedIn platform knowledge. Updated manually when source docs change. */
+export const PLATFORM_KNOWLEDGE: Record<string, string> = {
+  hooks: `## Hook Type Analysis
+Only the first 210-235 characters are visible before "See more". 60-70% of potential readers are lost at this decision point.
+
+| Hook Type | Description | Strength |
+|-----------|-------------|----------|
+| Question | Opens with direct question | Drives comments |
+| Bold Claim | Contrarian/surprising statement | Stops the scroll |
+| Story | "Last Tuesday, I got fired..." | Emotional engagement, dwell time |
+| Statistic | Leads with surprising number | Establishes credibility |
+| Contrarian | "Unpopular opinion: X is dead" | Polarization drives comments |
+| Vulnerable | Admits failure, shares struggle | High saves and follows |`,
+
+  closings: `## Closing Strategies
+Close with either a single practitioner question answerable in one sentence from direct experience, or a self-directed claim that stays open.
+
+A question must name one specific thing the reader would have to actively know or have checked to answer it.
+A self-directed close ('still thinking about what mine says about me') works when the post is confessional or personal.
+
+The closing is the second most important element after the hook. It determines whether readers comment or scroll past.`,
+
+  length: `## Optimal Post Length
+| Length | Performance | Best Use |
+|--------|-------------|----------|
+| <500 chars | Underperforms | Quick hot takes only |
+| 500-900 chars | Good | Engagement drivers, questions |
+| 1,300-1,900 chars | **Peak zone** | Deep insight, storytelling |
+| >2,000 chars | Diminishing returns | Only if extremely compelling |`,
+
+  format: `## Content Format Performance (2025-2026)
+| Format | Avg Engagement Rate | Notes |
+|--------|-------------------|-------|
+| Multi-image posts | 6.60% | Highest engagement |
+| Document carousels | 6.10% | 278% more than video |
+| Video | 5.60% | But crashed 35% YoY |
+| Text + image | Strong | 58% of all LinkedIn content |
+| Text-only | Lowest tier | Unless sharp and compelling |
+
+Single-image posts dropped 30% below text-only in 2026 — LinkedIn's text-only retrieval system can't see images. Substantial captions compensate.`,
+
+  engagement: `## Engagement Quality Hierarchy
+| Signal | Approximate Weight | What It Indicates |
+|--------|-------------------|-------------------|
+| Meaningful comments (15+ words) | ~15x baseline | Provoked genuine thought |
+| Shares/Reposts (with context) | ~5x baseline | Worth staking social capital on |
+| Saves | ~3x baseline | Lasting reference value |
+| Sends (DM shares) | ~3x baseline | High-trust private recommendation |
+| Reactions (likes) | 1x baseline | Low-friction; weakest signal |
+
+## Engagement Rate Benchmarks (2026)
+- Below 2%: Underperforming
+- 2-3.5%: Solid / average
+- 3.5-5%: Good
+- Above 5%: Exceptional`,
+
+  timing: `## The "Golden Hour"
+LinkedIn shows your post to 2-5% of your network in the first 60 minutes. Engagement quality during this window determines platform-wide amplification. Posts maintaining high engagement get distribution for 48-72 hours (up to 1-3 weeks under the 2026 freshness system).
+
+## Posting Frequency
+Higher posting frequency = better per-post performance (Buffer, 2M+ posts). No cannibalization. The jump from 1 to 2-5 posts/week is the biggest marginal lift.
+
+Creator reply within 15 minutes gives ~90% boost (GrowLeads). Peak engagement shifted to 3-8 PM in 2026 (Buffer, 4.8M posts).`,
+
+  comments: `## Comments
+Comment quality is scored via NLP/ML — not word-count heuristics. A 5-word specific question may score higher than a 50-word generic response.
+
+Threaded conversations (replies to comments) boost reach ~2.4x vs top-level-only comments (AuthoredUp, 621K posts).
+
+Commenter identity matters. Comments from people whose expertise semantically matches the post topic carry more weight.
+
+Pod-like behavior (repetitive phrasing across multiple comments) is specifically detected and devalued.`,
+
+  dwell_time: `## Dwell Time
+The P(skip) model is content-type-relative (percentile-based, not absolute seconds). Posts with 61+ seconds dwell time average 15.6% engagement vs 1.2% for 0-3 seconds.
+
+Clicking "see more" is a positive engagement signal that starts/extends the dwell time clock. Posts earning the click AND holding attention past ~15 seconds get a reach multiplier.
+
+Content completion rate matters more than raw engagement.`,
+
+  topic_authority: `## Topic Authority
+360Brew requires 60-90 days of consistent posting on 2-3 focused topics before recognizing expertise and optimizing distribution.
+
+The system cross-references post content against the author's profile (headline, about, experience). Content misaligned with stated expertise gets suppressed.
+
+80%+ of content should be within 2-3 core topics for proper classification.`,
+};
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add server/src/ai/platform-knowledge.ts
+git commit -m "feat: pre-extracted platform knowledge map — no regex, no runtime file reads"
+```
+
+### Task 4: Ghostwriter Tool Handlers
 
 **Files:**
 - Create: `server/src/ai/ghostwriter-tools.ts`
@@ -225,15 +370,20 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { initDatabase } from "../db/index.js";
 import fs from "fs";
 import path from "path";
-import { executeGhostwriterTool, GHOSTWRITER_TOOLS } from "../ai/ghostwriter-tools.js";
+import {
+  createGhostwriterState,
+  executeGhostwriterTool,
+  GHOSTWRITER_TOOLS,
+  type GhostwriterState,
+} from "../ai/ghostwriter-tools.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-ghostwriter-tools.db");
 let db: ReturnType<typeof initDatabase>;
 
 beforeAll(() => {
   db = initDatabase(TEST_DB_PATH);
-  // Seed some test data
-  db.prepare("INSERT INTO author_profile (persona_id, profile_text) VALUES (1, 'Security practitioner, builds AI tools')").run();
+  // Use INSERT OR REPLACE in case initDatabase seeds persona data
+  db.prepare("INSERT OR REPLACE INTO author_profile (persona_id, profile_text, profile_json) VALUES (1, 'Security practitioner, builds AI tools', '{}')").run();
 });
 
 afterAll(() => {
@@ -247,40 +397,72 @@ describe("GHOSTWRITER_TOOLS", () => {
     for (const tool of GHOSTWRITER_TOOLS) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();
-      expect(tool.input_schema).toBeDefined();
       expect(tool.input_schema.type).toBe("object");
     }
   });
 });
 
 describe("executeGhostwriterTool", () => {
+  let state: GhostwriterState;
+
+  beforeEach(() => {
+    state = createGhostwriterState("Initial draft text");
+  });
+
   it("get_author_profile returns profile text", () => {
-    const result = executeGhostwriterTool(db, 1, "get_author_profile", {});
+    const result = executeGhostwriterTool(db, 1, "get_author_profile", {}, state);
     expect(result).toContain("Security practitioner");
   });
 
-  it("get_platform_knowledge returns relevant section", () => {
-    const result = executeGhostwriterTool(db, 1, "get_platform_knowledge", { aspect: "hooks" });
-    expect(result).toContain("hook");
+  it("get_platform_knowledge returns relevant content for each aspect", () => {
+    for (const aspect of ["hooks", "closings", "length", "format", "engagement", "timing", "comments", "dwell_time", "topic_authority"]) {
+      const result = executeGhostwriterTool(db, 1, "get_platform_knowledge", { aspect }, state);
+      expect(result.length).toBeGreaterThan(20);
+      expect(result).not.toContain("No knowledge");
+    }
   });
 
-  it("lookup_principles returns principles", () => {
-    const result = executeGhostwriterTool(db, 1, "lookup_principles", {});
-    // May be empty if no principles seeded — that's fine, just no error
+  it("lookup_principles returns string (empty or formatted)", () => {
+    const result = executeGhostwriterTool(db, 1, "lookup_principles", {}, state);
     expect(typeof result).toBe("string");
   });
 
-  it("update_draft returns confirmation", () => {
+  it("update_draft updates per-request state", () => {
     const result = executeGhostwriterTool(db, 1, "update_draft", {
-      draft: "New draft text here",
+      draft: "New draft text",
       change_summary: "Rewrote the hook",
-    });
+    }, state);
     expect(result).toContain("Draft updated");
+    expect(state.currentDraft).toBe("New draft text");
+    expect(state.lastChangeSummary).toBe("Rewrote the hook");
   });
 
-  it("search_past_posts returns results or empty", () => {
-    const result = executeGhostwriterTool(db, 1, "search_past_posts", { query: "security" });
+  it("concurrent states don't interfere", () => {
+    const state1 = createGhostwriterState("Draft A");
+    const state2 = createGhostwriterState("Draft B");
+    executeGhostwriterTool(db, 1, "update_draft", { draft: "Updated A", change_summary: "a" }, state1);
+    executeGhostwriterTool(db, 1, "update_draft", { draft: "Updated B", change_summary: "b" }, state2);
+    expect(state1.currentDraft).toBe("Updated A");
+    expect(state2.currentDraft).toBe("Updated B");
+  });
+
+  it("search_past_posts returns results or empty message", () => {
+    const result = executeGhostwriterTool(db, 1, "search_past_posts", { query: "security" }, state);
     expect(typeof result).toBe("string");
+  });
+
+  it("unknown tool returns error string without throwing", () => {
+    const result = executeGhostwriterTool(db, 1, "nonexistent_tool", {}, state);
+    expect(result).toContain("Unknown tool");
+  });
+
+  it("tool execution errors are caught and returned as strings", () => {
+    // Force an error by passing invalid DB (closed connection)
+    const badDb = initDatabase(TEST_DB_PATH + ".bad");
+    badDb.close();
+    const result = executeGhostwriterTool(badDb, 1, "get_author_profile", {}, state);
+    expect(typeof result).toBe("string");
+    // Should not throw — returns error message
   });
 });
 ```
@@ -288,22 +470,35 @@ describe("executeGhostwriterTool", () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm test -- --run server/src/__tests__/ghostwriter-tools.test.ts`
-Expected: FAIL — module not found
 
 - [ ] **Step 3: Implement ghostwriter-tools.ts**
 
-Create `server/src/ai/ghostwriter-tools.ts`. This file contains the tool schema definitions and a dispatcher function.
-
-Tool definitions (the `tools` array passed to the Messages API):
+Create `server/src/ai/ghostwriter-tools.ts`. Key design decisions:
+- **Per-request state object** instead of module globals — concurrency safe
+- **try-catch around every tool handler** — errors return as strings for the AI to handle gracefully
+- **Platform knowledge from pre-extracted map** — no regex, no file reads
+- **6 tools**: get_author_profile, lookup_principles, lookup_rules (existing generation_rules), search_past_posts, get_platform_knowledge, update_draft
+- **Sort columns as prepared statement map** instead of string interpolation
 
 ```typescript
 import type Database from "better-sqlite3";
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import { getEditorialPrinciples } from "../db/generate-queries.js";
+import { getRules } from "../db/generate-queries.js";
 import { getAuthorProfile } from "../db/profile-queries.js";
-import fs from "fs";
-import path from "path";
+import { PLATFORM_KNOWLEDGE } from "./platform-knowledge.js";
 
+// ── Per-request state (NOT module-level) ──────────────────
+export interface GhostwriterState {
+  currentDraft: string;
+  lastChangeSummary: string;
+}
+
+export function createGhostwriterState(initialDraft: string): GhostwriterState {
+  return { currentDraft: initialDraft, lastChangeSummary: "" };
+}
+
+// ── Tool definitions ──────────────────────────────────────
 export const GHOSTWRITER_TOOLS: Tool[] = [
   {
     name: "get_author_profile",
@@ -312,7 +507,7 @@ export const GHOSTWRITER_TOOLS: Tool[] = [
   },
   {
     name: "lookup_principles",
-    description: "Look up editorial principles learned from the author's past revisions. These describe HOW the author likes to write — naming real people, compressing process into lists, closing styles, etc. Filter by post_type for more relevant results.",
+    description: "Look up editorial principles learned from the author's past revisions. These describe HOW the author likes to write — naming real people, compressing process, closing styles, etc. Filter by post_type for more relevant results.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -322,8 +517,13 @@ export const GHOSTWRITER_TOOLS: Tool[] = [
     },
   },
   {
+    name: "lookup_rules",
+    description: "Look up the author's manually-managed writing rules. These are user-created guardrails for voice, structure, and anti-AI-tropes.",
+    input_schema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
     name: "search_past_posts",
-    description: "Search the author's past LinkedIn posts by topic or pattern. Returns hook text, impressions, engagement rate, and content type. Use this to find what has worked before on similar topics.",
+    description: "Search the author's past LinkedIn posts by topic or pattern. Returns hook text, impressions, engagement rate. Use this to find what worked before on similar topics.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -336,7 +536,7 @@ export const GHOSTWRITER_TOOLS: Tool[] = [
   },
   {
     name: "get_platform_knowledge",
-    description: "Get specific LinkedIn platform knowledge and best practices. Use this when you identify a weakness in the draft (weak hook, wrong length, poor format choice) and need data-backed guidance.",
+    description: "Get specific LinkedIn platform knowledge and best practices. Use when you identify a weakness in the draft (weak hook, wrong length, poor format) and need data-backed guidance.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -362,134 +562,98 @@ export const GHOSTWRITER_TOOLS: Tool[] = [
     },
   },
 ];
-```
 
-Tool dispatcher:
+// ── Prepared statement map for safe sort columns ──────────
+const SORT_QUERIES: Record<string, string> = {
+  impressions: "ORDER BY m.impressions DESC NULLS LAST",
+  engagement_rate: "ORDER BY m.engagement_rate DESC NULLS LAST",
+  reactions: "ORDER BY m.reactions DESC NULLS LAST",
+  comments: "ORDER BY m.comments DESC NULLS LAST",
+};
 
-```typescript
-// State holder for the current draft (passed in from the route handler)
-let _currentDraft = "";
-let _lastChangeSummary = "";
-
-export function setCurrentDraft(draft: string) { _currentDraft = draft; }
-export function getCurrentDraft() { return _currentDraft; }
-export function getLastChangeSummary() { return _lastChangeSummary; }
-
+// ── Tool dispatcher ───────────────────────────────────────
 export function executeGhostwriterTool(
   db: Database.Database,
   personaId: number,
   toolName: string,
-  input: Record<string, any>
+  input: Record<string, any>,
+  state: GhostwriterState
 ): string {
-  switch (toolName) {
-    case "get_author_profile": {
-      const profile = getAuthorProfile(db, personaId);
-      return profile?.profile_text ?? "No author profile available. Ask the user about their background and perspective.";
-    }
-    case "lookup_principles": {
-      const principles = getEditorialPrinciples(db, personaId, input.post_type);
-      if (principles.length === 0) return "No editorial principles recorded yet.";
-      return principles.map((p, i) =>
-        `${i + 1}. ${p.principle_text} (confidence: ${p.confidence.toFixed(1)}, seen ${p.frequency}x${p.source_post_type ? `, typical for: ${p.source_post_type}` : ""})`
-      ).join("\n");
-    }
-    case "search_past_posts": {
-      const sortBy = input.sort_by ?? "impressions";
-      const limit = input.limit ?? 5;
-      const allowedSorts = new Set(["impressions", "engagement_rate", "reactions", "comments"]);
-      const safeSort = allowedSorts.has(sortBy) ? sortBy : "impressions";
-
-      const rows = db.prepare(`
-        SELECT p.hook_text, p.content_type, p.published_at,
-               m.impressions, m.reactions, m.comments, m.engagement_rate
-        FROM posts p
-        LEFT JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest ON latest.post_id = p.id
-        LEFT JOIN post_metrics m ON m.id = latest.max_id
-        WHERE p.persona_id = ? AND (p.hook_text LIKE ? OR p.full_text LIKE ?)
-        ORDER BY m.${safeSort} DESC NULLS LAST
-        LIMIT ?
-      `).all(personaId, `%${input.query}%`, `%${input.query}%`, limit) as any[];
-
-      if (rows.length === 0) return `No past posts found matching "${input.query}".`;
-      return rows.map((r: any) =>
-        `- "${(r.hook_text ?? "").slice(0, 100)}" (${r.published_at?.slice(0, 10) ?? "?"}) — ${r.impressions ?? 0} impressions, ${((r.engagement_rate ?? 0) * 100).toFixed(1)}% ER, ${r.reactions ?? 0} reactions, ${r.comments ?? 0} comments`
-      ).join("\n");
-    }
-    case "get_platform_knowledge": {
-      return getPlatformKnowledgeSection(input.aspect);
-    }
-    case "update_draft": {
-      _currentDraft = input.draft;
-      _lastChangeSummary = input.change_summary;
-      return `Draft updated. Change: ${input.change_summary}`;
-    }
-    default:
-      return `Unknown tool: ${toolName}`;
-  }
-}
-```
-
-The `getPlatformKnowledgeSection` function parses `linkedin-knowledge.md` and `ai-insights-research.md` by section headers, returning the relevant section for the requested aspect. Map aspects to section headers:
-
-```typescript
-const KNOWLEDGE_SECTIONS: Record<string, string[]> = {
-  hooks: ["Hook Type Analysis"],
-  closings: [], // No dedicated section — return hook + length guidance
-  length: ["Optimal Post Length"],
-  format: ["Content Format Performance", "Content Format"],
-  engagement: ["Engagement Quality Hierarchy", "Engagement Rate Benchmarks"],
-  timing: ["The \"Golden Hour\"", "Posting Frequency"],
-  comments: ["Comments"],
-  dwell_time: ["Dwell Time"],
-  topic_authority: ["Topic Authority"],
-};
-
-function getPlatformKnowledgeSection(aspect: string): string {
-  const headers = KNOWLEDGE_SECTIONS[aspect];
-  if (!headers || headers.length === 0) return `No specific knowledge available for "${aspect}".`;
-
-  // Read both knowledge files
-  const knowledgePath = path.join(import.meta.dirname, "linkedin-knowledge.md");
-  const researchPath = path.join(import.meta.dirname, "../../docs/ai-insights-research.md");
-
-  let content = "";
-  for (const filePath of [knowledgePath, researchPath]) {
-    try {
-      const text = fs.readFileSync(filePath, "utf-8");
-      for (const header of headers) {
-        const regex = new RegExp(`### ${header}[\\s\\S]*?(?=\\n###|\\n---|\$)`, "i");
-        const match = text.match(regex);
-        if (match) content += match[0] + "\n\n";
+  try {
+    switch (toolName) {
+      case "get_author_profile": {
+        const profile = getAuthorProfile(db, personaId);
+        return profile?.profile_text ?? "No author profile available. Ask the user about their background and perspective.";
       }
-    } catch {}
-  }
+      case "lookup_principles": {
+        const principles = getEditorialPrinciples(db, personaId, input.post_type);
+        if (principles.length === 0) return "No editorial principles recorded yet. These accumulate as the user runs retros on published posts.";
+        return principles.map((p, i) =>
+          `${i + 1}. ${p.principle_text} (confidence: ${p.confidence.toFixed(1)}, seen ${p.frequency}x${p.source_post_type ? `, typical for: ${p.source_post_type}` : ""})`
+        ).join("\n");
+      }
+      case "lookup_rules": {
+        const rules = getRules(db, personaId).filter(r => r.enabled);
+        if (rules.length === 0) return "No writing rules configured.";
+        return rules.map(r => `- [${r.category}] ${r.rule_text}`).join("\n");
+      }
+      case "search_past_posts": {
+        const orderClause = SORT_QUERIES[input.sort_by] ?? SORT_QUERIES.impressions;
+        const limit = Math.min(input.limit ?? 5, 10);
 
-  return content.trim() || `No knowledge found for "${aspect}".`;
+        const rows = db.prepare(`
+          SELECT p.hook_text, p.content_type, p.published_at,
+                 m.impressions, m.reactions, m.comments, m.engagement_rate
+          FROM posts p
+          LEFT JOIN (SELECT post_id, MAX(id) as max_id FROM post_metrics GROUP BY post_id) latest ON latest.post_id = p.id
+          LEFT JOIN post_metrics m ON m.id = latest.max_id
+          WHERE p.persona_id = ? AND (p.hook_text LIKE ? OR p.full_text LIKE ?)
+          ${orderClause}
+          LIMIT ?
+        `).all(personaId, `%${input.query}%`, `%${input.query}%`, limit) as any[];
+
+        if (rows.length === 0) return `No past posts found matching "${input.query}".`;
+        return rows.map((r: any) =>
+          `- "${(r.hook_text ?? "").slice(0, 100)}" (${r.published_at?.slice(0, 10) ?? "?"}) — ${r.impressions ?? 0} impressions, ${((r.engagement_rate ?? 0) * 100).toFixed(1)}% ER, ${r.reactions ?? 0} reactions, ${r.comments ?? 0} comments`
+        ).join("\n");
+      }
+      case "get_platform_knowledge": {
+        return PLATFORM_KNOWLEDGE[input.aspect] ?? `No knowledge available for "${input.aspect}".`;
+      }
+      case "update_draft": {
+        state.currentDraft = input.draft;
+        state.lastChangeSummary = input.change_summary;
+        return `Draft updated. Change: ${input.change_summary}`;
+      }
+      default:
+        return `Unknown tool: ${toolName}`;
+    }
+  } catch (err: any) {
+    return `Tool error (${toolName}): ${err.message}`;
+  }
 }
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm test -- --run server/src/__tests__/ghostwriter-tools.test.ts`
-Expected: PASS
 
 - [ ] **Step 5: Type-check**
 
 Run: `npx tsc --noEmit --project server/tsconfig.json`
-Expected: No errors
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add server/src/ai/ghostwriter-tools.ts server/src/__tests__/ghostwriter-tools.test.ts
-git commit -m "feat: ghostwriter tool definitions and handlers"
+git commit -m "feat: ghostwriter tool definitions and handlers with per-request state"
 ```
 
 ---
 
 ## Chunk 2: Agentic Loop & System Prompt (server core)
 
-### Task 4: Ghostwriter Agentic Loop
+### Task 5: Ghostwriter Agentic Loop
 
 **Files:**
 - Create: `server/src/ai/ghostwriter.ts`
@@ -497,7 +661,7 @@ git commit -m "feat: ghostwriter tool definitions and handlers"
 
 - [ ] **Step 1: Write the system prompt builder**
 
-Create `server/src/ai/ghostwriter.ts`. The system prompt is behavioral instructions — it tells the AI HOW to conduct the conversation, not WHAT to write. Reference `server/src/ai/interviewer-prompt.ts` for the follow-up strategy patterns.
+Create `server/src/ai/ghostwriter.ts`. The system prompt is behavioral instructions — it tells the AI HOW to conduct the conversation, not WHAT to write.
 
 ```typescript
 import type Anthropic from "@anthropic-ai/sdk";
@@ -507,12 +671,14 @@ import { AiLogger } from "./logger.js";
 import {
   GHOSTWRITER_TOOLS,
   executeGhostwriterTool,
-  setCurrentDraft,
-  getCurrentDraft,
-  getLastChangeSummary,
+  createGhostwriterState,
+  type GhostwriterState,
 } from "./ghostwriter-tools.js";
 import { insertGenerationMessage } from "../db/generate-queries.js";
 import type { Draft } from "@reachlab/shared";
+
+const MAX_TOOL_ITERATIONS = 10;
+const API_TIMEOUT_MS = 120_000; // 2 minutes per API call
 
 function buildGhostwriterSystemPrompt(
   selectedDrafts: Draft[],
@@ -523,15 +689,17 @@ function buildGhostwriterSystemPrompt(
     `--- Draft ${i + 1} (${d.type}) ---\nHook: ${d.hook}\n\nBody:\n${d.body}\n\nClosing: ${d.closing}`
   ).join("\n\n");
 
-  return `You are a LinkedIn post ghostwriter working one-on-one with the author. You have tools to look up their voice profile, editorial principles, past post performance, and LinkedIn platform best practices. Use them selectively — don't front-load everything.
+  return `You are a LinkedIn post ghostwriter working one-on-one with the author. You have tools to look up their voice profile, editorial principles, writing rules, past post performance, and LinkedIn platform best practices. Use them selectively — don't front-load everything.
 
 ## Your Process
 
-1. IMMEDIATELY produce a combined draft from the selected variations and user feedback below. Call update_draft with your first version.
+1. Your FIRST action: call update_draft with a combined draft built from the selected variations and user feedback below. No preamble text before this tool call.
 2. After updating the draft, review it critically. Identify the weakest elements — vague claims, anonymous sources, generic closings, untold specifics.
 3. Ask ONE targeted question about the most important gap. Not a generic question — a question driven by what THIS draft specifically needs. For example: if the draft says "a colleague told me," ask who. If it describes a failure, ask what specifically broke.
 4. When the user answers, revise the draft incorporating their answer, call update_draft, then identify the next gap.
 5. Keep going until the draft is specific, concrete, and sounds like the author — not like AI.
+6. If the user edits the draft directly (you'll see the current draft in their message), adapt to their changes. Don't revert their edits — build on them.
+7. When the user says something like "looks good", "done", or "publish" — acknowledge briefly and stop asking questions.
 
 ## Follow-Up Strategy
 
@@ -575,16 +743,16 @@ Begin by producing the combined draft now.`;
 }
 ```
 
-- [ ] **Step 2: Write the agentic loop**
+- [ ] **Step 2: Write the agentic loop with timeouts and iteration cap**
 
 Continue in `ghostwriter.ts`:
 
 ```typescript
 export interface GhostwriterTurnResult {
-  assistantMessage: string;       // What the AI said to the user
-  draft: string | null;           // Updated draft (if update_draft was called)
-  changeSummary: string | null;   // What changed in the draft
-  toolsUsed: string[];            // Which tools were called this turn
+  assistantMessage: string;
+  draft: string | null;
+  changeSummary: string | null;
+  toolsUsed: string[];
   input_tokens: number;
   output_tokens: number;
 }
@@ -599,30 +767,39 @@ export async function ghostwriterTurn(
   systemPrompt: string,
   currentDraft: string,
 ): Promise<GhostwriterTurnResult> {
-  setCurrentDraft(currentDraft);
+  const state = createGhostwriterState(currentDraft);
   const toolsUsed: string[] = [];
   let totalInput = 0;
   let totalOutput = 0;
 
-  // Build the messages array for the API call
   const apiMessages = [...messages];
-
-  // Agentic loop: keep calling until stop_reason !== "tool_use"
   let response: Anthropic.Message;
+  let iterations = 0;
+
   while (true) {
+    if (++iterations > MAX_TOOL_ITERATIONS) {
+      throw new Error("Ghostwriter exceeded maximum tool iterations");
+    }
+
     const start = Date.now();
-    response = await client.messages.create({
-      model: MODELS.SONNET,
-      max_tokens: 4000,
-      system: systemPrompt,
-      tools: GHOSTWRITER_TOOLS,
-      messages: apiMessages,
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+    try {
+      response = await client.messages.create({
+        model: MODELS.SONNET,
+        max_tokens: 4000,
+        system: systemPrompt,
+        tools: GHOSTWRITER_TOOLS,
+        messages: apiMessages,
+      }, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     totalInput += response.usage.input_tokens;
     totalOutput += response.usage.output_tokens;
 
-    // Log this iteration
     logger.log({
       step: "ghostwriter_turn",
       model: MODELS.SONNET,
@@ -637,15 +814,16 @@ export async function ghostwriterTurn(
       duration_ms: Date.now() - start,
     });
 
-    // If no tool use, we're done
     if (response.stop_reason !== "tool_use") break;
 
-    // Execute tool calls and build tool_result messages
+    // Execute tool calls
     const toolResults: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = [];
     for (const block of response.content) {
       if (block.type === "tool_use") {
         toolsUsed.push(block.name);
-        const result = executeGhostwriterTool(db, personaId, block.name, block.input as Record<string, any>);
+        const result = executeGhostwriterTool(
+          db, personaId, block.name, block.input as Record<string, any>, state
+        );
         toolResults.push({
           type: "tool_result",
           tool_use_id: block.id,
@@ -654,32 +832,31 @@ export async function ghostwriterTurn(
       }
     }
 
-    // Append the assistant's response and tool results for the next iteration
+    // Append assistant response + tool results for next iteration
+    // Note: tool call/result messages are NOT persisted to DB. Each turn
+    // is somewhat stateless regarding tool use — the draft state carries
+    // forward via currentDraft, and the conversation text provides context.
     apiMessages.push({ role: "assistant", content: response.content as any });
     apiMessages.push({ role: "user", content: toolResults as any });
   }
 
-  // Extract the text response
   const textBlocks = response.content.filter(b => b.type === "text");
   const assistantMessage = textBlocks.map(b => (b as any).text).join("\n");
 
-  // Check if draft was updated during this turn
-  const draft = getCurrentDraft();
-  const changeSummary = getLastChangeSummary();
-  const draftChanged = draft !== currentDraft;
+  const draftChanged = state.currentDraft !== currentDraft;
 
-  // Persist messages
+  // Persist assistant message
   insertGenerationMessage(db, {
     generation_id: generationId,
     role: "assistant",
     content: assistantMessage,
-    draft_snapshot: draftChanged ? draft : undefined,
+    draft_snapshot: draftChanged ? state.currentDraft : undefined,
   });
 
   return {
     assistantMessage,
-    draft: draftChanged ? draft : null,
-    changeSummary: draftChanged ? changeSummary : null,
+    draft: draftChanged ? state.currentDraft : null,
+    changeSummary: draftChanged ? state.lastChangeSummary : null,
     toolsUsed,
     input_tokens: totalInput,
     output_tokens: totalOutput,
@@ -689,7 +866,7 @@ export async function ghostwriterTurn(
 export { buildGhostwriterSystemPrompt };
 ```
 
-- [ ] **Step 3: Write tests for the system prompt builder**
+- [ ] **Step 3: Write tests**
 
 Create `server/src/__tests__/ghostwriter.test.ts`:
 
@@ -712,16 +889,29 @@ describe("buildGhostwriterSystemPrompt", () => {
     expect(prompt).toContain("AI security research story");
   });
 
-  it("includes behavioral instructions", () => {
+  it("includes behavioral instructions and follow-up strategies", () => {
     const prompt = buildGhostwriterSystemPrompt(mockDrafts, "", "");
     expect(prompt).toContain("ONE question at a time");
     expect(prompt).toContain("update_draft");
     expect(prompt).toContain("Follow-Up Strategy");
+    expect(prompt).toContain("FIRST action");
   });
 
   it("handles empty feedback gracefully", () => {
     const prompt = buildGhostwriterSystemPrompt(mockDrafts, "", "story");
     expect(prompt).toContain("No specific direction given");
+  });
+
+  it("instructs AI to respect user's direct edits", () => {
+    const prompt = buildGhostwriterSystemPrompt(mockDrafts, "", "");
+    expect(prompt).toContain("edits the draft directly");
+    expect(prompt).toContain("Don't revert");
+  });
+
+  it("instructs AI to handle conversation termination", () => {
+    const prompt = buildGhostwriterSystemPrompt(mockDrafts, "", "");
+    expect(prompt).toContain("looks good");
+    expect(prompt).toContain("stop asking questions");
   });
 });
 ```
@@ -729,7 +919,6 @@ describe("buildGhostwriterSystemPrompt", () => {
 - [ ] **Step 4: Run tests**
 
 Run: `pnpm test -- --run server/src/__tests__/ghostwriter.test.ts`
-Expected: PASS
 
 - [ ] **Step 5: Type-check**
 
@@ -739,35 +928,61 @@ Run: `npx tsc --noEmit --project server/tsconfig.json`
 
 ```bash
 git add server/src/ai/ghostwriter.ts server/src/__tests__/ghostwriter.test.ts
-git commit -m "feat: ghostwriter agentic loop with tool-use and behavioral system prompt"
+git commit -m "feat: ghostwriter agentic loop with timeouts, iteration cap, and behavioral system prompt"
 ```
 
-### Task 5: API Endpoint
+### Task 6: API Endpoints
 
 **Files:**
 - Modify: `server/src/routes/generate.ts`
 - Modify: `server/src/schemas/generate.ts`
 - Test: `server/src/__tests__/generate-routes.test.ts`
 
-- [ ] **Step 1: Add the schema**
+- [ ] **Step 1: Add schemas**
 
 Add to `server/src/schemas/generate.ts`:
 
 ```typescript
 export const ghostwriteBody = z.object({
   generation_id: z.number().int().positive(),
-  message: z.string().trim().min(1).max(10000),
+  message: z.string().trim().min(1),
+  current_draft: z.string().optional(), // Sent when user has directly edited the draft
+});
+
+export const selectionBody = z.object({
+  selected_draft_indices: z.array(z.number().int().min(0)),
+  combining_guidance: z.string().optional(),
 });
 ```
 
-- [ ] **Step 2: Add the route**
+- [ ] **Step 2: Add the selection persistence endpoint**
 
-Add to `server/src/routes/generate.ts`, after the chat endpoint. Import `ghostwriterTurn` and `buildGhostwriterSystemPrompt` from `../ai/ghostwriter.js`. Import `ghostwriteBody` from schemas.
+This is a lightweight PATCH that saves the user's draft selection before transitioning to the ghostwriter. Add to `server/src/routes/generate.ts`:
+
+```typescript
+app.patch("/api/generate/:id/selection", async (request, reply) => {
+  const id = Number((request.params as any).id);
+  if (isNaN(id)) return reply.status(400).send({ error: "Invalid id" });
+
+  const { selected_draft_indices, combining_guidance } = validateBody(selectionBody, request.body);
+
+  updateGeneration(db, id, {
+    selected_draft_indices: JSON.stringify(selected_draft_indices),
+    ...(combining_guidance !== undefined ? { combining_guidance } : {}),
+  });
+
+  return { ok: true };
+});
+```
+
+- [ ] **Step 3: Add the ghostwrite endpoint**
+
+Import `ghostwriterTurn`, `buildGhostwriterSystemPrompt` from `../ai/ghostwriter.js`. Import `ghostwriteBody`, `selectionBody` from schemas. Add after the chat endpoint:
 
 ```typescript
 app.post("/api/generate/ghostwrite", async (request, reply) => {
   const personaId = getPersonaId(request);
-  const { generation_id, message } = validateBody(ghostwriteBody, request.body);
+  const { generation_id, message, current_draft } = validateBody(ghostwriteBody, request.body);
 
   const gen = getGeneration(db, generation_id);
   if (!gen) return reply.status(404).send({ error: "Generation not found" });
@@ -796,22 +1011,22 @@ app.post("/api/generate/ghostwrite", async (request, reply) => {
     const story = gen.selected_story_index != null ? stories[gen.selected_story_index] : null;
     const storyContext = story ? `**${story.headline}**\n${story.summary}` : "";
 
-    // Use combining_guidance as initial feedback for first turn, message for subsequent
-    const isFirstTurn = history.length <= 1; // Only the user message we just inserted
+    const isFirstTurn = history.length <= 1;
     const systemPrompt = buildGhostwriterSystemPrompt(
       selectedDrafts.length > 0 ? selectedDrafts : drafts,
       isFirstTurn ? (gen.combining_guidance ?? message) : "",
       storyContext
     );
 
-    const currentDraft = gen.final_draft ?? "";
+    // Use user's local edits if provided, otherwise use persisted draft
+    const activeDraft = current_draft ?? gen.final_draft ?? "";
 
     const result = await ghostwriterTurn(
       client, db, personaId, generation_id, logger,
-      messages, systemPrompt, currentDraft
+      messages, systemPrompt, activeDraft
     );
 
-    // Persist draft update if changed
+    // Persist draft update
     if (result.draft) {
       updateGeneration(db, generation_id, { final_draft: result.draft });
     }
@@ -831,11 +1046,16 @@ app.post("/api/generate/ghostwrite", async (request, reply) => {
 });
 ```
 
-- [ ] **Step 3: Add test for the endpoint**
-
-Add to `server/src/__tests__/generate-routes.test.ts`:
+- [ ] **Step 4: Add tests**
 
 ```typescript
+describe("PATCH /api/generate/:id/selection", () => {
+  it("returns 400 for invalid id", async () => {
+    const res = await app.inject({ method: "PATCH", url: "/api/generate/abc/selection", payload: { selected_draft_indices: [0] } });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe("POST /api/generate/ghostwrite", () => {
   it("returns 404 for nonexistent generation", async () => {
     const res = await app.inject({
@@ -857,37 +1077,30 @@ describe("POST /api/generate/ghostwrite", () => {
 });
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 5: Run tests, type-check**
 
 Run: `pnpm test -- --run server/src/__tests__/generate-routes.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: Type-check**
-
 Run: `npx tsc --noEmit --project server/tsconfig.json`
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add server/src/routes/generate.ts server/src/schemas/generate.ts server/src/__tests__/generate-routes.test.ts
-git commit -m "feat: POST /api/generate/ghostwrite endpoint with agentic tool-use loop"
+git commit -m "feat: ghostwrite and selection endpoints with tool-use agentic loop"
 ```
 
 ---
 
 ## Chunk 3: Dashboard — API Client & Chat UI
 
-### Task 6: API Client Method
+### Task 7: API Client Methods
 
 **Files:**
 - Modify: `dashboard/src/api/client.ts`
 
-- [ ] **Step 1: Add types and API method**
-
-Add to `dashboard/src/api/client.ts`:
+- [ ] **Step 1: Add types and API methods**
 
 ```typescript
-// Near the other Gen types
 export interface GhostwriteResponse {
   message: string;
   draft: string | null;
@@ -899,49 +1112,91 @@ export interface GhostwriteResponse {
 Add to the `api` object:
 
 ```typescript
-ghostwrite: (generationId: number, message: string) =>
+ghostwrite: (generationId: number, message: string, currentDraft?: string) =>
   fetch(withPersonaId(`/api/generate/ghostwrite`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ generation_id: generationId, message }),
+    body: JSON.stringify({
+      generation_id: generationId,
+      message,
+      ...(currentDraft !== undefined ? { current_draft: currentDraft } : {}),
+    }),
   }).then((r) => {
     if (!r.ok) throw new Error(`API error: ${r.status}`);
     return r.json() as Promise<GhostwriteResponse>;
   }),
+
+saveSelection: (generationId: number, selectedDraftIndices: number[], combiningGuidance?: string) =>
+  fetch(withPersonaId(`/api/generate/${generationId}/selection`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ selected_draft_indices: selectedDraftIndices, combining_guidance: combiningGuidance }),
+  }).then((r) => {
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    return r.json();
+  }),
+
+saveDraft: (generationId: number, draft: string) =>
+  fetch(withPersonaId(`/api/generate/${generationId}/draft`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ final_draft: draft }),
+  }).then((r) => {
+    if (!r.ok) throw new Error(`API error: ${r.status}`);
+    return r.json();
+  }),
+```
+
+Note: `saveDraft` needs a corresponding PATCH endpoint. Add to `server/src/routes/generate.ts`:
+
+```typescript
+app.patch("/api/generate/:id/draft", async (request, reply) => {
+  const id = Number((request.params as any).id);
+  if (isNaN(id)) return reply.status(400).send({ error: "Invalid id" });
+  const body = request.body as any;
+  if (!body?.final_draft || typeof body.final_draft !== "string") {
+    return reply.status(400).send({ error: "final_draft required" });
+  }
+  updateGeneration(db, id, { final_draft: body.final_draft });
+  return { ok: true };
+});
 ```
 
 - [ ] **Step 2: Type-check**
 
 Run: `npx tsc --noEmit --project dashboard/tsconfig.json`
+Run: `npx tsc --noEmit --project server/tsconfig.json`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add dashboard/src/api/client.ts
-git commit -m "feat: add ghostwrite API client method"
+git add dashboard/src/api/client.ts server/src/routes/generate.ts
+git commit -m "feat: ghostwrite, saveSelection, and saveDraft API client methods"
 ```
 
-### Task 7: GhostwriterChat Component
+### Task 8: GhostwriterChat Component
 
 **Files:**
 - Create: `dashboard/src/pages/generate/GhostwriterChat.tsx`
 
-This is the split-view component: chat on the left, live draft on the right. The draft highlights recently changed text with a brief fade effect.
+Split-view: chat left, **editable** draft right. Draft auto-saves on a debounce. Change highlighting on AI updates. Error display. PostRetro accessible.
 
 - [ ] **Step 1: Create the component**
 
-Create `dashboard/src/pages/generate/GhostwriterChat.tsx`:
+Key design decisions:
+- **Editable textarea** for the draft, not read-only. Auto-resizes.
+- **Debounced auto-save** — saves to DB 1.5s after the user stops typing. Uses `api.saveDraft()`.
+- **When sending a message, include current local draft** — so the AI sees any direct edits the user made.
+- **StrictMode-safe auto-start** — uses a ref guard to prevent double-fire.
+- **Error state displayed in UI** — not just console.error.
+- **PostRetro button** in the draft footer.
+- **Copy and Open in LinkedIn** buttons.
+
+The component follows the same patterns as `ReviewEdit.tsx` (editable textarea, optimistic messages, chat history scroll, error display) but with split layout and auto-save.
 
 ```typescript
-import { useState, useRef, useEffect } from "react";
-import { api, type GhostwriteResponse } from "../../api/client";
-import ScannerLoader from "./components/ScannerLoader";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  changeSummary?: string;
-}
+import { useState, useRef, useEffect, useCallback } from "react";
+import { api } from "../../api/client";
 
 interface GhostwriterChatProps {
   gen: {
@@ -954,34 +1209,52 @@ interface GhostwriterChatProps {
   loading: boolean;
   setLoading: (v: boolean) => void;
   onBack: () => void;
+  onRetro?: () => void;
 }
 ```
 
-The component layout:
-- Outer: `flex min-h-[70vh]` with two columns
-- Left (chat): `w-1/2 border-r border-gen-border-1 flex flex-col` containing scrollable message list + input area at bottom
-- Right (draft): `w-1/2 p-6 overflow-y-auto` containing the draft text with `whitespace-pre-line` and a word count footer
-
-Chat messages display:
-- User messages: `bg-gen-bg-2 rounded-lg p-3 ml-8` (right-aligned feel)
-- Assistant messages: `bg-transparent p-3 mr-8` with subtle `text-gen-text-1`
-- If a message has `changeSummary`, show a small pill: `text-[11px] text-gen-accent bg-gen-accent/10 px-2 py-0.5 rounded`
-
-The draft panel:
-- Uses `font-serif-gen text-[16px] leading-relaxed text-gen-text-0`
-- When the draft updates, apply a brief `animate-fade-up` with 0.3s duration to indicate the change
-- Bottom bar: word count (tabular-nums), Copy button, Open in LinkedIn button
-
-Input area at the bottom of the chat panel:
-- `textarea` with auto-resize, placeholder: "Tell me what to change, answer my questions, or say 'looks good'..."
-- Send button, Enter to send (Shift+Enter for newline)
-- While waiting for response, show a subtle typing indicator (three dots pulsing)
-
-On mount (or when `generationId` changes), if there are no chat messages yet, auto-send the initial message. The initial message combines the user's guidance with a "start the ghostwriting session" prompt:
+Local state needed:
 ```typescript
-// Auto-start the conversation
+const [chatInput, setChatInput] = useState("");
+const [localDraft, setLocalDraft] = useState(gen.finalDraft);
+const [error, setError] = useState<string | null>(null);
+const [copied, setCopied] = useState(false);
+const [draftVersion, setDraftVersion] = useState(0); // for change animation
+const startedRef = useRef(false);
+const chatEndRef = useRef<HTMLDivElement>(null);
+const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+```
+
+Auto-save debounce:
+```typescript
+const debouncedSave = useCallback((draft: string) => {
+  if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  saveTimerRef.current = setTimeout(() => {
+    if (gen.generationId) {
+      api.saveDraft(gen.generationId, draft).catch(() => {});
+    }
+  }, 1500);
+}, [gen.generationId]);
+
+const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  setLocalDraft(e.target.value);
+  debouncedSave(e.target.value);
+};
+```
+
+Sync local draft when AI updates it:
+```typescript
 useEffect(() => {
-  if (gen.generationId && gen.chatMessages.length === 0 && !loading) {
+  setLocalDraft(gen.finalDraft);
+  setDraftVersion(v => v + 1);
+}, [gen.finalDraft]);
+```
+
+StrictMode-safe auto-start:
+```typescript
+useEffect(() => {
+  if (gen.generationId && gen.chatMessages.length === 0 && !startedRef.current) {
+    startedRef.current = true;
     const initialMessage = gen.combiningGuidance?.trim()
       ? gen.combiningGuidance
       : "Combine these drafts into a single strong post.";
@@ -990,59 +1263,64 @@ useEffect(() => {
 }, [gen.generationId]);
 ```
 
-The `sendMessage` function:
+sendMessage includes local draft edits:
 ```typescript
 const sendMessage = async (message: string) => {
   if (!gen.generationId || !message.trim() || loading) return;
   setLoading(true);
+  setError(null);
 
-  // Optimistic user message
-  const userMsg: ChatMessage = { role: "user", content: message.trim() };
   setGen((prev: any) => ({
     ...prev,
-    chatMessages: [...prev.chatMessages, userMsg],
+    chatMessages: [...prev.chatMessages, { role: "user", content: message.trim() }],
   }));
 
   try {
-    const res = await api.ghostwrite(gen.generationId, message.trim());
-
-    const assistantMsg: ChatMessage = {
-      role: "assistant",
-      content: res.message,
-      changeSummary: res.change_summary ?? undefined,
-    };
+    const draftChanged = localDraft !== gen.finalDraft;
+    const res = await api.ghostwrite(
+      gen.generationId,
+      message.trim(),
+      draftChanged ? localDraft : undefined
+    );
 
     setGen((prev: any) => ({
       ...prev,
       finalDraft: res.draft ?? prev.finalDraft,
-      chatMessages: [...prev.chatMessages, assistantMsg],
+      chatMessages: [...prev.chatMessages, {
+        role: "assistant",
+        content: res.message,
+      }],
     }));
     setChatInput("");
   } catch (err: any) {
-    // Remove optimistic message on error
+    setError(err.message ?? "Failed to get response. Try again.");
     setGen((prev: any) => ({
       ...prev,
       chatMessages: prev.chatMessages.slice(0, -1),
     }));
-    console.error("Ghostwrite failed:", err);
   } finally {
     setLoading(false);
   }
 };
 ```
 
-Draft panel footer with Copy and Open in LinkedIn:
-```typescript
-const handleCopy = async () => {
-  await navigator.clipboard.writeText(gen.finalDraft);
-  setCopied(true);
-  setTimeout(() => setCopied(false), 2000);
-};
+Layout structure:
+- Outer: `flex min-h-[70vh]`
+- Left chat panel: `w-1/2 border-r border-gen-border-1 flex flex-col`
+  - Scrollable message area: `flex-1 overflow-y-auto p-4 space-y-3`
+  - Input area at bottom: `border-t border-gen-border-1 p-3`
+  - Error banner above input when `error` is set
+- Right draft panel: `w-1/2 flex flex-col`
+  - Editable textarea: `flex-1 p-6 font-serif-gen text-[16px] leading-relaxed text-gen-text-0 bg-transparent resize-none border-none focus:outline-none`
+  - Footer: `border-t border-gen-border-1 px-6 py-3 flex items-center justify-between`
+    - Left: word count (tabular-nums), onRetro button
+    - Right: Copy button, Open in LinkedIn button
 
-const handleOpenLinkedIn = async () => {
-  await navigator.clipboard.writeText(gen.finalDraft);
-  window.open("https://www.linkedin.com/feed/?shareActive=true", "_blank");
-};
+Auto-scroll chat on new messages:
+```typescript
+useEffect(() => {
+  chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+}, [gen.chatMessages]);
 ```
 
 - [ ] **Step 2: Type-check**
@@ -1053,24 +1331,24 @@ Run: `npx tsc --noEmit --project dashboard/tsconfig.json`
 
 ```bash
 git add dashboard/src/pages/generate/GhostwriterChat.tsx
-git commit -m "feat: GhostwriterChat split-view component — chat left, live draft right"
+git commit -m "feat: GhostwriterChat — split-view with editable draft, auto-save, error handling"
 ```
 
-### Task 8: Wire Into Generate Flow
+### Task 9: Wire Into Generate Flow
 
 **Files:**
 - Modify: `dashboard/src/pages/Generate.tsx`
 - Modify: `dashboard/src/pages/generate/DraftVariations.tsx`
 
-- [ ] **Step 1: Update Generate.tsx to use GhostwriterChat as step 3**
+- [ ] **Step 1: Update Generate.tsx**
 
-Import `GhostwriterChat` and replace the `ReviewEdit` rendering at step 3:
+Import `GhostwriterChat` and replace step 3:
 
 ```typescript
 import GhostwriterChat from "./generate/GhostwriterChat";
 ```
 
-In the render, change the step 3 block:
+Change the step 3 render block:
 
 ```typescript
 {subTab === "Generate" && step === 3 && (
@@ -1080,40 +1358,38 @@ In the render, change the step 3 block:
     loading={loading}
     setLoading={setLoading}
     onBack={() => setStep(2)}
+    onRetro={() => setStep(4)}
   />
 )}
 ```
 
-Keep `ReviewEdit` import and the step 4 retro flow — those remain accessible from the chat view (a "Run retro" link in the draft panel footer).
+- [ ] **Step 2: Update DraftVariations to persist selection before advancing**
 
-- [ ] **Step 2: Update DraftVariations to transition correctly**
-
-The current `handleCombineAndReview` calls the combine endpoint and moves to step 3. Change it to:
-1. Save the selected drafts + guidance to the generation record (already done)
-2. Move to step 3 (GhostwriterChat), which auto-starts the conversation
-
-Replace the combine API call with just persisting state and advancing:
+Replace `handleCombineAndReview` to persist to DB first:
 
 ```typescript
 const handleCombineAndReview = async () => {
   if (gen.generationId === null || selectedCount === 0) return;
-
-  // Save selection to the generation record
+  setLoading(true);
   try {
-    // The ghostwriter chat will handle combining via the agentic loop
+    // Persist selection to DB so ghostwriter endpoint can read it
+    await api.saveSelection(
+      gen.generationId,
+      gen.selectedDraftIndices,
+      reviseFeedback || gen.combiningGuidance || undefined
+    );
     setGen((prev: any) => ({
       ...prev,
-      selectedDraftIndices: prev.selectedDraftIndices,
       combiningGuidance: reviseFeedback || prev.combiningGuidance,
     }));
     onNext();
   } catch (err) {
-    console.error("Failed to advance:", err);
+    console.error("Failed to save selection:", err);
+  } finally {
+    setLoading(false);
   }
 };
 ```
-
-Note: The combine endpoint (`/api/generate/combine`) is no longer called directly — the ghostwriter's first turn handles combining via its `update_draft` tool call.
 
 - [ ] **Step 3: Type-check both projects**
 
@@ -1122,89 +1398,78 @@ Run: `npx tsc --noEmit --project server/tsconfig.json`
 
 - [ ] **Step 4: Manual smoke test**
 
-1. Start the dev server: `pnpm dev`
-2. Navigate to Generate tab
-3. Pick a topic, generate drafts
-4. Select 1-2 drafts, optionally add guidance
-5. Click "Combine & review" — should enter the ghostwriter chat
-6. The AI should produce an initial combined draft and ask a targeted question
-7. Answer the question — the draft should update
-8. Verify the draft panel shows updates with change indicators
+1. `pnpm dev`
+2. Generate tab → pick topic → generate drafts
+3. Select 1-2 drafts, add guidance
+4. Click "Combine & review" → should enter ghostwriter chat
+5. AI produces combined draft on right, asks a question on left
+6. Answer → draft updates with fade animation
+7. Directly edit the draft text → auto-saves after 1.5s
+8. Send another message → AI sees your edits and builds on them
+9. Click Copy, click Open in LinkedIn
+10. Click "Run retro" (if post is published)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add dashboard/src/pages/Generate.tsx dashboard/src/pages/generate/DraftVariations.tsx dashboard/src/pages/generate/GhostwriterChat.tsx
-git commit -m "feat: wire ghostwriter chat into generate flow as step 3"
+git add dashboard/src/pages/Generate.tsx dashboard/src/pages/generate/DraftVariations.tsx
+git commit -m "feat: wire ghostwriter chat into generate flow — persist selection, pass onRetro"
 ```
 
 ---
 
-## Chunk 4: Polish & Retro Integration
+## Chunk 4: Retro Integration & Polish
 
-### Task 9: Draft Change Highlighting
-
-**Files:**
-- Modify: `dashboard/src/pages/generate/GhostwriterChat.tsx`
-
-- [ ] **Step 1: Add change highlighting to the draft panel**
-
-When the draft updates, set a `draftJustChanged` flag that triggers a CSS transition. Use a `key` prop that changes on each draft update to trigger the `animate-fade-up` animation:
-
-```typescript
-const [draftVersion, setDraftVersion] = useState(0);
-
-// In the effect that handles draft changes:
-useEffect(() => {
-  setDraftVersion(v => v + 1);
-}, [gen.finalDraft]);
-```
-
-In the draft panel:
-```tsx
-<div key={draftVersion} className="animate-fade-up" style={{ animationDuration: "0.3s" }}>
-  <p className="font-serif-gen text-[16px] leading-relaxed text-gen-text-0 whitespace-pre-line">
-    {gen.finalDraft}
-  </p>
-</div>
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add dashboard/src/pages/generate/GhostwriterChat.tsx
-git commit -m "feat: draft change highlighting with fade animation"
-```
-
-### Task 10: Retro System Integration with Editorial Principles
+### Task 10: LLM-Based Principle Deduplication
 
 **Files:**
 - Modify: `server/src/ai/retro.ts`
 
-- [ ] **Step 1: After retro analysis, extract and store editorial principles**
+Instead of brittle substring matching, use the LLM (Haiku — cheap and fast) to determine if a new principle is semantically similar to an existing one.
 
-In `retro.ts`, after `analyzeRetro` returns the analysis, add a function that converts the retro's `patterns` and `changes` into editorial principles:
+- [ ] **Step 1: Implement LLM dedup**
 
 ```typescript
 import { insertEditorialPrinciple, getEditorialPrinciples, confirmPrinciple } from "../db/generate-queries.js";
 
-export function storeRetroAsPrinciples(
+export async function storeRetroAsPrinciples(
+  client: Anthropic,
   db: Database.Database,
   personaId: number,
   analysis: RetroAnalysis,
   postCategory?: string
-): void {
+): Promise<void> {
   const existing = getEditorialPrinciples(db, personaId);
 
   for (const pattern of analysis.patterns) {
-    // Check if a similar principle already exists (simple substring match)
-    const match = existing.find(p =>
-      p.principle_text.toLowerCase().includes(pattern.toLowerCase().slice(0, 30)) ||
-      pattern.toLowerCase().includes(p.principle_text.toLowerCase().slice(0, 30))
-    );
+    if (existing.length === 0) {
+      insertEditorialPrinciple(db, personaId, {
+        principle_text: pattern,
+        source_post_type: postCategory,
+        source_context: analysis.summary,
+      });
+      continue;
+    }
 
-    if (match) {
-      confirmPrinciple(db, match.id);
+    // Use Haiku to check semantic similarity — cheap (~0.001 cents per check)
+    const existingList = existing.map((p, i) => `${i + 1}. ${p.principle_text}`).join("\n");
+    const { text } = await streamWithIdleTimeout(client, {
+      model: MODELS.HAIKU,
+      max_tokens: 50,
+      messages: [{
+        role: "user",
+        content: `Does this new editorial principle duplicate any existing one? Answer with just the number of the matching principle, or "none".
+
+New: "${pattern}"
+
+Existing:
+${existingList}`,
+      }],
+    });
+
+    const matchNum = parseInt(text.trim());
+    if (!isNaN(matchNum) && matchNum >= 1 && matchNum <= existing.length) {
+      confirmPrinciple(db, existing[matchNum - 1].id);
     } else {
       insertEditorialPrinciple(db, personaId, {
         principle_text: pattern,
@@ -1216,24 +1481,36 @@ export function storeRetroAsPrinciples(
 }
 ```
 
-- [ ] **Step 2: Call it from the retro route**
+- [ ] **Step 2: Call from retro route**
 
-In `server/src/routes/generate.ts`, in the retro endpoint handler, after `analyzeRetro` succeeds, call:
+In the retro endpoint handler in `server/src/routes/generate.ts`, after `analyzeRetro` succeeds:
 
 ```typescript
-const { storeRetroAsPrinciples } = await import("../ai/retro.js");
-storeRetroAsPrinciples(db, personaId, result.analysis, gen.post_type);
+// Store editorial principles (fire-and-forget — don't block the response)
+import("../ai/retro.js").then(({ storeRetroAsPrinciples }) =>
+  storeRetroAsPrinciples(client, db, personaId, result.analysis, gen.post_type)
+    .catch(err => console.error("[Retro] Failed to store principles:", err))
+);
 ```
 
-- [ ] **Step 3: Type-check**
+- [ ] **Step 3: Add auto-pruning call**
+
+Add to the retro route, before storing new principles:
+
+```typescript
+import { pruneStaleEditorialPrinciples } from "../db/generate-queries.js";
+pruneStaleEditorialPrinciples(db, personaId);
+```
+
+- [ ] **Step 4: Type-check**
 
 Run: `npx tsc --noEmit --project server/tsconfig.json`
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add server/src/ai/retro.ts server/src/routes/generate.ts
-git commit -m "feat: retro analysis stores editorial principles for ghostwriter retrieval"
+git commit -m "feat: LLM-based principle dedup via Haiku, auto-pruning of stale principles"
 ```
 
 ### Task 11: Final Type-Check & Integration Test
@@ -1253,13 +1530,190 @@ Run: `pnpm test`
 2. Complete the full flow: discover → research → drafts → select → ghostwriter chat
 3. Have a 3-4 turn conversation in the chat
 4. Verify the draft improves with each turn
-5. Copy the draft and verify it's publishable
-6. Run a retro on a published post and verify principles are stored
-7. Start a new generation and verify the ghostwriter's `lookup_principles` tool returns the stored principles
+5. Directly edit the draft mid-conversation — verify auto-save and AI adapts
+6. Copy the draft and verify it's publishable
+7. Run a retro on a published post — verify principles are stored with LLM dedup
+8. Start a new generation — verify `lookup_principles` returns stored principles
+9. Verify `lookup_rules` returns the user's existing generation_rules
+10. Check Generation History shows the ghostwriter session correctly
+11. Refresh mid-conversation — verify restore puts you back in the chat
 
-- [ ] **Step 4: Commit everything**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: ghostwriter chat — complete integration"
+git commit -m "feat: ghostwriter chat — complete integration with all fixes"
 ```
+
+---
+
+## Audit Findings — Required Modifications
+
+The following issues were found by review agents after the initial plan was written. They modify specific tasks above and MUST be applied during implementation.
+
+### AF-1: Persona ownership check on ghostwrite endpoint (HIGH — modifies Task 6)
+
+The `getGeneration(db, id)` query has no persona filter. A request with persona 2 can read/write persona 1's generation. This is a pre-existing bug in the chat endpoint too.
+
+**Apply in Task 6, Step 3 (ghostwrite route):** After loading the generation, add:
+```typescript
+if ((gen as any).persona_id !== personaId) {
+  return reply.status(403).send({ error: "Not authorized for this generation" });
+}
+```
+Also apply to the existing `/api/generate/chat` endpoint and the new `PATCH /api/generate/:id/selection` and `PATCH /api/generate/:id/draft` endpoints.
+
+### AF-2: Concurrent request lock per generation_id (HIGH — modifies Task 6)
+
+Two simultaneous ghostwrite requests for the same generation corrupt message history and draft.
+
+**Apply in Task 6, Step 3:** Add an in-memory lock at the top of the route file:
+```typescript
+const activeGhostwriteRequests = new Set<number>();
+```
+In the handler, before processing:
+```typescript
+if (activeGhostwriteRequests.has(generation_id)) {
+  return reply.status(429).send({ error: "A ghostwrite request is already in progress for this generation" });
+}
+activeGhostwriteRequests.add(generation_id);
+try {
+  // ... existing logic
+} finally {
+  activeGhostwriteRequests.delete(generation_id);
+}
+```
+
+### AF-3: Persist user message AFTER success, not before (HIGH — modifies Task 6)
+
+The plan persists the user message to DB before the agentic loop. If the loop fails, the message is orphaned. On retry, it's duplicated.
+
+**Apply in Task 6, Step 3:** Move `insertGenerationMessage` for the user message to AFTER the agentic loop succeeds, in the same block where the assistant message is persisted:
+```typescript
+// After ghostwriterTurn succeeds:
+insertGenerationMessage(db, { generation_id, role: "user", content: message });
+// The assistant message is already persisted inside ghostwriterTurn
+```
+
+### AF-4: Per-turn token budget (HIGH — modifies Task 5)
+
+10 iterations of growing context can cost $2-5 per turn.
+
+**Apply in Task 5, Step 2 (agentic loop):** Add after the token accumulator:
+```typescript
+const MAX_TURN_INPUT_TOKENS = 80_000;
+if (totalInput > MAX_TURN_INPUT_TOKENS) {
+  // Force the model to respond without more tools by breaking
+  break;
+}
+```
+
+### AF-5: Consistent message history limits (MEDIUM — modifies Task 6)
+
+Route loads 40 messages, restore loads 20. AI sees context the user can't see.
+
+**Apply in Task 6, Step 3:** Use limit 20 (matching restore), or update the restore endpoint to use 40. Consistency matters more than the specific number.
+
+### AF-6: Set `originalDraft` from first ghostwriter response (MEDIUM — modifies Task 8)
+
+PostRetro needs `originalDraft` to compare against published text. It's never set in the ghostwriter flow.
+
+**Apply in Task 8, Step 1 (GhostwriterChat sendMessage):** When receiving the first response that includes a draft:
+```typescript
+setGen((prev: any) => ({
+  ...prev,
+  originalDraft: prev.originalDraft || res.draft || prev.originalDraft,
+  finalDraft: res.draft ?? prev.finalDraft,
+  chatMessages: [...prev.chatMessages, assistantMsg],
+}));
+```
+
+### AF-7: Validate `update_draft` input (MEDIUM — modifies Task 4)
+
+Model can pass empty string, wiping the draft.
+
+**Apply in Task 4, Step 3 (update_draft handler):**
+```typescript
+case "update_draft": {
+  if (!input.draft || typeof input.draft !== "string" || input.draft.trim().length < 10) {
+    return "Error: draft must be at least 10 characters. Provide the full draft text.";
+  }
+  state.currentDraft = input.draft;
+  state.lastChangeSummary = input.change_summary ?? "";
+  return `Draft updated. Change: ${input.change_summary}`;
+}
+```
+
+### AF-8: Validate tool_use blocks before processing (MEDIUM — modifies Task 5)
+
+Missing `block.id` causes cryptic SDK errors.
+
+**Apply in Task 5, Step 2 (tool execution loop):**
+```typescript
+for (const block of response.content) {
+  if (block.type === "tool_use") {
+    if (!block.id || typeof block.name !== "string") continue; // skip malformed
+    toolsUsed.push(block.name);
+    // ...
+  }
+}
+```
+
+### AF-9: Back-navigation clears chat state (MEDIUM — modifies Task 9)
+
+Going back to DraftVariations and re-entering creates stale conversation mixed with new context.
+
+**Apply in Task 9, Step 1 (Generate.tsx):** When GhostwriterChat's `onBack` fires, clear the conversation:
+```typescript
+onBack={() => {
+  setGen((prev: any) => ({
+    ...prev,
+    finalDraft: "",
+    originalDraft: "",
+    chatMessages: [],
+  }));
+  setStep(2);
+}}
+```
+
+### AF-10: Set sentinel `final_draft` when entering step 3 (MEDIUM — modifies Task 9)
+
+If the AI asks a question before drafting, `final_draft` is null and restore breaks.
+
+**Apply in Task 9, Step 2 (DraftVariations handleCombineAndReview):** After persisting selection, set a sentinel:
+```typescript
+// Set sentinel final_draft so restore works even if AI asks before drafting
+const firstDraft = gen.drafts[gen.selectedDraftIndices[0]];
+if (firstDraft) {
+  const sentinel = `${firstDraft.hook}\n\n${firstDraft.body}\n\n${firstDraft.closing}`;
+  await api.saveDraft(gen.generationId, sentinel);
+  setGen((prev: any) => ({ ...prev, finalDraft: sentinel, originalDraft: sentinel }));
+}
+```
+
+### AF-11: Initialize `reviseFeedback` from gen state (MEDIUM — modifies Task 9)
+
+On remount, the local state resets to empty but `gen.combiningGuidance` retains the old value.
+
+**Apply in DraftVariations:** Change initialization:
+```typescript
+const [reviseFeedback, setReviseFeedback] = useState(gen.combiningGuidance ?? "");
+```
+
+### AF-12: Escape LIKE wildcards in search_past_posts (LOW — modifies Task 4)
+
+AI-generated search terms containing `%` or `_` produce wrong results.
+
+**Apply in Task 4, Step 3 (search_past_posts handler):**
+```typescript
+const escaped = input.query.replace(/%/g, "\\%").replace(/_/g, "\\_");
+// Use ESCAPE clause in the query:
+// WHERE ... p.hook_text LIKE ? ESCAPE '\\' OR p.full_text LIKE ? ESCAPE '\\'
+```
+Pass `%${escaped}%` as the parameter.
+
+### AF-13: Simplified system prompt after first turn (LOW — modifies Task 6)
+
+After turn 1, the original draft variations in the system prompt are stale and waste tokens.
+
+**Apply in Task 6, Step 3:** When `isFirstTurn` is false, build a shorter system prompt that omits the draft variations and only includes behavioral instructions + story context. The current working draft is already in the conversation via the user's message or `current_draft` parameter.
