@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import SubTabBar, { type GenerateSubTab } from "./generate/SubTabBar";
 import DiscoveryView from "./generate/DiscoveryView";
 import DraftVariations from "./generate/DraftVariations";
-import ReviewEdit from "./generate/ReviewEdit";
 import GhostwriterChat from "./generate/GhostwriterChat";
 import Rules from "./generate/Rules";
 import Sources from "./generate/Sources";
@@ -113,7 +112,7 @@ async function restoreGeneration(data: any): Promise<RestoreResult | null> {
     chatMessages,
   };
 
-  // Step mapping: final_draft exists -> step 3 (ReviewEdit), drafts exist -> step 2 (DraftVariations), else step 1
+  // Step mapping: final_draft exists -> step 3 (GhostwriterChat), drafts exist -> step 2 (DraftVariations), else step 1
   // Step 4 (PostRetro) is never opened from history/restore.
   let step: 1 | 2 | 3;
   if (data.final_draft) {
