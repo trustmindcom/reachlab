@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "../../api/client";
+import ScannerLoader from "../generate/components/ScannerLoader";
 
 interface AnalyzeWritingProps {
   onNext: () => void;
@@ -18,15 +19,12 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
   const [writingPrompt, setWritingPrompt] = useState("");
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState(MESSAGES[0]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const msgRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     checkAndAnalyze();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
-      if (msgRef.current) clearInterval(msgRef.current);
     };
   }, []);
 
@@ -48,13 +46,6 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
         return;
       }
 
-      // Rotate status messages
-      let msgIdx = 0;
-      msgRef.current = setInterval(() => {
-        msgIdx = Math.min(msgIdx + 1, MESSAGES.length - 1);
-        setMessage(MESSAGES[msgIdx]);
-      }, 4000);
-
       // Poll for completion (max 5 minutes)
       let pollCount = 0;
       const MAX_POLLS = 150;
@@ -62,7 +53,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
         pollCount++;
         if (pollCount > MAX_POLLS) {
           if (pollRef.current) clearInterval(pollRef.current);
-          if (msgRef.current) clearInterval(msgRef.current);
+
           setError("Analysis is taking longer than expected. You can continue and check results in Settings later.");
           await loadResults();
           setPhase("done");
@@ -73,7 +64,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
           const latest = runs[0];
           if (latest && (latest.status === "completed" || latest.status === "error")) {
             if (pollRef.current) clearInterval(pollRef.current);
-            if (msgRef.current) clearInterval(msgRef.current);
+  
             if (latest.status === "error") {
               setError("Analysis encountered an error, but you can continue.");
             }
@@ -152,14 +143,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
   if (phase === "analyzing") {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <div className="relative w-20 h-20 mb-6">
-          <div className="absolute inset-0 rounded-full border-2 border-accent/20 animate-ping" />
-          <div className="absolute inset-2 rounded-full border-2 border-accent/40 animate-pulse" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-3 h-3 rounded-full bg-accent" />
-          </div>
-        </div>
-        <p className="text-[15px] text-text-muted">{message}</p>
+        <ScannerLoader messages={MESSAGES} interval={4000} />
       </div>
     );
   }
