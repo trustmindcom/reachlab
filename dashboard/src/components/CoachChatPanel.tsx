@@ -51,7 +51,13 @@ export default function CoachChatPanel({ open, onClose }: CoachChatPanelProps) {
             if (m.tool_blocks_json) {
               try {
                 const blocks = JSON.parse(m.tool_blocks_json);
-                tools_used = blocks.map((b: any) => b.tool);
+                tools_used = blocks
+                  .filter((b: any) => b.role === "assistant")
+                  .flatMap((b: any) =>
+                    Array.isArray(b.content)
+                      ? b.content.filter((c: any) => c.type === "tool_use").map((c: any) => c.name)
+                      : []
+                  );
               } catch { /* ignore */ }
             }
             return { role: m.role, content: m.content, tools_used };

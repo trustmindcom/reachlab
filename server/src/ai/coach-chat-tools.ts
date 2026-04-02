@@ -10,6 +10,7 @@ import {
   getHookPerformance,
 } from "../db/ai/deep-dive.js";
 import { queryTiming } from "../db/queries.js";
+import { computeWeightedER } from "./stats-report.js";
 
 // ── Sort clauses for query_posts ─────────────────────────
 
@@ -164,11 +165,11 @@ export async function executeCoachTool(
       if (limit > 20) limit = 20;
 
       const sql = `SELECT p.id, p.content_preview, p.full_text, p.published_at, p.content_type,
-                      m.impressions, m.engagement_rate, m.reactions, m.comments, m.reposts, m.saves,
+                      m.impressions, m.reactions, m.comments, m.reposts, m.saves, m.sends,
                       t.post_category
                FROM posts p
                LEFT JOIN (
-                 SELECT post_id, impressions, engagement_rate, reactions, comments, reposts, saves,
+                 SELECT post_id, impressions, reactions, comments, reposts, saves, sends,
                         ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY scraped_at DESC) as rn
                  FROM post_metrics
                ) m ON m.post_id = p.id AND m.rn = 1
@@ -185,13 +186,16 @@ export async function executeCoachTool(
       return rows
         .map((r, i) => {
           const text = (r.full_text || r.content_preview || "").slice(0, 200);
+          const wer = r.impressions > 0
+            ? computeWeightedER(r.reactions ?? 0, r.comments ?? 0, r.reposts ?? 0, r.saves, r.sends, r.impressions)
+            : null;
           const lines = [
             `${i + 1}. [${r.published_at ?? "unknown date"}] ${r.content_type ?? "text"}${r.post_category ? ` | ${r.post_category}` : ""}`,
             `   "${text}${text.length >= 200 ? "..." : ""}"`,
             `   Impressions: ${r.impressions ?? "N/A"} | Reactions: ${r.reactions ?? 0} | Comments: ${r.comments ?? 0} | Reposts: ${r.reposts ?? 0} | Saves: ${r.saves ?? 0}`,
           ];
-          if (r.engagement_rate != null) {
-            lines.push(`   ER: ${(r.engagement_rate * 100).toFixed(2)}%`);
+          if (wer != null) {
+            lines.push(`   Weighted ER: ${wer.toFixed(2)}%`);
           }
           return lines.join("\n");
         })
