@@ -6,6 +6,51 @@ import { GHOSTWRITER_TOOLS, createGhostwriterState, executeGhostwriterTool } fro
 import { insertGenerationMessage } from "../db/generate-queries.js";
 import type { AiLogger } from "./logger.js";
 
+// ── Tool block persistence & replay ──────────────────────
+
+export const CLEARED_TOOL_RESULT = "[Old tool result content cleared]";
+
+interface StoredToolBlock {
+  role: "assistant" | "user";
+  content: any;
+}
+
+export function expandMessageRow(
+  row: { role: string; content: string; tool_blocks_json: string | null },
+  isRecent: boolean
+): Array<{ role: "user" | "assistant"; content: any }> {
+  if (!row.tool_blocks_json) {
+    return [{ role: row.role as "user" | "assistant", content: row.content }];
+  }
+
+  let toolBlocks: StoredToolBlock[];
+  try {
+    toolBlocks = JSON.parse(row.tool_blocks_json);
+  } catch {
+    return [{ role: row.role as "user" | "assistant", content: row.content }];
+  }
+  const messages: Array<{ role: "user" | "assistant"; content: any }> = [];
+
+  for (const block of toolBlocks) {
+    if (!isRecent && block.role === "user" && Array.isArray(block.content)) {
+      const compacted = block.content.map((b: any) =>
+        b.type === "tool_result"
+          ? { ...b, content: CLEARED_TOOL_RESULT }
+          : b
+      );
+      messages.push({ role: "user", content: compacted });
+    } else {
+      messages.push({ role: block.role, content: block.content });
+    }
+  }
+
+  if (row.role === "assistant") {
+    messages.push({ role: "assistant", content: row.content });
+  }
+
+  return messages;
+}
+
 // ── Safety constants ───────────────────────────────────────
 
 export const MAX_TOOL_ITERATIONS = 10;
@@ -94,6 +139,7 @@ export async function ghostwriterTurn(
   let totalInput = 0;
   let totalOutput = 0;
   const toolsUsed: string[] = [];
+  const toolBlockLog: StoredToolBlock[] = [];
   const apiMessages: Array<{ role: "user" | "assistant"; content: any }> = [...messages];
   const turnStart = Date.now();
   let lastResponse: Anthropic.Messages.Message | null = null;
@@ -170,9 +216,12 @@ export async function ghostwriterTurn(
       }
     }
 
-    // NOTE: tool call/result messages are NOT persisted to DB.
     apiMessages.push({ role: "assistant", content: response.content });
     apiMessages.push({ role: "user", content: toolResults });
+
+    // Collect for persistence
+    toolBlockLog.push({ role: "assistant", content: response.content });
+    toolBlockLog.push({ role: "user", content: toolResults });
   }
 
   // Extract text from the last response
@@ -192,6 +241,7 @@ export async function ghostwriterTurn(
     role: "assistant",
     content: assistantMessage,
     draft_snapshot: draftChanged ? state.currentDraft : undefined,
+    tool_blocks_json: toolBlockLog.length > 0 ? JSON.stringify(toolBlockLog) : undefined,
   });
 
   return {
