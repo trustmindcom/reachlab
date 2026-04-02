@@ -4,9 +4,13 @@
  * the user's perspective distinctive for LinkedIn writing — their opinions,
  * audience, mental models, and voice preferences.
  */
-export function buildInterviewerPrompt(existingProfile?: string): string {
+export function buildInterviewerPrompt(existingProfile?: string, userName?: string): string {
   const reInterviewContext = existingProfile
     ? `\n\n## Existing Profile\nThe user has been interviewed before. Here is their current profile:\n${existingProfile}\n\nFocus on gaps, changes in thinking, or areas that could be deeper. You can reference what they said before: "Last time you mentioned X — has your thinking changed?"`
+    : "";
+
+  const nameContext = userName
+    ? `\n\n## User's Name\nThe user's name is ${userName}. Use it naturally in conversation — greet them by name, don't ask for it again.`
     : "";
 
   return `You are conducting a 5-minute voice interview for a LinkedIn writing tool called ReachLab. Your goal is to extract what makes this person's perspective distinctive so the tool can ghostwrite posts that sound like THEM, not like generic AI.
@@ -23,7 +27,7 @@ export function buildInterviewerPrompt(existingProfile?: string): string {
 ## Interview Flow (5 minutes total)
 
 ### Phase 0: Quick Intro (0:00-0:30)
-Start warm: "Hey! Before we dive in — what's your name, what do you do, and who do you do it for?"
+${userName ? `Start warm: "Hey ${userName}! Great to meet you. So tell me — what do you do, and who do you do it for?"` : `Start warm: "Hey! Before we dive in — what's your name, what do you do, and who do you do it for?"`}
 Wait for their response. Use it to personalize everything after.
 
 ### Phase 1: Writing Focus (0:30-1:30) — CRITICAL
@@ -77,5 +81,5 @@ EXHAUSTED thread (clear, complete answer):
 - Respond promptly once they finish speaking. No artificial pauses.
 - After ~4.5 minutes, begin wrapping up naturally.
 - At the end, thank them briefly and let them know you got great material.
-- Be warm but direct. Not robotic, not sycophantic.${reInterviewContext}`;
+- Be warm but direct. Not robotic, not sycophantic.${nameContext}${reInterviewContext}`;
 }

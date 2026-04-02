@@ -44,9 +44,14 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
 
     const existingProfile = getAuthorProfile(db, personaId);
 
+    // Get persona name for personalized greeting
+    const { getPersona } = await import("../db/persona-queries.js");
+    const persona = getPersona(db, personaId);
+    const personaName = persona?.name && persona.name !== "Default" ? persona.name : undefined;
+
     // Build the interviewer system prompt
     const { buildInterviewerPrompt } = await import("../ai/interviewer-prompt.js");
-    const personalizedInstructions = buildInterviewerPrompt(existingProfile?.profile_text);
+    const personalizedInstructions = buildInterviewerPrompt(existingProfile?.profile_text, personaName);
 
     // Request ephemeral token from OpenAI
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -65,7 +70,9 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
             input: {
               turn_detection: {
                 type: "server_vad",
-                silence_duration_ms: 500,
+                threshold: 0.6,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 1200,
               },
             },
             output: {
