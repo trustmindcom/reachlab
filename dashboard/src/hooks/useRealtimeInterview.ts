@@ -112,7 +112,7 @@ export function useRealtimeInterview(): UseRealtimeInterviewReturn {
             console.log("[Interview]", msg.type, msg.transcript ?? "");
           }
           // Capture transcript from conversation events
-          if (msg.type === "response.audio_transcript.done" && msg.transcript) {
+          if ((msg.type === "response.audio_transcript.done" || msg.type === "response.output_audio_transcript.done") && msg.transcript) {
             setTranscript((prev) => [...prev, { role: "assistant", text: msg.transcript, timestamp: Date.now() }]);
           }
           if (msg.type === "conversation.item.input_audio_transcription.completed" && msg.transcript) {
@@ -158,8 +158,13 @@ export function useRealtimeInterview(): UseRealtimeInterviewReturn {
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
-            input_audio_transcription: {
-              model: "gpt-4o-mini-transcribe",
+            type: "realtime",
+            audio: {
+              input: {
+                transcription: {
+                  model: "gpt-4o-mini-transcribe",
+                },
+              },
             },
             turn_detection: {
               type: "server_vad",

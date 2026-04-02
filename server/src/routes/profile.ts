@@ -76,8 +76,8 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
               },
             },
             output: {
-              voice: "shimmer",
-              speed: 1.3,
+              voice: "coral",
+              speed: 1.0,
             },
           },
         },
