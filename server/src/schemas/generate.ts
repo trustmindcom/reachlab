@@ -31,10 +31,12 @@ export const chatBody = z.object({
 });
 
 const ruleItem = z.object({
+  id: z.number().int().optional(),
   rule_text: z.string().min(1),
   example_text: z.string().optional(),
   sort_order: z.number(),
   enabled: z.number().optional(),
+  origin: z.string().optional(),
 });
 
 export const rulesBody = z.object({

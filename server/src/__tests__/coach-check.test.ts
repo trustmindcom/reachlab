@@ -5,7 +5,7 @@ describe("buildCoachCheckPrompt", () => {
   it("includes draft, rules, and insights in prompt", () => {
     const prompt = buildCoachCheckPrompt(
       "This is a draft about AI.",
-      [{ id: 1, category: "voice_tone", rule_text: "Be direct", example_text: null, sort_order: 0, enabled: 1 }],
+      [{ id: 1, category: "voice_tone", rule_text: "Be direct", example_text: null, sort_order: 0, enabled: 1, origin: "manual" }],
       [{ id: 1, title: "Test insight", prompt_text: "Use examples", evidence: null, status: "active", source_sync_id: null, created_at: "", updated_at: "", retired_at: null }]
     );
     expect(prompt).toContain("This is a draft about AI.");

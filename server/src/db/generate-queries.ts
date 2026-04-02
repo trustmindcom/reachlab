@@ -12,6 +12,7 @@ export interface GenerationRule {
   example_text: string | null;
   sort_order: number;
   enabled: number;
+  origin: string;
 }
 
 export interface CoachingInsight {
@@ -120,15 +121,37 @@ export function getRulesByCategory(
 export function replaceAllRules(
   db: Database.Database,
   personaId: number,
-  rules: Array<{ category: string; rule_text: string; example_text?: string; sort_order: number; enabled?: number }>
+  rules: Array<{ id?: number; category: string; rule_text: string; example_text?: string; sort_order: number; enabled?: number; origin?: string }>
 ): void {
   const tx = db.transaction(() => {
-    db.prepare("DELETE FROM generation_rules WHERE persona_id = ?").run(personaId);
+    const manualRules = rules.filter((r) => !r.origin || r.origin === "manual");
+    const autoRules = rules.filter((r) => r.origin === "auto" && r.id);
+    const autoIds = new Set(autoRules.map((r) => r.id));
+
+    db.prepare("DELETE FROM generation_rules WHERE persona_id = ? AND origin = 'manual'").run(personaId);
+    if (autoIds.size > 0) {
+      const existing = db.prepare("SELECT id FROM generation_rules WHERE persona_id = ? AND origin = 'auto'").all(personaId) as Array<{ id: number }>;
+      for (const row of existing) {
+        if (!autoIds.has(row.id)) {
+          db.prepare("DELETE FROM generation_rules WHERE id = ?").run(row.id);
+        }
+      }
+    } else {
+      db.prepare("DELETE FROM generation_rules WHERE persona_id = ? AND origin = 'auto'").run(personaId);
+    }
+
     const insert = db.prepare(
-      "INSERT INTO generation_rules (persona_id, category, rule_text, example_text, sort_order, enabled) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO generation_rules (persona_id, category, rule_text, example_text, sort_order, enabled, origin) VALUES (?, ?, ?, ?, ?, ?, 'manual')"
     );
-    for (const rule of rules) {
+    for (const rule of manualRules) {
       insert.run(personaId, rule.category, rule.rule_text, rule.example_text ?? null, rule.sort_order, rule.enabled ?? 1);
+    }
+
+    const update = db.prepare(
+      "UPDATE generation_rules SET rule_text = ?, example_text = ?, sort_order = ?, enabled = ? WHERE id = ? AND persona_id = ?"
+    );
+    for (const rule of autoRules) {
+      update.run(rule.rule_text, rule.example_text ?? null, rule.sort_order, rule.enabled ?? 1, rule.id, personaId);
     }
   });
   tx();
@@ -552,6 +575,7 @@ export interface GenerationMessage {
   content: string;
   draft_snapshot: string | null;
   quality_json: string | null;
+  tool_blocks_json: string | null;
   created_at: string;
 }
 
@@ -563,14 +587,15 @@ export function insertGenerationMessage(
     content: string;
     draft_snapshot?: string;
     quality_json?: string;
+    tool_blocks_json?: string;
   }
 ): number {
   const result = db
     .prepare(
-      `INSERT INTO generation_messages (generation_id, role, content, draft_snapshot, quality_json)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO generation_messages (generation_id, role, content, draft_snapshot, quality_json, tool_blocks_json)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(data.generation_id, data.role, data.content, data.draft_snapshot ?? null, data.quality_json ?? null);
+    .run(data.generation_id, data.role, data.content, data.draft_snapshot ?? null, data.quality_json ?? null, data.tool_blocks_json ?? null);
   return Number(result.lastInsertRowid);
 }
 
@@ -600,11 +625,27 @@ export function insertSingleRule(
   personaId: number,
   category: string,
   ruleText: string,
-  sortOrder: number
+  sortOrder: number,
+  origin: string = "manual"
 ): void {
   db.prepare(
-    "INSERT INTO generation_rules (category, rule_text, sort_order, enabled, persona_id) VALUES (?, ?, ?, 1, ?)"
-  ).run(category, ruleText, sortOrder, personaId);
+    "INSERT INTO generation_rules (category, rule_text, sort_order, enabled, persona_id, origin) VALUES (?, ?, ?, 1, ?, ?)"
+  ).run(category, ruleText, sortOrder, personaId, origin);
+}
+
+export function updateRule(
+  db: Database.Database,
+  ruleId: number,
+  personaId: number,
+  fields: { rule_text?: string; example_text?: string }
+): void {
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (fields.rule_text !== undefined) { sets.push("rule_text = ?"); params.push(fields.rule_text); }
+  if (fields.example_text !== undefined) { sets.push("example_text = ?"); params.push(fields.example_text); }
+  if (sets.length === 0) return;
+  params.push(ruleId, personaId);
+  db.prepare(`UPDATE generation_rules SET ${sets.join(", ")} WHERE id = ? AND persona_id = ?`).run(...params);
 }
 
 export function getRuleCount(db: Database.Database, personaId: number): number {

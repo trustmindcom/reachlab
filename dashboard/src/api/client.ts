@@ -340,6 +340,7 @@ export interface GenRule {
   rule_text: string;
   example_text?: string | null;
   sort_order: number;
+  origin?: string;
 }
 
 export interface GenRulesResponse {

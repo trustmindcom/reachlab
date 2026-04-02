@@ -32,6 +32,8 @@ import {
   getEditorialPrinciples,
   confirmPrinciple,
   pruneStaleEditorialPrinciples,
+  insertSingleRule,
+  updateRule,
 } from "../db/generate-queries.js";
 import { initDatabase } from "../db/index.js";
 
@@ -370,6 +372,99 @@ describe("getActiveGeneration", () => {
     if (active) {
       expect(active.id).not.toBe(genId);
     }
+  });
+});
+
+describe("generation_messages tool_blocks_json", () => {
+  let genId: number;
+
+  beforeAll(() => {
+    const researchId = insertResearch(db, PERSONA_ID, { post_type: "general", stories_json: "[]" });
+    genId = insertGeneration(db, PERSONA_ID, {
+      research_id: researchId,
+      post_type: "general",
+      selected_story_index: 0,
+      drafts_json: "[]",
+    });
+  });
+
+  it("inserts message with tool_blocks_json", () => {
+    const toolBlocks = JSON.stringify([{ type: "tool_use", name: "web_search", input: { query: "test" } }]);
+    const msgId = insertGenerationMessage(db, {
+      generation_id: genId,
+      role: "assistant",
+      content: "I searched for that",
+      tool_blocks_json: toolBlocks,
+    });
+    expect(msgId).toBeGreaterThan(0);
+
+    const messages = getGenerationMessages(db, genId);
+    const found = messages.find((m) => m.id === msgId);
+    expect(found).toBeDefined();
+    expect(found!.tool_blocks_json).toBe(toolBlocks);
+  });
+
+  it("inserts message without tool_blocks_json (null)", () => {
+    const msgId = insertGenerationMessage(db, {
+      generation_id: genId,
+      role: "user",
+      content: "No tools here",
+    });
+    expect(msgId).toBeGreaterThan(0);
+
+    const messages = getGenerationMessages(db, genId);
+    const found = messages.find((m) => m.id === msgId);
+    expect(found).toBeDefined();
+    expect(found!.tool_blocks_json).toBeNull();
+  });
+});
+
+describe("insertSingleRule origin", () => {
+  it("inserts rule with default manual origin", () => {
+    const maxOrder = db
+      .prepare("SELECT COALESCE(MAX(sort_order), -1) as m FROM generation_rules WHERE category = ? AND persona_id = ?")
+      .get("voice_tone", PERSONA_ID) as { m: number };
+    insertSingleRule(db, PERSONA_ID, "voice_tone", "Manual rule text", maxOrder.m + 1);
+
+    const rules = getRules(db, PERSONA_ID);
+    const found = rules.find((r) => r.rule_text === "Manual rule text");
+    expect(found).toBeDefined();
+    expect(found!.origin).toBe("manual");
+  });
+
+  it("inserts rule with auto origin", () => {
+    const maxOrder = db
+      .prepare("SELECT COALESCE(MAX(sort_order), -1) as m FROM generation_rules WHERE category = ? AND persona_id = ?")
+      .get("voice_tone", PERSONA_ID) as { m: number };
+    insertSingleRule(db, PERSONA_ID, "voice_tone", "Auto rule text", maxOrder.m + 1, "auto");
+
+    const rules = getRules(db, PERSONA_ID);
+    const found = rules.find((r) => r.rule_text === "Auto rule text");
+    expect(found).toBeDefined();
+    expect(found!.origin).toBe("auto");
+  });
+});
+
+describe("updateRule", () => {
+  it("updates rule_text and example_text", () => {
+    const maxOrder = db
+      .prepare("SELECT COALESCE(MAX(sort_order), -1) as m FROM generation_rules WHERE category = ? AND persona_id = ?")
+      .get("voice_tone", PERSONA_ID) as { m: number };
+    insertSingleRule(db, PERSONA_ID, "voice_tone", "Original text", maxOrder.m + 1);
+
+    const rules = getRules(db, PERSONA_ID);
+    const inserted = rules.find((r) => r.rule_text === "Original text");
+    expect(inserted).toBeDefined();
+
+    updateRule(db, inserted!.id, PERSONA_ID, {
+      rule_text: "Updated text",
+      example_text: "New example",
+    });
+
+    const updated = getRules(db, PERSONA_ID).find((r) => r.id === inserted!.id);
+    expect(updated).toBeDefined();
+    expect(updated!.rule_text).toBe("Updated text");
+    expect(updated!.example_text).toBe("New example");
   });
 });
 
