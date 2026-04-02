@@ -5,51 +5,10 @@ import { MODELS } from "./client.js";
 import { GHOSTWRITER_TOOLS, createGhostwriterState, executeGhostwriterTool } from "./ghostwriter-tools.js";
 import { insertGenerationMessage } from "../db/generate-queries.js";
 import type { AiLogger } from "./logger.js";
+import { agentTurn } from "./agent-loop.js";
 
-// ── Tool block persistence & replay ──────────────────────
-
-export const CLEARED_TOOL_RESULT = "[Old tool result content cleared]";
-
-interface StoredToolBlock {
-  role: "assistant" | "user";
-  content: any;
-}
-
-export function expandMessageRow(
-  row: { role: string; content: string; tool_blocks_json: string | null },
-  isRecent: boolean
-): Array<{ role: "user" | "assistant"; content: any }> {
-  if (!row.tool_blocks_json) {
-    return [{ role: row.role as "user" | "assistant", content: row.content }];
-  }
-
-  let toolBlocks: StoredToolBlock[];
-  try {
-    toolBlocks = JSON.parse(row.tool_blocks_json);
-  } catch {
-    return [{ role: row.role as "user" | "assistant", content: row.content }];
-  }
-  const messages: Array<{ role: "user" | "assistant"; content: any }> = [];
-
-  for (const block of toolBlocks) {
-    if (!isRecent && block.role === "user" && Array.isArray(block.content)) {
-      const compacted = block.content.map((b: any) =>
-        b.type === "tool_result"
-          ? { ...b, content: CLEARED_TOOL_RESULT }
-          : b
-      );
-      messages.push({ role: "user", content: compacted });
-    } else {
-      messages.push({ role: block.role, content: block.content });
-    }
-  }
-
-  if (row.role === "assistant") {
-    messages.push({ role: "assistant", content: row.content });
-  }
-
-  return messages;
-}
+// Re-export so existing imports from ghostwriter.js keep working
+export { expandMessageRow, CLEARED_TOOL_RESULT, type StoredToolBlock } from "./agent-loop.js";
 
 // ── Safety constants ───────────────────────────────────────
 
@@ -152,103 +111,20 @@ export async function ghostwriterTurn(
   currentDraft: string
 ): Promise<GhostwriterTurnResult> {
   const state = createGhostwriterState(currentDraft);
-  let iterations = 0;
-  let totalInput = 0;
-  let totalOutput = 0;
-  const toolsUsed: string[] = [];
-  const toolBlockLog: StoredToolBlock[] = [];
-  const apiMessages: Array<{ role: "user" | "assistant"; content: any }> = [...messages];
-  const turnStart = Date.now();
-  let lastResponse: Anthropic.Messages.Message | null = null;
 
-  while (true) {
-    // GUARD: iteration cap
-    if (++iterations > MAX_TOOL_ITERATIONS) {
-      throw new Error("Ghostwriter exceeded maximum tool iterations");
-    }
-
-    // GUARD: token budget (checked BEFORE the call, not after)
-    if (totalInput > MAX_TURN_INPUT_TOKENS) break;
-
-    // GUARD: total turn deadline
-    const elapsed = Date.now() - turnStart;
-    if (elapsed > TURN_DEADLINE_MS) break;
-
-    // GUARD: per-call timeout (remaining time or API_TIMEOUT_MS, whichever is smaller)
-    const remainingMs = Math.min(API_TIMEOUT_MS, TURN_DEADLINE_MS - elapsed);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), remainingMs);
-    const iterStart = Date.now();
-
-    let response: Anthropic.Messages.Message;
-    try {
-      response = await client.messages.create(
-        {
-          model: MODELS.SONNET,
-          max_tokens: 4000,
-          system: systemPrompt,
-          tools: GHOSTWRITER_TOOLS,
-          messages: apiMessages,
-        },
-        { signal: controller.signal }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    lastResponse = response;
-    totalInput += response.usage.input_tokens;
-    totalOutput += response.usage.output_tokens;
-
-    logger.log({
-      step: "ghostwriter_turn",
-      model: MODELS.SONNET,
-      input_messages: JSON.stringify(apiMessages.slice(-1)),
-      output_text: JSON.stringify(response.content),
-      tool_calls: null,
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-      thinking_tokens: 0,
-      duration_ms: Date.now() - iterStart,
-    });
-
-    if (response.stop_reason !== "tool_use") break;
-
-    // Execute tools — validate blocks, catch errors
-    const toolResults: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = [];
-    for (const block of response.content) {
-      if (block.type === "tool_use") {
-        // Validate tool_use blocks
-        if (!block.id || typeof block.name !== "string") continue;
-        toolsUsed.push(block.name);
-        const result = await executeGhostwriterTool(
-          db,
-          personaId,
-          block.name,
-          block.input as Record<string, unknown>,
-          state,
-          logger
-        );
-        toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
-      }
-    }
-
-    apiMessages.push({ role: "assistant", content: response.content });
-    apiMessages.push({ role: "user", content: toolResults });
-
-    // Collect for persistence
-    toolBlockLog.push({ role: "assistant", content: response.content });
-    toolBlockLog.push({ role: "user", content: toolResults });
-  }
-
-  // Extract text from the last response
-  if (!lastResponse) throw new Error("Ghostwriter produced no response");
-
-  const assistantMessage =
-    lastResponse.content
-      .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n") || "(Draft updated)";
+  const result = await agentTurn({
+    client,
+    model: MODELS.SONNET,
+    tools: GHOSTWRITER_TOOLS,
+    executeTool: (name, input) => executeGhostwriterTool(db, personaId, name, input, state, logger),
+    systemPrompt,
+    messages,
+    logger,
+    maxIterations: MAX_TOOL_ITERATIONS,
+    maxInputTokens: MAX_TURN_INPUT_TOKENS,
+    turnDeadlineMs: TURN_DEADLINE_MS,
+    apiTimeoutMs: API_TIMEOUT_MS,
+  });
 
   const draftChanged = state.currentDraft !== currentDraft;
 
@@ -256,17 +132,17 @@ export async function ghostwriterTurn(
   insertGenerationMessage(db, {
     generation_id: generationId,
     role: "assistant",
-    content: assistantMessage,
+    content: result.assistantMessage,
     draft_snapshot: draftChanged ? state.currentDraft : undefined,
-    tool_blocks_json: toolBlockLog.length > 0 ? JSON.stringify(toolBlockLog) : undefined,
+    tool_blocks_json: result.toolBlockLog.length > 0 ? JSON.stringify(result.toolBlockLog) : undefined,
   });
 
   return {
-    assistantMessage,
+    assistantMessage: result.assistantMessage,
     draft: draftChanged ? state.currentDraft : null,
     changeSummary: draftChanged ? state.lastChangeSummary : null,
-    toolsUsed,
-    input_tokens: totalInput,
-    output_tokens: totalOutput,
+    toolsUsed: result.toolsUsed,
+    input_tokens: result.input_tokens,
+    output_tokens: result.output_tokens,
   };
 }
