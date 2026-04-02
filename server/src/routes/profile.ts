@@ -63,7 +63,7 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
       body: JSON.stringify({
         session: {
           type: "realtime",
-          model: "gpt-realtime",
+          model: "gpt-realtime-1.5",
           instructions: personalizedInstructions,
           output_modalities: ["audio"],
           audio: {
@@ -92,7 +92,7 @@ export function registerProfileRoutes(app: FastifyInstance, db: Database.Databas
 
     const data = await response.json();
     console.log("[Interview] Session created successfully");
-    return { client_secret: data.client_secret?.value ?? data.value, model: "gpt-realtime" };
+    return { client_secret: data.client_secret?.value ?? data.value, model: "gpt-realtime-1.5" };
   });
 
   // Extract profile from interview transcript

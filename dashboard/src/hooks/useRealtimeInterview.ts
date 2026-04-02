@@ -128,7 +128,7 @@ export function useRealtimeInterview(): UseRealtimeInterviewReturn {
       await pc.setLocalDescription(offer);
 
       // Connect to OpenAI Realtime
-      const sdpResponse = await fetch(`https://api.openai.com/v1/realtime/calls?model=${session.model ?? "gpt-realtime"}`, {
+      const sdpResponse = await fetch(`https://api.openai.com/v1/realtime/calls?model=${session.model ?? "gpt-realtime-1.5"}`, {
         method: "POST",
         body: offer.sdp,
         headers: {
