@@ -82,15 +82,15 @@ describe("GHOSTWRITER_TOOLS definitions", () => {
   it("has the expected tool names", () => {
     const names = GHOSTWRITER_TOOLS.map((t) => t.name);
     expect(names).toEqual([
-      "get_author_profile",
-      "lookup_principles",
       "get_rules",
-      "search_past_posts",
-      "get_platform_knowledge",
-      "update_draft",
       "web_search",
       "fetch_url",
       "add_or_update_rule",
+      "get_author_profile",
+      "lookup_principles",
+      "search_past_posts",
+      "get_platform_knowledge",
+      "update_draft",
     ]);
   });
 });
