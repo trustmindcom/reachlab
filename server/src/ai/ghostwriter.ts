@@ -158,12 +158,13 @@ export async function ghostwriterTurn(
         // Validate tool_use blocks
         if (!block.id || typeof block.name !== "string") continue;
         toolsUsed.push(block.name);
-        const result = executeGhostwriterTool(
+        const result = await executeGhostwriterTool(
           db,
           personaId,
           block.name,
           block.input as Record<string, unknown>,
-          state
+          state,
+          logger
         );
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
       }
