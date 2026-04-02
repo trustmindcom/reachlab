@@ -55,7 +55,12 @@ export default function RuleItem({ rule, onUpdate, onDelete }: RuleItemProps) {
     >
       <span className="text-gen-text-4 mt-0.5 select-none text-[13px]">-</span>
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] text-gen-text-1 leading-relaxed">{rule.rule_text}</p>
+        <div className="flex items-baseline gap-2">
+          <p className="text-[13px] text-gen-text-1 leading-relaxed">{rule.rule_text}</p>
+          {rule.origin === "auto" && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-gen-accent/10 text-gen-accent border border-gen-accent/20 uppercase tracking-wider flex-shrink-0">auto</span>
+          )}
+        </div>
         {rule.example_text && (
           <p className="text-[12px] text-gen-text-3 italic mt-0.5">{rule.example_text}</p>
         )}

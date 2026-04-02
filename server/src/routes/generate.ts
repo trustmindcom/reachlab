@@ -566,7 +566,7 @@ Return JSON only:
     };
 
     for (const rule of rules) {
-      const item = { id: rule.id, rule_text: rule.rule_text, example_text: rule.example_text, sort_order: rule.sort_order };
+      const item = { id: rule.id, rule_text: rule.rule_text, example_text: rule.example_text, sort_order: rule.sort_order, origin: rule.origin };
       if (rule.category === "anti_ai_tropes") {
         categories.anti_ai_tropes.rules.push(item);
       } else if (categories[rule.category]) {
@@ -609,7 +609,7 @@ Return JSON only:
       anti_ai_tropes: { enabled: antiAiEnabled, rules: [] as any[] },
     };
     for (const rule of rules) {
-      const item = { id: rule.id, rule_text: rule.rule_text, example_text: rule.example_text, sort_order: rule.sort_order };
+      const item = { id: rule.id, rule_text: rule.rule_text, example_text: rule.example_text, sort_order: rule.sort_order, origin: rule.origin };
       if (rule.category === "anti_ai_tropes") {
         categories.anti_ai_tropes.rules.push(item);
       } else if (categories[rule.category]) {
