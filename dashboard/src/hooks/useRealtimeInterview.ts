@@ -161,6 +161,12 @@ export function useRealtimeInterview(): UseRealtimeInterviewReturn {
             input_audio_transcription: {
               model: "gpt-4o-mini-transcribe",
             },
+            turn_detection: {
+              type: "server_vad",
+              threshold: 0.6,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 1200,
+            },
           },
         }));
         // Trigger the AI to speak first (ask for name/role/etc)
