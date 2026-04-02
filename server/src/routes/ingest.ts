@@ -253,7 +253,7 @@ export function registerIngestRoutes(
         if (postsUpserted === 0 && untaggedIds.length === 0) return;
         if (getRunningRun(db, personaId)) return;
         const postCount = getPostCountWithMetrics(db, personaId);
-        if (postCount < 10) return;
+        if (postCount < 5) return;
 
         const client = createClient(aiApiKey);
 

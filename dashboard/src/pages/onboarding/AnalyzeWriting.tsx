@@ -13,7 +13,7 @@ const MESSAGES = [
 ];
 
 export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) {
-  const [phase, setPhase] = useState<"checking" | "no-posts" | "analyzing" | "done">("checking");
+  const [phase, setPhase] = useState<"checking" | "no-posts" | "not-enough" | "analyzing" | "done">("checking");
   const [topics, setTopics] = useState<string[]>([]);
   const [writingPrompt, setWritingPrompt] = useState("");
   const [editing, setEditing] = useState(false);
@@ -41,7 +41,12 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
       setPhase("analyzing");
 
       // Trigger analysis
-      await api.insightsRefresh();
+      const refreshRes = await api.insightsRefresh();
+      if (refreshRes.error) {
+        // Not enough posts with metrics to run analysis
+        setPhase("not-enough");
+        return;
+      }
 
       // Rotate status messages
       let msgIdx = 0;
@@ -115,6 +120,24 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
         <h2 className="text-[20px] font-semibold text-text-primary mb-2">No posts to analyze yet</h2>
         <p className="text-[13px] text-text-secondary mb-6">
           After your first LinkedIn sync, come back to Settings to run the analysis.
+        </p>
+        <button
+          onClick={onSkip}
+          className="px-6 py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90"
+        >
+          Continue
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === "not-enough") {
+    return (
+      <div className="max-w-lg mx-auto text-center">
+        <h2 className="text-[20px] font-semibold text-text-primary mb-2">Not enough data yet</h2>
+        <p className="text-[13px] text-text-secondary mb-6">
+          ReachLab needs at least 5 posts with engagement metrics before it can analyze your writing.
+          Keep syncing from LinkedIn — once you hit 5 posts with metrics, head to the Coach tab to run the analysis.
         </p>
         <button
           onClick={onSkip}

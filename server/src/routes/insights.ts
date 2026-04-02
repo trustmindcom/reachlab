@@ -31,9 +31,10 @@ import {
   listCompletedRuns,
   getTotalCostForPersona,
   getLastFullRun,
+  getPostCountWithMetrics,
 } from "../db/ai-queries.js";
 import { createClient } from "../ai/client.js";
-import { runPipeline } from "../ai/orchestrator.js";
+import { runPipeline, shouldRunPipeline } from "../ai/orchestrator.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
 import { refreshBody, feedbackBody, resolveBody } from "../schemas/insights.js";
@@ -92,6 +93,14 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
     const client = createClient(apiKey);
     const body = request.body ? validateBody(refreshBody, request.body) : undefined;
     const trigger = body?.force ? "force" : "manual";
+    // Pre-check threshold so we can return a useful error instead of silently failing
+    if (trigger !== "force") {
+      const postCount = getPostCountWithMetrics(db, personaId);
+      const check = shouldRunPipeline(postCount, null);
+      if (!check.should) {
+        return reply.status(422).send({ error: check.reason, post_count: postCount });
+      }
+    }
     // Fire and forget — don't block the response
     runPipeline(client, db, personaId, trigger).catch((err) => {
       console.error("[AI Pipeline] Refresh failed:", err.message);

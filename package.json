@@ -16,5 +16,11 @@
   },
   "devDependencies": {
     "npm-run-all2": "^8.0.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }

@@ -71,8 +71,8 @@ export function shouldRunPipeline(
   currentPostCount: number,
   lastRun: { post_count: number } | null
 ): { should: boolean; reason?: string } {
-  if (currentPostCount < 10) {
-    return { should: false, reason: "Need at least 10 posts with metrics" };
+  if (currentPostCount < 5) {
+    return { should: false, reason: "Need at least 5 posts with metrics" };
   }
   if (!lastRun) {
     return { should: true };
