@@ -80,7 +80,7 @@ Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Create agent-loop.ts**
 
-Move `CLEARED_TOOL_RESULT`, `StoredToolBlock`, `expandMessageRow` from `ghostwriter.ts` into the new file. Then add the generic `agentTurn` function:
+Move `CLEARED_TOOL_RESULT`, `StoredToolBlock`, `expandMessageRow` from `ghostwriter.ts` into the new file. Then add the generic `agentTurn` function. **IMPORTANT:** In `ghostwriter.ts`, re-export these so existing imports in `generate.ts` don't break: `export { expandMessageRow, CLEARED_TOOL_RESULT } from "./agent-loop.js";`
 
 ```typescript
 import type Anthropic from "@anthropic-ai/sdk";
@@ -373,7 +373,7 @@ Check latest migration number at execution time (currently 025).
 -- 026-coach-chat.sql
 CREATE TABLE coach_chat_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  persona_id INTEGER NOT NULL,
+  persona_id INTEGER NOT NULL REFERENCES personas(id),
   title TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -494,7 +494,7 @@ Test the pure query tools that return formatted strings. Use a test DB with samp
 
 - [ ] **Step 2: Implement coach-chat-tools.ts**
 
-The coach tools wrap existing query functions from `server/src/db/ai/deep-dive.ts` and `server/src/db/queries.ts`. They format the results as human-readable strings for the LLM.
+The coach tools MUST call existing query functions from `server/src/db/ai/deep-dive.ts` and `server/src/db/stats-queries.ts` — do NOT write new SQL. This ensures the coach chat produces the same numbers as the dashboard (especially the weighted ER formula from `computeWeightedER()`). The tools format the results as human-readable strings for the LLM.
 
 ```typescript
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";

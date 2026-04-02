@@ -55,6 +55,10 @@ async function agentTurn(config: AgentTurnConfig): Promise<AgentTurnResult>
 
 Contains the while loop, guards (iteration cap, token budget, deadline, timeout), tool execution, tool block collection, and result extraction. The `StoredToolBlock` type, `expandMessageRow`, and `CLEARED_TOOL_RESULT` constant also live here.
 
+**Microcompaction:** `expandMessageRow` lives in `agent-loop.ts` and is used by both route handlers (`generate.ts` and `coach-chat.ts`) to apply microcompaction BEFORE calling the turn function. This is the caller's responsibility — the agent loop itself does not compact. Both route handlers use the same pattern: keep last 10 rows (5 turns) fully hydrated, clear older tool results.
+
+**Import re-exports:** `ghostwriter.ts` should re-export `expandMessageRow` and `CLEARED_TOOL_RESULT` from `agent-loop.ts` so that existing imports in `generate.ts` don't break.
+
 **`ghostwriterTurn`** becomes a thin wrapper that:
 - Assembles ghostwriter-specific tools and system prompt
 - Calls `agentTurn`
@@ -76,7 +80,7 @@ Extract from `ghostwriter-tools.ts` into a shared module:
 - `get_rules` tool definition + dispatch (calls `getRules`)
 - `add_or_update_rule` tool definition + dispatch (calls `updateRule`/`insertSingleRule`)
 
-Both `ghostwriter-tools.ts` and `coach-chat-tools.ts` import from `shared-tools.ts` and merge the shared tool definitions with their domain-specific ones.
+The shared dispatcher takes `(db, personaId, toolName, input, logger)` — same signature pattern as the domain-specific dispatchers. Both `ghostwriter-tools.ts` and `coach-chat-tools.ts` import from `shared-tools.ts` and merge the shared tool definitions with their domain-specific ones.
 
 ### 3. Coach Chat Tools
 
@@ -84,19 +88,21 @@ Both `ghostwriter-tools.ts` and `coach-chat-tools.ts` import from `shared-tools.
 
 7 coaching-specific tools plus the 4 shared tools:
 
-**`query_posts`** — Search/filter posts by date range, topic, category, sort_by, limit. Returns post text + performance metrics (impressions, ER, reactions, comments, reposts, saves). SQL queries the `posts` + `post_metrics` tables with optional WHERE clauses.
+**IMPORTANT: All analytics tools MUST call existing query functions from `server/src/db/ai/deep-dive.ts` and `server/src/db/stats-queries.ts` rather than writing new SQL. This ensures the coach chat produces the same numbers as the dashboard (especially the weighted ER formula from `computeWeightedER()`).**
 
-**`get_performance_summary`** — Overall stats for a time period. Total posts, average impressions, average engagement rate, comparison vs prior period of same length. Queries `posts` + `post_metrics` with date filtering and aggregation.
+**`query_posts`** — Search/filter posts by date range, topic, category, sort_by, limit. Returns post text + performance metrics. Uses weighted ER from `computeWeightedER()` for consistency with the dashboard, not the raw `engagement_rate` column on `post_metrics`.
 
-**`get_category_breakdown`** — Categories with post count, median engagement rate, status (reliable/declining/underexplored). Queries `ai_tags` + `post_metrics` grouped by category. Reuses the same categorization logic as the Coach Deep Dive tab.
+**`get_performance_summary`** — Overall stats for a time period. Calls `getProgressMetrics()` from `deep-dive.ts` which returns current vs previous period comparison with weighted ER.
 
-**`get_topic_performance`** — Topics ranked by engagement. Queries `ai_tags` with topic-level grouping and engagement metrics.
+**`get_category_breakdown`** — Calls `getCategoryPerformance()` from `deep-dive.ts` directly. This function already computes weighted ER, groups by category, calculates medians, and assigns status labels (reliable/declining/underexplored). No new SQL needed.
 
-**`get_timing_analysis`** — Best days and hours based on historical engagement data. Queries `posts` with day-of-week and hour extraction, grouped by time slot with average engagement rates.
+**`get_topic_performance`** — Calls `getTopicPerformance()` from `deep-dive.ts` directly.
 
-**`get_engagement_quality`** — Breakdown of engagement types: reactions vs comments vs saves ratio, comment-to-impression rate. Queries `post_metrics` with aggregation.
+**`get_timing_analysis`** — Calls `getTimingSlots()` from `stats-queries.ts` (or the equivalent timing query function). Existing function handles SQLite `strftime` date extraction.
 
-**`get_hook_analysis`** — Hook types and format styles ranked by performance. Queries `ai_tags` where tag type is hook_type or format_style, joined with `post_metrics`.
+**`get_engagement_quality`** — Calls `getEngagementQuality()` from `deep-dive.ts` directly.
+
+**`get_hook_analysis`** — Calls `getHookPerformance()` from `deep-dive.ts` directly. Handles nullable `hook_type`/`format_style` columns (excludes untagged posts).
 
 ### 4. Coach System Prompt
 
@@ -130,7 +136,7 @@ When the user asks about external factors (algorithm changes, platform trends, c
 ```sql
 CREATE TABLE coach_chat_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  persona_id INTEGER NOT NULL,
+  persona_id INTEGER NOT NULL REFERENCES personas(id),
   title TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
