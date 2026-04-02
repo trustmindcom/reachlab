@@ -28,6 +28,7 @@ import { registerGenerateRoutes } from "./routes/generate.js";
 import { registerProfileRoutes } from "./routes/profile.js";
 import { registerPersonaRoutes } from "./routes/personas.js";
 import { registerIngestRoutes } from "./routes/ingest.js";
+import { registerCoachChatRoutes } from "./routes/coach-chat.js";
 
 import { getPersonaId } from "./utils.js";
 import { ensureDefaultUser, getUserByToken } from "./db/user-queries.js";
@@ -218,6 +219,9 @@ export function buildApp(dbPath: string) {
 
   // Persona management routes
   registerPersonaRoutes(app, db);
+
+  // Coach chat routes
+  registerCoachChatRoutes(app, db);
 
   // On startup, prune old AI logs and retry image downloads
   app.addHook("onReady", async () => {
