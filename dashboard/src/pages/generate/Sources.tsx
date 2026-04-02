@@ -2,6 +2,21 @@ import { useState, useEffect } from "react";
 import { api, type GenSource } from "../../api/client";
 import { useToast } from "../../components/Toast";
 
+const DEFAULT_FEED_URLS = new Set([
+  "https://no.security/rss.xml",
+  "https://rss.beehiiv.com/feeds/xgTKUmMmUm.xml",
+  "https://importai.substack.com/feed",
+  "https://news.smol.ai/rss.xml",
+  "https://simonwillison.net/atom/everything/",
+  "https://www.schneier.com/feed/atom/",
+  "https://techcrunch.com/category/artificial-intelligence/feed/",
+  "https://krebsonsecurity.com/feed/",
+]);
+
+function hasOnlyDefaults(sources: GenSource[]): boolean {
+  return sources.length > 0 && sources.every((s) => DEFAULT_FEED_URLS.has(s.feed_url));
+}
+
 export default function Sources() {
   const { showError } = useToast();
   const [sources, setSources] = useState<GenSource[]>([]);
@@ -12,7 +27,13 @@ export default function Sources() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getSources().then((res) => setSources(res.sources)).catch(() => showError("Failed to load sources"));
+    api.getSources().then((res) => {
+      setSources(res.sources);
+      // Auto-backfill if user only has the seed defaults
+      if (hasOnlyDefaults(res.sources)) {
+        runBackfill();
+      }
+    }).catch(() => showError("Failed to load sources"));
   }, []);
 
   const handleAdd = async () => {
@@ -60,7 +81,7 @@ export default function Sources() {
     }
   };
 
-  const handleDiscover = async () => {
+  const runBackfill = async () => {
     setDiscovering(true);
     setError(null);
     setSuccess(null);
@@ -121,17 +142,17 @@ export default function Sources() {
       <div className="mb-6 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-[10px]">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-[15px] font-medium text-gen-text-0">Discover sources for my topics</h3>
+            <h3 className="text-[15px] font-medium text-gen-text-0">Find sources for my topics</h3>
             <p className="text-[13px] text-gen-text-3 mt-0.5">
-              Find blogs and newsletters based on your interview profile.
+              Search for blogs and newsletters based on your interview profile.
             </p>
           </div>
           <button
-            onClick={handleDiscover}
+            onClick={runBackfill}
             disabled={discovering}
             className="px-4 py-2 bg-gen-accent text-white text-[14px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
           >
-            {discovering ? "Searching..." : "Discover"}
+            {discovering ? "Searching..." : "Find sources"}
           </button>
         </div>
       </div>
