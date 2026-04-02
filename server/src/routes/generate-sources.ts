@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
 import { createDbClient } from "../db/client.js";
-import { listSources, sourceExists, insertSource, getSource, updateSource, deleteSource, getTaxonomyNames } from "../db/source-queries.js";
+import { listSources, sourceExists, insertSource, getSource, updateSource, deleteSource, getTaxonomyNames, deleteSources, DEFAULT_FEED_URLS } from "../db/source-queries.js";
 import { createRun, completeRun, failRun, getRunCost, getPersonaSetting, upsertPersonaSetting } from "../db/ai-queries.js";
 import { createClient } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
@@ -139,5 +139,58 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
     const { discoverSources } = await import("../ai/source-discoverer.js");
     const sources = await discoverSources(topicList);
     return { sources };
+  });
+
+  // ── Source Backfill ─────────────────────────────────────
+  // Discovers sources based on author profile topics, removes seed defaults,
+  // and saves the discovered sources. For existing users who onboarded before
+  // source discovery was wired to the interview.
+
+  app.post("/api/sources/backfill", async (request) => {
+    const personaId = getPersonaId(request);
+
+    // 1. Get writing_topics from author profile
+    const { getAuthorProfile } = await import("../db/profile-queries.js");
+    const profile = getAuthorProfile(db, personaId);
+    let topics: string[] = [];
+    if (profile?.profile_json) {
+      try {
+        const parsed = JSON.parse(profile.profile_json);
+        if (Array.isArray(parsed.writing_topics)) {
+          topics = parsed.writing_topics;
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (topics.length === 0) {
+      return { sources: [], removed: 0, added: 0, message: "No writing topics found in your profile. Complete a voice interview first." };
+    }
+
+    // 2. Discover sources via Perplexity
+    const { discoverSources } = await import("../ai/source-discoverer.js");
+    const discovered = await discoverSources(topics);
+    const withFeeds = discovered.filter((s) => s.feed_url);
+
+    if (withFeeds.length === 0) {
+      return { sources: [], removed: 0, added: 0, message: "Couldn't find sources with RSS feeds for your topics." };
+    }
+
+    // 3. Remove default seed sources (only those that match the known defaults)
+    const existing = listSources(dbc, personaId);
+    const defaultIds = existing
+      .filter((s) => DEFAULT_FEED_URLS.has(s.feed_url))
+      .map((s) => s.id);
+    const removed = deleteSources(dbc, defaultIds, personaId);
+
+    // 4. Add discovered sources (skip duplicates)
+    let added = 0;
+    for (const source of withFeeds) {
+      if (!sourceExists(dbc, source.feed_url!, personaId)) {
+        insertSource(dbc, source.name, source.feed_url!, personaId);
+        added++;
+      }
+    }
+
+    return { sources: withFeeds, removed, added };
   });
 }

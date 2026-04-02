@@ -7,6 +7,7 @@ export default function Sources() {
   const [sources, setSources] = useState<GenSource[]>([]);
   const [urlInput, setUrlInput] = useState("");
   const [adding, setAdding] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -59,6 +60,28 @@ export default function Sources() {
     }
   };
 
+  const handleDiscover = async () => {
+    setDiscovering(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await api.backfillSources();
+      if (result.message) {
+        setError(result.message);
+      } else {
+        // Reload sources list to reflect changes
+        const res = await api.getSources();
+        setSources(res.sources);
+        setSuccess(`Found ${result.added} source${result.added === 1 ? "" : "s"} for your topics${result.removed > 0 ? `, removed ${result.removed} default${result.removed === 1 ? "" : "s"}` : ""}`);
+        setTimeout(() => setSuccess(null), 5000);
+      }
+    } catch (err: any) {
+      setError(err.message ?? "Source discovery failed");
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
   const enabledCount = sources.filter((s) => s.enabled).length;
 
   return (
@@ -92,6 +115,25 @@ export default function Sources() {
         {success && (
           <p className="mt-2 text-[14px] text-positive">{success}</p>
         )}
+      </div>
+
+      {/* Discover sources */}
+      <div className="mb-6 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-[10px]">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[15px] font-medium text-gen-text-0">Discover sources for my topics</h3>
+            <p className="text-[13px] text-gen-text-3 mt-0.5">
+              Find blogs and newsletters based on your interview profile.
+            </p>
+          </div>
+          <button
+            onClick={handleDiscover}
+            disabled={discovering}
+            className="px-4 py-2 bg-gen-accent text-white text-[14px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            {discovering ? "Searching..." : "Discover"}
+          </button>
+        </div>
       </div>
 
       {/* Source list */}

@@ -54,6 +54,28 @@ export function deleteSource(db: DbClient, id: number, personaId: number): boole
   return result.changes > 0;
 }
 
+/** The feed URLs seeded by migration 011 / persona creation. */
+export const DEFAULT_FEED_URLS = new Set([
+  "https://no.security/rss.xml",
+  "https://rss.beehiiv.com/feeds/xgTKUmMmUm.xml",
+  "https://importai.substack.com/feed",
+  "https://news.smol.ai/rss.xml",
+  "https://simonwillison.net/atom/everything/",
+  "https://www.schneier.com/feed/atom/",
+  "https://techcrunch.com/category/artificial-intelligence/feed/",
+  "https://krebsonsecurity.com/feed/",
+]);
+
+export function deleteSources(db: DbClient, ids: number[], personaId: number): number {
+  if (ids.length === 0) return 0;
+  const placeholders = ids.map(() => "?").join(",");
+  const result = db.run(
+    `DELETE FROM research_sources WHERE id IN (${placeholders}) AND persona_id = ?`,
+    ...ids, personaId
+  );
+  return result.changes;
+}
+
 export function getTaxonomyNames(db: DbClient): string[] {
   return db.all<{ name: string }>("SELECT name FROM ai_taxonomy ORDER BY name").map(r => r.name);
 }

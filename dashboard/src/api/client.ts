@@ -886,6 +886,15 @@ export const api = {
       return data.sources as Array<{ name: string; url: string; feed_url: string | null; description: string }>;
     }),
 
+  backfillSources: () =>
+    fetch(withPersonaId(`/api/sources/backfill`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    }).then(async (r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<{ sources: Array<{ name: string; url: string; feed_url: string | null; description: string }>; removed: number; added: number; message?: string }>;
+    }),
+
   // Persona management (not scoped)
   listPersonas: () =>
     fetch("/api/personas").then(r => r.json() as Promise<{ personas: import("../context/PersonaContext").Persona[] }>),
