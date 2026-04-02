@@ -42,7 +42,7 @@ import { registerSourceRoutes } from "./generate-sources.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
 import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
-import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt } from "../ai/ghostwriter.js";
+import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt, expandMessageRow } from "../ai/ghostwriter.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -483,10 +483,15 @@ Return JSON only:
     try {
       // Load history — consistent limit (20, matching restore)
       const history = getGenerationMessages(db, generation_id, 20).reverse();
-      const messages: Array<{ role: "user" | "assistant"; content: string }> = history.map((msg) => ({
-        role: msg.role as "user" | "assistant",
-        content: msg.content,
-      }));
+
+      // Replay with microcompaction — last 5 turns get full tool context
+      const recentThreshold = Math.max(0, history.length - 10);
+      const messages: Array<{ role: "user" | "assistant"; content: any }> = [];
+      for (let i = 0; i < history.length; i++) {
+        const isRecent = i >= recentThreshold;
+        const expanded = expandMessageRow(history[i], isRecent);
+        messages.push(...expanded);
+      }
 
       // Build system prompt — simplified after first turn
       const isFirstTurn = history.length === 0;
