@@ -24,11 +24,13 @@ import { ActionsTab } from "./coach/ActionsTab";
 import { InsightsTab } from "./coach/InsightsTab";
 import { DeepDiveTab } from "./coach/DeepDiveTab";
 import { useToast } from "../components/Toast";
+import CoachChatPanel from "../components/CoachChatPanel";
 
 type CoachTab = "actions" | "insights" | "deep-dive";
 
 export default function Coach() {
   const { showError } = useToast();
+  const [coachChatOpen, setCoachChatOpen] = useState(false);
   const [tab, setTab] = useState<CoachTab>("actions");
   const [refreshing, setRefreshing] = useState(false);
   const [status, setStatus] = useState<AnalysisStatus | null>(null);
@@ -234,6 +236,12 @@ export default function Coach() {
             </span>
           )}
           <button
+            onClick={() => setCoachChatOpen(true)}
+            className="px-3 py-1.5 bg-accent/10 text-accent text-[12px] font-medium rounded-lg hover:bg-accent/20 transition-colors"
+          >
+            Chat with Coach
+          </button>
+          <button
             onClick={() => handleRefresh(true)}
             disabled={refreshing}
             className="px-3 py-1.5 rounded-md text-xs font-medium text-accent hover:bg-accent/8 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
@@ -339,6 +347,7 @@ export default function Coach() {
           timingSlots={timingSlots}
         />
       )}
+      <CoachChatPanel open={coachChatOpen} onClose={() => setCoachChatOpen(false)} />
     </div>
   );
 }

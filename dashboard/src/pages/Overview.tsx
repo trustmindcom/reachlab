@@ -5,6 +5,7 @@ import DateRangeSelector, {
   daysToDateRange,
 } from "../components/DateRangeSelector";
 import { useToast } from "../components/Toast";
+import CoachChatPanel from "../components/CoachChatPanel";
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "--";
@@ -37,6 +38,7 @@ export default function Overview() {
   const [refreshing, setRefreshing] = useState(false);
   const [syncWarnings, setSyncWarnings] = useState<Array<{ message: string }>>([]);
   const [scrapeErrors, setScrapeErrors] = useState<ScrapeError[]>([]);
+  const [coachChatOpen, setCoachChatOpen] = useState(false);
 
   useEffect(() => {
     api.getSyncHealth().then(r => setSyncWarnings(r.warnings)).catch(() => {});
@@ -127,6 +129,12 @@ export default function Overview() {
       <div className="flex items-center justify-between animate-fade-up">
         <h2 className="text-xl font-semibold [text-wrap:balance]">Overview</h2>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCoachChatOpen(true)}
+            className="px-3 py-1.5 bg-accent/10 text-accent text-[12px] font-medium rounded-lg hover:bg-accent/20 transition-colors"
+          >
+            Chat with Coach
+          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -249,6 +257,7 @@ export default function Overview() {
           </div>
         )}
       </div>
+      <CoachChatPanel open={coachChatOpen} onClose={() => setCoachChatOpen(false)} />
     </div>
   );
 }
