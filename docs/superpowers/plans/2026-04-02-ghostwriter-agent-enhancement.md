@@ -214,26 +214,56 @@ export function insertSingleRule(
 
 - [ ] **Step 7: Update replaceAllRules to preserve auto-generated rules**
 
-The PUT `/api/generate/rules` route calls `replaceAllRules()` which deletes all rules and re-inserts. This would destroy auto-generated rules. Fix: only delete MANUAL rules, leave auto rules untouched.
+The PUT `/api/generate/rules` route calls `replaceAllRules()` which deletes all rules and re-inserts. This would destroy auto-generated rules. Fix: delete manual rules and re-insert them; for auto rules, update in place by ID if the frontend sends edits, and delete any auto rules whose IDs weren't included (user deleted them in UI).
 
 ```typescript
 export function replaceAllRules(
   db: Database.Database,
   personaId: number,
-  rules: Array<{ category: string; rule_text: string; example_text?: string; sort_order: number; enabled?: number }>
+  rules: Array<{ id?: number; category: string; rule_text: string; example_text?: string; sort_order: number; enabled?: number; origin?: string }>
 ): void {
   const tx = db.transaction(() => {
-    // Only delete manual rules — auto rules are managed by the ghostwriter agent
+    // Separate manual rules (re-insert) from auto rules (update by ID)
+    const manualRules = rules.filter((r) => !r.origin || r.origin === "manual");
+    const autoRules = rules.filter((r) => r.origin === "auto" && r.id);
+    const autoIds = new Set(autoRules.map((r) => r.id));
+
+    // Delete manual rules and any auto rules the user removed from the UI
     db.prepare("DELETE FROM generation_rules WHERE persona_id = ? AND origin = 'manual'").run(personaId);
+    if (autoIds.size > 0) {
+      // Delete auto rules NOT in the submitted set (user deleted them)
+      const existing = db.prepare("SELECT id FROM generation_rules WHERE persona_id = ? AND origin = 'auto'").all(personaId) as Array<{ id: number }>;
+      for (const row of existing) {
+        if (!autoIds.has(row.id)) {
+          db.prepare("DELETE FROM generation_rules WHERE id = ?").run(row.id);
+        }
+      }
+    } else {
+      // No auto rules in submission — delete all auto rules (user removed them all)
+      db.prepare("DELETE FROM generation_rules WHERE persona_id = ? AND origin = 'auto'").run(personaId);
+    }
+
+    // Re-insert manual rules
     const insert = db.prepare(
       "INSERT INTO generation_rules (persona_id, category, rule_text, example_text, sort_order, enabled, origin) VALUES (?, ?, ?, ?, ?, ?, 'manual')"
     );
-    for (const rule of rules) {
+    for (const rule of manualRules) {
       insert.run(personaId, rule.category, rule.rule_text, rule.example_text ?? null, rule.sort_order, rule.enabled ?? 1);
+    }
+
+    // Update auto rules in place
+    const update = db.prepare(
+      "UPDATE generation_rules SET rule_text = ?, example_text = ?, sort_order = ?, enabled = ? WHERE id = ? AND persona_id = ?"
+    );
+    for (const rule of autoRules) {
+      update.run(rule.rule_text, rule.example_text ?? null, rule.sort_order, rule.enabled ?? 1, rule.id, personaId);
     }
   });
   tx();
 }
+```
+
+Also update the `rulesBody` Zod schema in `server/src/schemas/generate.ts` to accept `id` and `origin` fields on rule items, so the frontend can round-trip auto rules through the bulk save.
 ```
 
 - [ ] **Step 8: Add updateRule function**
@@ -244,14 +274,17 @@ Add after `insertSingleRule`:
 export function updateRule(
   db: Database.Database,
   ruleId: number,
+  personaId: number,
   fields: { rule_text?: string; example_text?: string }
 ): void {
-  if (fields.rule_text !== undefined) {
-    db.prepare("UPDATE generation_rules SET rule_text = ? WHERE id = ?").run(fields.rule_text, ruleId);
-  }
-  if (fields.example_text !== undefined) {
-    db.prepare("UPDATE generation_rules SET example_text = ? WHERE id = ?").run(fields.example_text, ruleId);
-  }
+  // Single atomic UPDATE with persona ownership check
+  const sets: string[] = [];
+  const params: any[] = [];
+  if (fields.rule_text !== undefined) { sets.push("rule_text = ?"); params.push(fields.rule_text); }
+  if (fields.example_text !== undefined) { sets.push("example_text = ?"); params.push(fields.example_text); }
+  if (sets.length === 0) return;
+  params.push(ruleId, personaId);
+  db.prepare(`UPDATE generation_rules SET ${sets.join(", ")} WHERE id = ? AND persona_id = ?`).run(...params);
 }
 ```
 
@@ -727,7 +760,11 @@ Add the new cases:
 case "web_search": {
   const query = typeof input.query === "string" ? input.query : "";
   if (!query.trim()) return "Error: query is required.";
-  return chatWebSearch(query, logger);
+  try {
+    return await chatWebSearch(query, logger);
+  } catch (err: unknown) {
+    return `Web search failed: ${err instanceof Error ? err.message : String(err)}. Proceeding without search results.`;
+  }
 }
 
 case "fetch_url": {
@@ -743,8 +780,8 @@ case "add_or_update_rule": {
   const exampleText = typeof input.example_text === "string" ? input.example_text : undefined;
 
   if (typeof input.rule_id === "number") {
-    // Update existing rule
-    updateRule(db, input.rule_id, { rule_text: ruleText, example_text: exampleText });
+    // Update existing rule — validate persona ownership
+    updateRule(db, input.rule_id, personaId, { rule_text: ruleText, example_text: exampleText });
     return `Rule updated (id:${input.rule_id}): ${ruleText}`;
   }
 
@@ -813,7 +850,13 @@ export function expandMessageRow(
     return [{ role: row.role as "user" | "assistant", content: row.content }];
   }
 
-  const toolBlocks: StoredToolBlock[] = JSON.parse(row.tool_blocks_json);
+  let toolBlocks: StoredToolBlock[];
+  try {
+    toolBlocks = JSON.parse(row.tool_blocks_json);
+  } catch {
+    // Corrupt JSON — fall back to plain text replay
+    return [{ role: row.role as "user" | "assistant", content: row.content }];
+  }
   const messages: Array<{ role: "user" | "assistant"; content: any }> = [];
 
   for (const block of toolBlocks) {
@@ -847,14 +890,15 @@ In the `ghostwriterTurn` function, add a `toolBlockLog` array to collect interme
 const toolBlockLog: StoredToolBlock[] = [];
 ```
 
-Inside the while loop, after tool execution (where `apiMessages.push` happens), also push to `toolBlockLog`:
+Inside the while loop, ONLY when the response has tool_use blocks (i.e., `stop_reason === "tool_use"`), collect the intermediate messages. The final text-only response is NOT included in toolBlockLog — it's stored separately as `row.content`.
 
 ```typescript
-// Existing lines that push to apiMessages:
+// These existing lines are inside the `if (response.stop_reason !== "tool_use") break;` guard,
+// meaning they only run for intermediate tool calls, not the final response:
 apiMessages.push({ role: "assistant", content: response.content });
 apiMessages.push({ role: "user", content: toolResults });
 
-// NEW: also collect for persistence
+// NEW: also collect for persistence (only intermediate tool exchanges, not final response)
 toolBlockLog.push({ role: "assistant", content: response.content });
 toolBlockLog.push({ role: "user", content: toolResults });
 ```
