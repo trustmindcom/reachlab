@@ -16,7 +16,7 @@ import { computeWeightedER } from "./stats-report.js";
 
 const SORT_CLAUSES: Record<string, string> = {
   impressions: "ORDER BY m.impressions DESC NULLS LAST",
-  engagement_rate: "ORDER BY m.engagement_rate DESC NULLS LAST",
+  engagement_rate: "ORDER BY (CASE WHEN m.impressions > 0 THEN CAST((m.comments * 5 + m.reposts * 3 + COALESCE(m.saves, 0) * 3 + COALESCE(m.sends, 0) * 3 + m.reactions) AS REAL) / m.impressions ELSE 0 END) DESC",
   reactions: "ORDER BY m.reactions DESC NULLS LAST",
   comments: "ORDER BY m.comments DESC NULLS LAST",
   published_at: "ORDER BY p.published_at DESC",
