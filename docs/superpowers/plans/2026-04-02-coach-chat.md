@@ -501,9 +501,8 @@ import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import type Database from "better-sqlite3";
 import type { AiLogger } from "./logger.js";
 import { SHARED_TOOLS, executeSharedTool } from "./shared-tools.js";
-import { getCategoryPerformance, getEngagementQuality, getTopicPerformance, getProgressMetrics } from "../db/ai/deep-dive.js";
-import { getHookPerformance } from "../db/ai/deep-dive.js";
-import { getTimingSlots } from "../db/stats-queries.js";
+import { getCategoryPerformance, getEngagementQuality, getTopicPerformance, getProgressMetrics, getHookPerformance } from "../db/ai/deep-dive.js";
+import { queryTiming } from "../db/queries.js";
 
 const COACH_SPECIFIC_TOOLS: Tool[] = [
   {
@@ -601,23 +600,27 @@ export async function executeCoachTool(
         const days = typeof input.days_back === "number" ? input.days_back : undefined;
         const topics = getTopicPerformance(db, personaId, days);
         if (topics.length === 0) return "No topic data available yet.";
-        return topics.map(t => `- "${t.topic}": ${t.post_count} posts, ${t.median_er?.toFixed(1)}% median ER`).join("\n");
+        // Note: TopicPerformance uses `median_wer` not `median_er`
+        return topics.map(t => `- "${t.topic}": ${t.post_count} posts, ${t.median_wer.toFixed(1)}% weighted ER, ${t.median_impressions} median impressions`).join("\n");
       }
       case "get_timing_analysis": {
-        const slots = getTimingSlots(db, personaId);
-        if (slots.length === 0) return "No timing data available yet.";
+        // Use queryTiming from db/queries.ts (NOT getTimingSlots)
+        const timing = queryTiming(db, personaId);
+        if (!timing || timing.length === 0) return "No timing data available yet.";
         // Format by day and hour
-        return formatTimingSlots(slots);
+        return formatTimingData(timing);
       }
       case "get_engagement_quality": {
         const eq = getEngagementQuality(db, personaId);
         if (!eq) return "No engagement data available yet.";
-        return `Engagement quality:\n- Avg reactions: ${eq.avg_reactions}\n- Avg comments: ${eq.avg_comments}\n- Comment-to-reaction ratio: ${eq.comment_ratio?.toFixed(2)}`;
+        // Actual fields: comment_ratio, save_rate, repost_rate, weighted_er, standard_er, total_posts
+        return `Engagement quality (${eq.total_posts} posts):\n- Weighted ER: ${eq.weighted_er?.toFixed(2)}%\n- Standard ER: ${eq.standard_er?.toFixed(2)}%\n- Comment ratio: ${eq.comment_ratio?.toFixed(3)}\n- Save rate: ${eq.save_rate?.toFixed(3)}\n- Repost rate: ${eq.repost_rate?.toFixed(3)}`;
       }
       case "get_hook_analysis": {
         const days = typeof input.days_back === "number" ? input.days_back : undefined;
         const hooks = getHookPerformance(db, personaId, days);
-        return `By hook type:\n${hooks.by_hook_type.map(h => `- ${h.label}: ${h.post_count} posts, ${h.median_er?.toFixed(1)}% ER`).join("\n")}\n\nBy format:\n${hooks.by_format_style.map(h => `- ${h.label}: ${h.post_count} posts, ${h.median_er?.toFixed(1)}% ER`).join("\n")}`;
+        // HookPerformance uses `name` not `label`, and `median_wer` not `median_er`
+        return `By hook type:\n${hooks.by_hook_type.map(h => `- ${h.name}: ${h.post_count} posts, ${h.median_wer.toFixed(1)}% ER`).join("\n")}\n\nBy format:\n${hooks.by_format_style.map(h => `- ${h.name}: ${h.post_count} posts, ${h.median_wer.toFixed(1)}% ER`).join("\n")}`;
       }
       default:
         return `Unknown tool: ${toolName}`;
@@ -807,10 +810,11 @@ export function registerCoachChatRoutes(app: FastifyInstance, db: Database.Datab
       }
       messages.push({ role: "user", content: message });
 
-      const result = await coachChatTurn(client, db, personaId, sessionId, logger, messages);
-
-      // Persist user message after success
+      // Persist user message BEFORE the turn so IDs are in order
+      // (coachChatTurn persists the assistant message internally)
       insertCoachMessage(db, { session_id: sessionId, role: "user", content: message });
+
+      const result = await coachChatTurn(client, db, personaId, sessionId, logger, messages);
 
       completeRun(db, runId, getRunCost(db, runId));
 
