@@ -45,8 +45,8 @@ export default function RuleSection({
           >
             <path d="M4.5 2.5l3.5 3.5-3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span className="text-[14px] font-medium text-gen-text-0">{title}</span>
-          <span className="text-[12px] text-gen-text-3">{rules.length}</span>
+          <span className="text-[16px] font-medium text-gen-text-0">{title}</span>
+          <span className="text-[14px] text-gen-text-3">{rules.length}</span>
         </div>
         {masterToggle && (
           <div
@@ -92,7 +92,7 @@ export default function RuleSection({
                 }
               }}
               placeholder={`Add a ${categoryLabel} rule...`}
-              className="w-full bg-transparent text-[13px] text-gen-text-2 placeholder:text-gen-text-4 focus-visible:outline-none"
+              className="w-full bg-transparent text-[15px] text-gen-text-2 placeholder:text-gen-text-4 focus-visible:outline-none"
             />
           </div>
         </div>

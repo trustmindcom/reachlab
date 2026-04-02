@@ -32,12 +32,12 @@ export default function StoryCard({ story, index, selected, onSelect }: StoryCar
           </h3>
 
           {/* Summary */}
-          <p className="text-[14px] text-gen-text-2 leading-relaxed mb-3">
+          <p className="text-[16px] text-gen-text-2 leading-relaxed mb-3">
             {story.summary}
           </p>
 
           {/* Meta row */}
-          <div className="flex items-center gap-2 text-[12px]">
+          <div className="flex items-center gap-2 text-[14px]">
             <span className={`px-2 py-0.5 rounded-md font-medium ${
               selected
                 ? "bg-gen-accent-soft text-gen-accent border border-gen-accent-border"
@@ -69,8 +69,8 @@ export default function StoryCard({ story, index, selected, onSelect }: StoryCar
           {/* Angles — only when selected */}
           {selected && story.angles.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gen-border-1">
-              <p className="text-[12px] text-gen-text-3 font-medium mb-1">Possible angles</p>
-              <ul className="text-[13px] text-gen-text-2 space-y-0.5">
+              <p className="text-[14px] text-gen-text-3 font-medium mb-1">Possible angles</p>
+              <ul className="text-[15px] text-gen-text-2 space-y-0.5">
                 {story.angles.map((angle, i) => (
                   <li key={i} className="flex gap-2">
                     <span className="text-gen-text-4 select-none">-</span>

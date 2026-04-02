@@ -78,7 +78,7 @@ export default function AgentChat({
             className={msg.role === "user" ? "flex justify-end" : "flex justify-start"}
           >
             <div
-              className={`max-w-[85%] px-4 py-2.5 text-[13px] leading-relaxed ${
+              className={`max-w-[85%] px-4 py-2.5 text-[15px] leading-relaxed ${
                 msg.role === "user"
                   ? `rounded-2xl rounded-br-md ${userBubbleClass}`
                   : `rounded-2xl rounded-bl-md ${assistantBubbleClass}`
@@ -123,12 +123,12 @@ export default function AgentChat({
           disabled={loading || disabled}
           placeholder={placeholder}
           rows={1}
-          className={`flex-1 rounded-lg px-3 py-2.5 text-[13px] resize-none focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50 ${inputClass}`}
+          className={`flex-1 rounded-lg px-3 py-2.5 text-[15px] resize-none focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50 ${inputClass}`}
         />
         <button
           onClick={handleSend}
           disabled={!input.trim() || loading || disabled}
-          className={`px-4 py-2 text-[12px] font-medium rounded-lg transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 self-end ${buttonClass}`}
+          className={`px-4 py-2 text-[14px] font-medium rounded-lg transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 self-end ${buttonClass}`}
         >
           {loading ? "..." : "Send"}
         </button>

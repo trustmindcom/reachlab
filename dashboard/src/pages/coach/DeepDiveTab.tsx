@@ -44,10 +44,10 @@ export function DeepDiveTab({
       <div className="animate-fade-up" style={{ animationDelay: "60ms" }}>
         <button onClick={() => setCategoriesOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
           <span className={`text-[10px] text-text-muted transition-transform ${categoriesOpen ? "rotate-90" : ""}`}>&#9654;</span>
-          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+          <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
             Content Opportunities
           </h3>
-          <span className="text-[11px] text-text-muted">What should I write next?</span>
+          <span className="text-[13px] text-text-muted">What should I write next?</span>
         </button>
         {categoriesOpen && categories.length > 0 && (
           <div className="bg-surface-1 border border-border rounded-lg overflow-hidden">
@@ -86,10 +86,10 @@ export function DeepDiveTab({
       <div className="animate-fade-up" style={{ animationDelay: "120ms" }}>
         <button onClick={() => setEngagementOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
           <span className={`text-[10px] text-text-muted transition-transform ${engagementOpen ? "rotate-90" : ""}`}>&#9654;</span>
-          <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+          <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
             Engagement Quality
           </h3>
-          <span className="text-[11px] text-text-muted">What kind of engagement am I getting?</span>
+          <span className="text-[13px] text-text-muted">What kind of engagement am I getting?</span>
         </button>
         {engagementOpen && engagement && engagement.total_posts > 0 && (
           <div className="space-y-3">
@@ -164,10 +164,10 @@ export function DeepDiveTab({
         <div className="animate-fade-up" style={{ animationDelay: "180ms" }}>
           <button onClick={() => setTopicsOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
             <span className={`text-[10px] text-text-muted transition-transform ${topicsOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+            <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               Topic Performance
             </h3>
-            <span className="text-[11px] text-text-muted">Which topics resonate most?</span>
+            <span className="text-[13px] text-text-muted">Which topics resonate most?</span>
           </button>
           {topicsOpen && (
             <PerformanceTable
@@ -183,16 +183,16 @@ export function DeepDiveTab({
         <div className="animate-fade-up" style={{ animationDelay: "240ms" }}>
           <button onClick={() => setHooksOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
             <span className={`text-[10px] text-text-muted transition-transform ${hooksOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+            <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               Hook &amp; Format Performance
             </h3>
-            <span className="text-[11px] text-text-muted">What openings and formats work best?</span>
+            <span className="text-[13px] text-text-muted">What openings and formats work best?</span>
           </button>
           {hooksOpen && (
             <div className="space-y-4">
               {hooks.by_hook_type.length > 0 && (
                 <div>
-                  <div className="text-[11px] text-text-muted font-medium mb-2">By Hook Type</div>
+                  <div className="text-[13px] text-text-muted font-medium mb-2">By Hook Type</div>
                   <PerformanceTable
                     rows={hooks.by_hook_type.map((h) => ({ name: h.name, post_count: h.post_count, median_wer: h.median_wer, median_impressions: h.median_impressions, median_comments: h.median_comments }))}
                     nameLabel="Hook Type"
@@ -201,7 +201,7 @@ export function DeepDiveTab({
               )}
               {hooks.by_format_style.length > 0 && (
                 <div>
-                  <div className="text-[11px] text-text-muted font-medium mb-2">By Format Style</div>
+                  <div className="text-[13px] text-text-muted font-medium mb-2">By Format Style</div>
                   <PerformanceTable
                     rows={hooks.by_format_style.map((h) => ({ name: h.name, post_count: h.post_count, median_wer: h.median_wer, median_impressions: h.median_impressions, median_comments: h.median_comments }))}
                     nameLabel="Format"
@@ -218,7 +218,7 @@ export function DeepDiveTab({
         <div className="animate-fade-up" style={{ animationDelay: "300ms" }}>
           <button onClick={() => setImageSubtypesOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
             <span className={`text-[10px] text-text-muted transition-transform ${imageSubtypesOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+            <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               Image Subtype Performance
             </h3>
           </button>

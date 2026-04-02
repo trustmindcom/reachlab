@@ -66,7 +66,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-lg text-[13px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
+            className={`px-3 py-1 rounded-lg text-[15px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
               filter === f
                 ? "bg-gen-accent-soft text-gen-accent border border-gen-accent-border"
                 : "text-gen-text-3 hover:text-gen-text-1 border border-transparent"
@@ -79,7 +79,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
 
       {/* Table */}
       {items.length === 0 ? (
-        <div className="text-gen-text-3 text-[14px] py-10 text-center">
+        <div className="text-gen-text-3 text-[16px] py-10 text-center">
           No generations yet. Start by generating a post.
         </div>
       ) : (
@@ -87,9 +87,9 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gen-border-1 bg-gen-bg-2">
-                <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium">Post</th>
-                <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium w-[90px]">Status</th>
-                <th className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wider text-gen-text-3 font-medium w-[120px]">Date</th>
+                <th className="text-left px-4 py-2.5 text-[13px] uppercase tracking-wider text-gen-text-3 font-medium">Post</th>
+                <th className="text-left px-4 py-2.5 text-[13px] uppercase tracking-wider text-gen-text-3 font-medium w-[90px]">Status</th>
+                <th className="text-left px-4 py-2.5 text-[13px] uppercase tracking-wider text-gen-text-3 font-medium w-[120px]">Date</th>
                 <th className="w-[100px]" />
               </tr>
             </thead>
@@ -97,31 +97,31 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-gen-border-1 hover:bg-gen-bg-2/50 group">
                   <td className="px-4 py-3">
-                    <p className="text-[13px] text-gen-text-1 leading-snug line-clamp-1">{item.hook_excerpt}</p>
-                    <p className="text-[11px] text-gen-text-3 mt-0.5">
+                    <p className="text-[15px] text-gen-text-1 leading-snug line-clamp-1">{item.hook_excerpt}</p>
+                    <p className="text-[13px] text-gen-text-3 mt-0.5">
                       {item.story_headline} - {item.drafts_used} draft{item.drafts_used !== 1 ? "s" : ""}
                     </p>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium border capitalize ${statusBadge(item.status)}`}>
+                    <span className={`px-2 py-0.5 rounded-md text-[13px] font-medium border capitalize ${statusBadge(item.status)}`}>
                       {item.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-[12px] text-gen-text-3">
+                  <td className="px-4 py-3 text-[14px] text-gen-text-3">
                     {new Date(item.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => onOpen(item.id)}
-                        className="text-[11px] text-gen-accent hover:underline"
+                        className="text-[13px] text-gen-accent hover:underline"
                       >
                         Open
                       </button>
                       {item.status !== "discarded" && (
                         <button
                           onClick={() => handleDiscard(item.id)}
-                          className="text-[11px] text-gen-text-3 hover:text-negative"
+                          className="text-[13px] text-gen-text-3 hover:text-negative"
                         >
                           Discard
                         </button>
@@ -144,7 +144,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
               setOffset(newOffset);
               load(filter, newOffset);
             }}
-            className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
+            className="text-[15px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
           >
             Showing {items.length} of {total} generations · Load more
           </button>

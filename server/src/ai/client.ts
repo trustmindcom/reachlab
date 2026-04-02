@@ -33,20 +33,26 @@ export function calculateCostCents(
   return Math.round(totalDollars * (1 + OPENROUTER_FEE) * 100);
 }
 
-const PROVIDER_PREFS = JSON.stringify({
-  order: ["amazon-bedrock", "google-vertex"],
-});
+const DEFAULT_PROVIDER_ORDER = "amazon-bedrock,google-vertex";
+
+function getProviderPrefs(): string {
+  const order = process.env.OPENROUTER_PROVIDER_ORDER ?? DEFAULT_PROVIDER_ORDER;
+  return JSON.stringify({
+    order: order.split(",").map((s) => s.trim()).filter(Boolean),
+  });
+}
 
 export function createClient(apiKey: string): Anthropic {
   if (!apiKey)
     throw new Error("TRUSTMIND_LLM_API_KEY is required for AI features");
+  const providerPrefs = getProviderPrefs();
   return new Anthropic({
     apiKey,
     baseURL: "https://openrouter.ai/api",
     fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
       // OpenRouter requires Bearer auth and provider routing header
       const headers = new Headers(init?.headers);
-      headers.set("X-OpenRouter-Provider", PROVIDER_PREFS);
+      headers.set("X-OpenRouter-Provider", providerPrefs);
       const key = headers.get("x-api-key");
       if (key) {
         headers.set("Authorization", `Bearer ${key}`);

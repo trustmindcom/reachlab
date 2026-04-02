@@ -169,7 +169,7 @@ export default function Posts() {
                   <select
                     value={contentType}
                     onChange={(e) => { setContentType(e.target.value); }}
-                    className="bg-surface-2 border border-border rounded px-1.5 py-0.5 text-[11px] text-text-primary normal-case tracking-normal"
+                    className="bg-surface-2 border border-border rounded px-1.5 py-0.5 text-[13px] text-text-primary normal-case tracking-normal"
                   >
                     {contentTypes.map((t) => (
                       <option key={t} value={t}>
@@ -222,7 +222,7 @@ export default function Posts() {
                   {showTags && (
                     <td className="hidden xl:table-cell px-3 py-3 align-top">
                       {p.post_category && (
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[11px] text-text-secondary border border-border whitespace-nowrap">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[13px] text-text-secondary border border-border whitespace-nowrap">
                           {p.post_category.replace(/_/g, " ")}
                         </span>
                       )}
@@ -233,7 +233,7 @@ export default function Posts() {
                     <td className="hidden xl:table-cell px-3 py-3 align-top">
                       <div className="flex flex-col gap-1">
                         {parseTopics(p.topics).map((topic) => (
-                          <span key={topic} className="inline-block px-1.5 py-0.5 rounded text-[11px] text-text-muted whitespace-nowrap w-fit">
+                          <span key={topic} className="inline-block px-1.5 py-0.5 rounded text-[13px] text-text-muted whitespace-nowrap w-fit">
                             {topic}
                           </span>
                         ))}

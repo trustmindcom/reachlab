@@ -36,21 +36,21 @@ export default function SetupComplete({ onFinish }: SetupCompleteProps) {
       </div>
 
       <h2 className="text-[24px] font-semibold text-text-primary mb-2">You're all set!</h2>
-      <p className="text-[13px] text-text-secondary mb-8">
+      <p className="text-[15px] text-text-secondary mb-8">
         ReachLab is configured and ready to help you write.
       </p>
 
       <div className="flex justify-center gap-8 mb-8">
         {stats.topics > 0 && (
           <div className="text-center">
-            <div className="text-[20px] font-semibold text-accent">{stats.topics}</div>
-            <div className="text-[11px] text-text-muted">topics</div>
+            <div className="text-[22px] font-semibold text-accent">{stats.topics}</div>
+            <div className="text-[13px] text-text-muted">topics</div>
           </div>
         )}
         {stats.sources > 0 && (
           <div className="text-center">
-            <div className="text-[20px] font-semibold text-accent">{stats.sources}</div>
-            <div className="text-[11px] text-text-muted">sources</div>
+            <div className="text-[22px] font-semibold text-accent">{stats.sources}</div>
+            <div className="text-[13px] text-text-muted">sources</div>
           </div>
         )}
         {stats.hasProfile && (
@@ -58,14 +58,14 @@ export default function SetupComplete({ onFinish }: SetupCompleteProps) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent mx-auto">
               <path d="M20 6L9 17l-5-5" />
             </svg>
-            <div className="text-[11px] text-text-muted">voice profile</div>
+            <div className="text-[13px] text-text-muted">voice profile</div>
           </div>
         )}
       </div>
 
       <button
         onClick={onFinish}
-        className="px-8 py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90 transition-opacity"
+        className="px-8 py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90 transition-opacity"
       >
         Start writing
       </button>

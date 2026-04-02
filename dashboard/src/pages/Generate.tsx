@@ -177,7 +177,7 @@ export default function Generate() {
         {step > 1 && subTab === "Generate" && (
           <button
             onClick={resetPipeline}
-            className="text-[12px] text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer"
+            className="text-[14px] text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer"
           >
             Start new
           </button>

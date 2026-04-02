@@ -562,7 +562,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       />
       <p
         key={msgIndex}
-        className="text-[13px] text-gen-text-3 tracking-wide"
+        className="text-[15px] text-gen-text-3 tracking-wide"
         style={{ animation: "scanner-msg 0.4s ease both" }}
       >
         {messages[msgIndex]}

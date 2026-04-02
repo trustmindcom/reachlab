@@ -546,7 +546,7 @@ export default function Settings() {
             await api.setSetting("onboarding_complete", "false");
             window.location.reload();
           }}
-          className="text-[12px] text-text-muted hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]"
+          className="text-[14px] text-text-muted hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]"
         >
           Re-run setup wizard
         </button>
@@ -743,7 +743,7 @@ function ApiKeysManager() {
         <div key={k.key} className="flex items-center gap-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[12px] text-text-secondary">{k.label}</span>
+              <span className="text-[14px] text-text-secondary">{k.label}</span>
               {k.configured ? (
                 <span className="text-[10px] text-green-400">configured</span>
               ) : (
@@ -758,7 +758,7 @@ function ApiKeysManager() {
               value={values[k.key] ?? ""}
               onChange={(e) => setValues((prev) => ({ ...prev, [k.key]: e.target.value }))}
               placeholder={k.configured ? "Paste to replace" : `${k.prefix}...`}
-              className="w-full bg-surface-2 border border-border rounded-md px-2.5 py-1.5 text-[12px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent font-mono"
+              className="w-full bg-surface-2 border border-border rounded-md px-2.5 py-1.5 text-[14px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent font-mono"
             />
           </div>
         </div>
@@ -767,7 +767,7 @@ function ApiKeysManager() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-4 py-1.5 bg-accent text-white rounded-md text-[12px] font-medium hover:opacity-90 disabled:opacity-50"
+          className="px-4 py-1.5 bg-accent text-white rounded-md text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
         >
           {saving ? "Saving..." : saved ? "Saved!" : "Save keys"}
         </button>

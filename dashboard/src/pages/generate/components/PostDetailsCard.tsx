@@ -10,8 +10,8 @@ export default function PostDetailsCard({ storyHeadline, draftsUsed, structureLa
 
   return (
     <div className="bg-gen-bg-2 border border-gen-border-2 rounded-xl p-4">
-      <h4 className="text-[13px] font-semibold text-gen-text-0 mb-3">Post details</h4>
-      <div className="space-y-2 text-[12px]">
+      <h4 className="text-[15px] font-semibold text-gen-text-0 mb-3">Post details</h4>
+      <div className="space-y-2 text-[14px]">
         <div className="flex justify-between gap-4">
           <span className="text-gen-text-3 flex-shrink-0">Story</span>
           <span className="text-gen-text-1 text-right max-w-[180px] truncate">{storyHeadline}</span>

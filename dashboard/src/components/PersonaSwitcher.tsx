@@ -8,7 +8,7 @@ export default function PersonaSwitcher() {
     <select
       value={active?.id}
       onChange={(e) => switchPersona(Number(e.target.value))}
-      className="text-[13px] bg-surface-1 border border-border rounded-md px-2 py-1 text-text-primary"
+      className="text-[15px] bg-surface-1 border border-border rounded-md px-2 py-1 text-text-primary"
     >
       {personas.map((p) => (
         <option key={p.id} value={p.id}>

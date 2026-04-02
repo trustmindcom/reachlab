@@ -107,9 +107,9 @@ export function InsightsTab({
       {/* Quick Insights */}
       <div className="animate-fade-up">
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-[13px] font-semibold text-text-primary">Quick Insights</h3>
+          <h3 className="text-[15px] font-semibold text-text-primary">Quick Insights</h3>
           {insights.length > 0 && (
-            <span className="text-[11px] font-medium text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">
+            <span className="text-[13px] font-medium text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">
               {insights.length}
             </span>
           )}
@@ -124,7 +124,7 @@ export function InsightsTab({
                 className="bg-surface-1 border border-border rounded-lg px-4 py-3.5 animate-fade-up"
                 style={{ animationDelay: `${i * 40}ms` }}
               >
-                <p className="text-[13px] font-medium text-text-primary leading-snug mb-1">{ins.claim}</p>
+                <p className="text-[15px] font-medium text-text-primary leading-snug mb-1">{ins.claim}</p>
                 <p className="text-sm text-text-secondary leading-relaxed">{ins.evidence}</p>
                 <div className="flex items-center gap-2 mt-2">
                   {ins.consecutive_appearances > 1 ? (
@@ -156,7 +156,7 @@ export function InsightsTab({
             className="flex items-center gap-2 mb-3 group"
           >
             <span className={`text-[10px] text-text-muted transition-transform ${changelogOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+            <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               What Changed
             </h3>
           </button>
@@ -169,7 +169,7 @@ export function InsightsTab({
                     {changelog![key].map((item) => (
                       <div key={item.id} className="bg-surface-1 border border-border rounded-md px-4 py-2.5">
                         <p className="text-sm font-medium text-text-primary">{item.claim}</p>
-                        <p className="text-[11px] text-text-muted mt-0.5">{item.evidence}</p>
+                        <p className="text-[13px] text-text-muted mt-0.5">{item.evidence}</p>
                       </div>
                     ))}
                   </div>
@@ -188,10 +188,10 @@ export function InsightsTab({
             className="flex items-center gap-2 mb-3 group"
           >
             <span className={`text-[10px] text-text-muted transition-transform ${gapsOpen ? "rotate-90" : ""}`}>&#9654;</span>
-            <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+            <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
               What's Limiting Analysis
             </h3>
-            <span className="text-[11px] font-medium text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">{gaps.length}</span>
+            <span className="text-[13px] font-medium text-text-muted bg-surface-2 px-2 py-0.5 rounded-full">{gaps.length}</span>
           </button>
           {gapsOpen && (
             <div className="space-y-2">
@@ -211,7 +211,7 @@ export function InsightsTab({
                     )}
                   </div>
                   <p className="text-sm text-text-primary mt-1">{gap.description}</p>
-                  <p className="text-[11px] text-text-muted mt-0.5">{gap.impact}</p>
+                  <p className="text-[13px] text-text-muted mt-0.5">{gap.impact}</p>
                 </div>
               ))}
             </div>
@@ -222,7 +222,7 @@ export function InsightsTab({
       {/* Best Timing */}
       {timing && (
         <div className="animate-fade-up" style={{ animationDelay: "120ms" }}>
-          <h3 className="text-[13px] font-semibold text-text-primary mb-3">Best Timing</h3>
+          <h3 className="text-[15px] font-semibold text-text-primary mb-3">Best Timing</h3>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-surface-1 border border-border rounded-lg p-4 text-center hover:border-surface-3 transition-colors duration-150 ease-[var(--ease-snappy)]">
               <div className="text-[10px] text-text-muted uppercase tracking-widest mb-1.5">Best Days</div>

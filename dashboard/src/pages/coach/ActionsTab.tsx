@@ -100,7 +100,7 @@ export function ActionsTab({
       {/* Surfaced Insights */}
       {surfacedInsights.length > 0 && (
         <div className="animate-fade-up" style={{ animationDelay: "40ms" }}>
-          <h3 className="text-[11px] font-semibold text-text-muted uppercase tracking-widest mb-2">Key Findings</h3>
+          <h3 className="text-[13px] font-semibold text-text-muted uppercase tracking-widest mb-2">Key Findings</h3>
           <div className="space-y-2">
             {surfacedInsights.map((insight) => (
               <div key={insight.id} className="bg-surface-1 border border-border rounded-lg px-4 py-3 flex items-start gap-3">
@@ -155,13 +155,13 @@ export function ActionsTab({
 
             {/* Headline + detail */}
             <p className="text-base font-semibold text-text-primary leading-snug">{rec.headline}</p>
-            <p className="text-[13px] text-text-secondary leading-relaxed">{rec.detail}</p>
+            <p className="text-[15px] text-text-secondary leading-relaxed">{rec.detail}</p>
 
             {/* Action box */}
             {rec.action && (
               <div className="bg-accent/5 border border-accent/12 rounded-md px-4 py-3">
                 <span className="text-[10px] font-semibold text-accent uppercase tracking-widest">Try next</span>
-                <p className="text-[13px] text-text-primary mt-1 leading-relaxed">{rec.action}</p>
+                <p className="text-[15px] text-text-primary mt-1 leading-relaxed">{rec.action}</p>
               </div>
             )}
 
@@ -305,7 +305,7 @@ export function ActionsTab({
                 ) : (
                   <span className="text-text-muted text-xs">&times;</span>
                 )}
-                <span className={`text-[13px] text-text-secondary flex-1 ${rec.resolved_type === "accepted" ? "line-through" : ""}`}>
+                <span className={`text-[15px] text-text-secondary flex-1 ${rec.resolved_type === "accepted" ? "line-through" : ""}`}>
                   {rec.headline}
                 </span>
                 {rec.resolved_at && (

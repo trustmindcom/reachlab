@@ -107,7 +107,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="text-[13px] text-text-secondary hover:text-text-primary">
+        <button onClick={onBack} className="text-[15px] text-text-secondary hover:text-text-primary">
           Back
         </button>
         <h2 className="text-[15px] font-semibold text-text-primary">Post Retro</h2>
@@ -135,32 +135,32 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
             return (
               <div className={`grid ${cols} gap-4`}>
                 <div>
-                  <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
+                  <label className="block text-[13px] uppercase tracking-wider text-text-muted font-medium mb-2">
                     {hasRevisions ? "Original AI Draft" : "AI Draft"}
                   </label>
-                  <div className="bg-surface-2 rounded-lg p-4 text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+                  <div className="bg-surface-2 rounded-lg p-4 text-[15px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
                     {draftText}
                   </div>
                 </div>
                 {hasRevisions && (
                   <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
+                    <label className="block text-[13px] uppercase tracking-wider text-text-muted font-medium mb-2">
                       After Your Revisions
                     </label>
-                    <div className="bg-surface-2 rounded-lg p-4 text-[13px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+                    <div className="bg-surface-2 rounded-lg p-4 text-[15px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
                       {finalDraftText}
                     </div>
                   </div>
                 )}
                 <div>
-                  <label className="block text-[11px] uppercase tracking-wider text-text-muted font-medium mb-2">
+                  <label className="block text-[13px] uppercase tracking-wider text-text-muted font-medium mb-2">
                     What You Published
                   </label>
                   <textarea
                     value={publishedText}
                     onChange={(e) => setPublishedText(e.target.value)}
                     placeholder="Paste the final version you published on LinkedIn..."
-                    className="w-full bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-primary leading-relaxed resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    className="w-full bg-surface-2 border border-border rounded-lg p-4 text-[15px] text-text-primary leading-relaxed resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                     rows={16}
                     disabled={analyzing}
                   />
@@ -175,11 +175,11 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
               <button
                 onClick={handleAnalyze}
                 disabled={!publishedText.trim()}
-                className="px-4 py-2 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
+                className="px-4 py-2 rounded-lg text-[15px] font-medium bg-accent text-white hover:bg-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
               >
                 Analyze Differences
               </button>
-              {error && <span className="text-[12px] text-negative">{error}</span>}
+              {error && <span className="text-[14px] text-negative">{error}</span>}
             </div>
           )}
         </div>
@@ -190,9 +190,9 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
         <div className="space-y-6">
           {/* Summary */}
           <div className="bg-surface-2 rounded-lg p-4 border border-border">
-            <p className="text-[13px] text-text-primary leading-relaxed">{analysis.summary}</p>
+            <p className="text-[15px] text-text-primary leading-relaxed">{analysis.summary}</p>
             {analysis.surface_changes_summary && analysis.surface_changes_summary !== "None significant" && (
-              <p className="text-[11px] text-text-muted mt-2">
+              <p className="text-[13px] text-text-muted mt-2">
                 Surface changes: {analysis.surface_changes_summary}
               </p>
             )}
@@ -201,7 +201,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           {/* Editorial principles */}
           {analysis.changes.length > 0 && (
             <div>
-              <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
+              <h3 className="text-[14px] uppercase tracking-wider text-text-muted font-medium mb-3">
                 Editorial Principles
               </h3>
               <div className="space-y-3">
@@ -209,21 +209,21 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                   <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`w-2 h-2 rounded-full ${significanceDot(change.significance)}`} />
-                      <span className="text-[11px] font-medium text-text-muted uppercase tracking-wider">
+                      <span className="text-[13px] font-medium text-text-muted uppercase tracking-wider">
                         {categoryLabel(change.category)}
                       </span>
                     </div>
-                    <p className="text-[13px] text-text-primary leading-relaxed">{change.principle}</p>
+                    <p className="text-[15px] text-text-primary leading-relaxed">{change.principle}</p>
                     {(change.draft_excerpt || change.published_excerpt) && (
                       <div className="mt-3 grid grid-cols-2 gap-3">
                         {change.draft_excerpt && (
-                          <div className="text-[12px]">
+                          <div className="text-[14px]">
                             <span className="text-text-muted">Draft: </span>
                             <span className="text-negative/80 line-through">{change.draft_excerpt}</span>
                           </div>
                         )}
                         {change.published_excerpt && (
-                          <div className="text-[12px]">
+                          <div className="text-[14px]">
                             <span className="text-text-muted">Published: </span>
                             <span className="text-positive/80">{change.published_excerpt}</span>
                           </div>
@@ -239,12 +239,12 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           {/* Patterns */}
           {analysis.patterns.length > 0 && (
             <div>
-              <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
+              <h3 className="text-[14px] uppercase tracking-wider text-text-muted font-medium mb-3">
                 Patterns
               </h3>
               <ul className="space-y-2">
                 {analysis.patterns.map((p, i) => (
-                  <li key={i} className="text-[13px] text-text-secondary leading-relaxed pl-4 border-l-2 border-accent/30">
+                  <li key={i} className="text-[15px] text-text-secondary leading-relaxed pl-4 border-l-2 border-accent/30">
                     {p}
                   </li>
                 ))}
@@ -255,7 +255,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           {/* Rule suggestions — with Apply buttons */}
           {analysis.rule_suggestions.length > 0 && (
             <div>
-              <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
+              <h3 className="text-[14px] uppercase tracking-wider text-text-muted font-medium mb-3">
                 Suggested Rules
               </h3>
               <div className="space-y-3">
@@ -265,16 +265,16 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                     <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
-                          <span className="text-[11px] font-medium text-accent uppercase">
+                          <span className="text-[13px] font-medium text-accent uppercase">
                             {rule.action} · {ruleCategoryLabel(rule.category)}
                           </span>
-                          <p className="text-[13px] text-text-primary mt-1">{rule.rule_text}</p>
-                          <p className="text-[11px] text-text-muted mt-1">{rule.evidence}</p>
+                          <p className="text-[15px] text-text-primary mt-1">{rule.rule_text}</p>
+                          <p className="text-[13px] text-text-muted mt-1">{rule.evidence}</p>
                         </div>
                         <button
                           onClick={() => handleAddRule(rule, i)}
                           disabled={applied}
-                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
+                          className={`shrink-0 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                             applied
                               ? "bg-positive/10 text-positive border border-positive/20"
                               : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
@@ -293,7 +293,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           {/* Prompt edits — with preview and Apply buttons */}
           {analysis.prompt_edits && analysis.prompt_edits.length > 0 && (
             <div>
-              <h3 className="text-[12px] uppercase tracking-wider text-text-muted font-medium mb-3">
+              <h3 className="text-[14px] uppercase tracking-wider text-text-muted font-medium mb-3">
                 Writing Prompt Updates
               </h3>
               <div className="space-y-3">
@@ -303,24 +303,24 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                     <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
-                          <p className="text-[11px] text-text-muted">{edit.reason}</p>
+                          <p className="text-[13px] text-text-muted">{edit.reason}</p>
                           {edit.remove_text && (
                             <div className="bg-negative/5 border border-negative/15 rounded-md p-3">
                               <span className="text-[10px] uppercase tracking-wider text-negative/70 font-medium">Remove</span>
-                              <p className="text-[12px] text-negative/80 mt-1 line-through">{edit.remove_text}</p>
+                              <p className="text-[14px] text-negative/80 mt-1 line-through">{edit.remove_text}</p>
                             </div>
                           )}
                           <div className="bg-positive/5 border border-positive/15 rounded-md p-3">
                             <span className="text-[10px] uppercase tracking-wider text-positive/70 font-medium">
                               {edit.type === "add" ? "Add" : "Replace with"}
                             </span>
-                            <p className="text-[12px] text-positive/80 mt-1">{edit.add_text}</p>
+                            <p className="text-[14px] text-positive/80 mt-1">{edit.add_text}</p>
                           </div>
                         </div>
                         <button
                           onClick={() => handleApplyPromptEdit(edit, i)}
                           disabled={applied}
-                          className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
+                          className={`shrink-0 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                             applied
                               ? "bg-positive/10 text-positive border border-positive/20"
                               : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
@@ -340,7 +340,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           <button
             onClick={handleAnalyze}
             disabled={analyzing || !publishedText.trim()}
-            className="text-[12px] text-text-muted hover:text-accent transition-colors duration-150 ease-[var(--ease-snappy)]"
+            className="text-[14px] text-text-muted hover:text-accent transition-colors duration-150 ease-[var(--ease-snappy)]"
           >
             Re-analyze
           </button>

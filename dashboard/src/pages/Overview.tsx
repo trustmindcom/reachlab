@@ -131,7 +131,7 @@ export default function Overview() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setCoachChatOpen(true)}
-            className="px-3 py-1.5 bg-accent/10 text-accent text-[12px] font-medium rounded-lg hover:bg-accent/20 transition-colors"
+            className="px-3 py-1.5 bg-accent/10 text-accent text-[14px] font-medium rounded-lg hover:bg-accent/20 transition-colors"
           >
             Chat with Coach
           </button>

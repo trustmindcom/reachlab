@@ -132,7 +132,7 @@ export default function CoachChatPanel({ open, onClose }: CoachChatPanelProps) {
           <select
             value={currentSessionId ?? "new"}
             onChange={handleSessionChange}
-            className="flex-1 bg-surface-1 border border-border rounded-md px-2 py-1.5 text-[12px] text-text-primary truncate focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+            className="flex-1 bg-surface-1 border border-border rounded-md px-2 py-1.5 text-[14px] text-text-primary truncate focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
           >
             <option value="new">New chat</option>
             {sessions.map((s) => (
@@ -143,7 +143,7 @@ export default function CoachChatPanel({ open, onClose }: CoachChatPanelProps) {
           </select>
           <button
             onClick={handleNewChat}
-            className="px-2.5 py-1.5 bg-accent/10 text-accent text-[11px] font-medium rounded-md hover:bg-accent/20 transition-colors shrink-0"
+            className="px-2.5 py-1.5 bg-accent/10 text-accent text-[13px] font-medium rounded-md hover:bg-accent/20 transition-colors shrink-0"
           >
             New
           </button>
@@ -159,9 +159,9 @@ export default function CoachChatPanel({ open, onClose }: CoachChatPanelProps) {
 
         {/* Error */}
         {error && (
-          <div className="mx-4 mt-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[12px] text-red-400 flex items-center justify-between">
+          <div className="mx-4 mt-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400 flex items-center justify-between">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-2 text-red-400/60 hover:text-red-400 text-[11px]">
+            <button onClick={() => setError(null)} className="ml-2 text-red-400/60 hover:text-red-400 text-[13px]">
               Dismiss
             </button>
           </div>

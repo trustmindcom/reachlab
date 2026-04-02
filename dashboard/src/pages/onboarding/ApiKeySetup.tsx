@@ -66,16 +66,16 @@ export default function ApiKeySetup({ onComplete }: ApiKeySetupProps) {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="max-w-lg w-full">
         <div className="text-center mb-8">
-          <h1 className="text-[28px] font-semibold tracking-tight mb-2">
+          <h1 className="text-[32px] font-semibold tracking-tight mb-2">
             <span className="text-accent">Reach</span>Lab
           </h1>
-          <p className="text-[14px] text-text-secondary">
+          <p className="text-[16px] text-text-secondary">
             Before we get started, ReachLab needs an API key to power its AI features.
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[13px] text-negative">
+          <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[15px] text-negative">
             {error}
           </div>
         )}
@@ -95,7 +95,7 @@ export default function ApiKeySetup({ onComplete }: ApiKeySetupProps) {
         {/* Optional keys */}
         {optionalKeys.length > 0 && (
           <div className="mb-6">
-            <p className="text-[12px] text-text-muted mb-3">
+            <p className="text-[14px] text-text-muted mb-3">
               Optional — you can add these later in Settings
             </p>
             <div className="space-y-4">
@@ -114,7 +114,7 @@ export default function ApiKeySetup({ onComplete }: ApiKeySetupProps) {
         <button
           onClick={handleSave}
           disabled={!allRequiredConfigured || saving}
-          className="w-full py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+          className="w-full py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
           {saving ? "Saving..." : "Continue"}
         </button>
@@ -135,14 +135,14 @@ function KeyInput({
   return (
     <div className="bg-surface-1 border border-border rounded-lg p-4">
       <div className="flex items-center justify-between mb-2">
-        <label className="text-[13px] font-medium text-text-primary">
+        <label className="text-[15px] font-medium text-text-primary">
           {config.label}
           {config.required && !config.configured && (
-            <span className="text-negative ml-1 text-[11px]">required</span>
+            <span className="text-negative ml-1 text-[13px]">required</span>
           )}
         </label>
         {config.configured && (
-          <span className="text-[11px] text-green-400 flex items-center gap-1">
+          <span className="text-[13px] text-green-400 flex items-center gap-1">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
               <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm3.3 5.3l-4 4a.75.75 0 01-1.1 0l-2-2a.75.75 0 111.1-1.1L6.8 8.7l3.4-3.4a.75.75 0 111.1 1.1z" />
             </svg>
@@ -155,13 +155,13 @@ function KeyInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={config.configured ? "Already configured (paste to replace)" : `Paste your key (${config.prefix}...)`}
-        className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-[13px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent font-mono"
+        className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-[15px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent font-mono"
       />
       <a
         href={config.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-[11px] text-accent hover:underline mt-1.5 inline-block"
+        className="text-[13px] text-accent hover:underline mt-1.5 inline-block"
       >
         Get a key →
       </a>

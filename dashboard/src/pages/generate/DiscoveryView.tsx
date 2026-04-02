@@ -198,7 +198,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     <div>
       {/* Error state */}
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-400">
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[15px] text-red-400">
           {error}
         </div>
       )}
@@ -219,12 +219,12 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               onChange={(e) => setTopicInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleGoTopic(); }}
               placeholder="I want to write about..."
-              className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3 text-[14px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent"
+              className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3 text-[16px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent"
             />
             <button
               onClick={handleGoTopic}
               disabled={!topicInput.trim()}
-              className="px-6 py-3 bg-gen-accent text-white text-[14px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-gen-accent text-white text-[16px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Go
             </button>
@@ -235,7 +235,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               {/* Divider with refresh */}
               <div className="flex items-center gap-4 mb-8">
                 <div className="flex-1 h-px bg-gen-border-1" />
-                <span className="text-[11px] uppercase tracking-[1.6px] text-gen-text-4">or explore trending topics</span>
+                <span className="text-[13px] uppercase tracking-[1.6px] text-gen-text-4">or explore trending topics</span>
                 <div className="flex-1 h-px bg-gen-border-1" />
               </div>
 
@@ -268,13 +268,13 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
               {/* Footer with refresh */}
               <div className="flex items-center justify-center gap-3 mt-6">
-                <span className="text-[12px] text-gen-text-4">
+                <span className="text-[14px] text-gen-text-4">
                   ~{gen.discoveryTopics!.reduce((sum, c) => sum + c.topics.length, 0)} topics from your feeds
                 </span>
                 <span className="text-gen-text-4">·</span>
                 <button
                   onClick={handleRefresh}
-                  className="text-[12px] text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer"
+                  className="text-[14px] text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer"
                 >
                   Find new topics
                 </button>
@@ -287,7 +287,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
             <div className="text-center py-10">
               <button
                 onClick={handleDiscover}
-                className="px-5 py-2.5 border border-gen-border-1 rounded-[10px] text-[13px] text-gen-text-2 hover:text-gen-text-0 hover:border-gen-border-2 transition-colors duration-150 ease-[var(--ease-snappy)]"
+                className="px-5 py-2.5 border border-gen-border-1 rounded-[10px] text-[15px] text-gen-text-2 hover:text-gen-text-0 hover:border-gen-border-2 transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Load trending topics
               </button>
@@ -305,7 +305,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
             </h2>
             <button
               onClick={handleBackToTopics}
-              className="text-[13px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
+              className="text-[15px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Back to topics
             </button>
@@ -328,10 +328,10 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
           {/* Personal connection */}
           {gen.selectedStoryIndex !== null && (
             <div className="mt-4 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-xl space-y-2">
-              <h3 className="text-[14px] font-medium text-gen-text-0">
+              <h3 className="text-[16px] font-medium text-gen-text-0">
                 What's your personal connection to this?
               </h3>
-              <p className="text-[12px] text-gen-text-3">
+              <p className="text-[14px] text-gen-text-3">
                 Optional — helps the AI ground the draft in your real experience.
               </p>
               <textarea
@@ -345,14 +345,14 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 }}
                 rows={3}
                 placeholder='e.g. "We migrated off Heroku to AWS and it took 6 months longer than estimated..."'
-                className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[13px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
+                className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[15px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
               />
             </div>
           )}
 
           {/* Bottom bar */}
           <div className="flex items-center justify-between mt-6 pt-4 border-t border-gen-border-1">
-            <span className="text-[12px] text-gen-text-3">
+            <span className="text-[14px] text-gen-text-3">
               {gen.articleCount} articles from {gen.sourceCount} sources
             </span>
             <div className="flex items-center gap-3">
@@ -361,7 +361,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                   <button
                     key={len}
                     onClick={() => setGen((prev: any) => ({ ...prev, draftLength: len }))}
-                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
+                    className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
                       gen.draftLength === len
                         ? "bg-gen-bg-0 text-gen-text-0 shadow-sm"
                         : "text-gen-text-3 hover:text-gen-text-1"
@@ -374,7 +374,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               <button
                 onClick={handleGenerateDrafts}
                 disabled={gen.selectedStoryIndex === null || loading}
-                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Generate drafts
               </button>

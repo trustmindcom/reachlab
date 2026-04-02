@@ -150,9 +150,9 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
       <div className="w-full lg:w-1/2 flex flex-col min-h-0">
         {/* Error banner */}
         {error && (
-          <div className="mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[12px] text-red-400 flex items-center justify-between">
+          <div className="mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400 flex items-center justify-between">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-2 text-red-400/60 hover:text-red-400 text-[11px]">
+            <button onClick={() => setError(null)} className="ml-2 text-red-400/60 hover:text-red-400 text-[13px]">
               Dismiss
             </button>
           </div>
@@ -170,12 +170,12 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
       <div className="w-full lg:w-1/2 flex flex-col min-h-0">
         {/* First-turn sentinel label */}
         {isFirstTurn && loading && (
-          <div className="mb-2 text-[11px] text-gen-text-3 tracking-wide animate-pulse">
+          <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide animate-pulse">
             Combining drafts...
           </div>
         )}
         {!hasAssistantMessage && !loading && localDraft && (
-          <div className="mb-2 text-[11px] text-gen-text-3 tracking-wide">
+          <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide">
             Starting draft
           </div>
         )}
@@ -198,10 +198,10 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
         {/* Draft footer */}
         <div className="flex items-center justify-between mt-3">
           <div className="flex items-center gap-3">
-            <span className="text-[12px] text-gen-text-3 tabular-nums">{wordCount} words</span>
+            <span className="text-[14px] text-gen-text-3 tabular-nums">{wordCount} words</span>
             <button
               onClick={onBack}
-              className="text-[12px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
+              className="text-[14px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Back to drafts
             </button>
@@ -209,20 +209,20 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
           <div className="flex items-center gap-3">
             <button
               onClick={handleCopy}
-              className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-1 text-[13px] font-medium rounded-[10px] hover:border-gen-border-3 transition-colors duration-150 ease-[var(--ease-snappy)]"
+              className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-1 text-[15px] font-medium rounded-[10px] hover:border-gen-border-3 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               {copied ? "Copied!" : "Copy"}
             </button>
             <button
               onClick={handleOpenLinkedIn}
-              className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)]"
+              className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Open in LinkedIn
             </button>
             {onRetro && (
               <button
                 onClick={onRetro}
-                className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-2 text-[13px] font-medium rounded-[10px] hover:border-gen-accent/40 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)]"
+                className="px-4 py-2 bg-gen-bg-3 border border-gen-border-2 text-gen-text-2 text-[15px] font-medium rounded-[10px] hover:border-gen-accent/40 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)]"
               >
                 Post Retro
               </button>

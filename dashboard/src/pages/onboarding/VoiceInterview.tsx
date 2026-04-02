@@ -75,16 +75,16 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
   if (noApiKey) {
     return (
       <div className="max-w-lg mx-auto text-center">
-        <h2 className="text-[20px] font-semibold text-text-primary mb-2">Voice interview unavailable</h2>
-        <p className="text-[13px] text-text-secondary mb-6">
-          This feature requires an OpenAI API key. Add <code className="text-[12px] bg-surface-2 px-1.5 py-0.5 rounded">OPENAI_API_KEY=sk-...</code> to your <code className="text-[12px] bg-surface-2 px-1.5 py-0.5 rounded">server/.env</code> file and restart the server.
+        <h2 className="text-[22px] font-semibold text-text-primary mb-2">Voice interview unavailable</h2>
+        <p className="text-[15px] text-text-secondary mb-6">
+          This feature requires an OpenAI API key. Add <code className="text-[14px] bg-surface-2 px-1.5 py-0.5 rounded">OPENAI_API_KEY=sk-...</code> to your <code className="text-[14px] bg-surface-2 px-1.5 py-0.5 rounded">server/.env</code> file and restart the server.
         </p>
-        <p className="text-[13px] text-text-secondary mb-6">
+        <p className="text-[15px] text-text-secondary mb-6">
           You can do the interview later from Settings.
         </p>
         <button
           onClick={onSkip}
-          className="px-6 py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90"
+          className="px-6 py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90"
         >
           Continue without interview
         </button>
@@ -94,22 +94,22 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
 
   return (
     <div className="max-w-lg mx-auto">
-      <h2 className="text-[20px] font-semibold text-text-primary mb-2">Voice interview</h2>
-      <p className="text-[13px] text-text-secondary mb-6">
+      <h2 className="text-[22px] font-semibold text-text-primary mb-2">Voice interview</h2>
+      <p className="text-[15px] text-text-secondary mb-6">
         A 5-minute voice conversation to capture what makes your perspective distinctive. The AI will ask about your name, role, and what you do — then dig into how you think.
       </p>
 
       {(error || extractError) && (
-        <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[13px] text-negative">
+        <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[15px] text-negative">
           {error || extractError}
         </div>
       )}
 
       {phase === "pre" && (
         <div className="space-y-4">
-          <div className="bg-surface-2 border border-border rounded-lg p-4 text-[13px] text-text-secondary space-y-2">
+          <div className="bg-surface-2 border border-border rounded-lg p-4 text-[15px] text-text-secondary space-y-2">
             <p>The interview will:</p>
-            <ul className="list-disc list-inside text-[12px] space-y-1 text-text-muted">
+            <ul className="list-disc list-inside text-[14px] space-y-1 text-text-muted">
               <li>Ask your name, role, and what you do</li>
               <li>Explore what makes your perspective unique</li>
               <li>Dig into your mental models and contrarian views</li>
@@ -119,7 +119,7 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
           <button
             onClick={handleStart}
             disabled={status === "connecting"}
-            className="w-full py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
+            className="w-full py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90 disabled:opacity-50"
           >
             {status === "connecting" ? "Connecting..." : "Start Interview"}
           </button>
@@ -133,17 +133,17 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
               <div className="relative">
                 <div className="w-4 h-4 bg-negative rounded-full animate-pulse" />
               </div>
-              <span className="text-[13px] font-medium text-text-primary">Interview in progress</span>
+              <span className="text-[15px] font-medium text-text-primary">Interview in progress</span>
             </div>
             <span className="text-2xl font-mono text-text-primary tabular-nums">{formatTime(elapsed)}</span>
           </div>
           <div className="bg-surface-2 rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
             {transcript.length === 0 ? (
-              <p className="text-[13px] text-text-muted italic">Waiting for conversation...</p>
+              <p className="text-[15px] text-text-muted italic">Waiting for conversation...</p>
             ) : (
               transcript.map((t, i) => (
-                <div key={i} className={`text-[13px] ${t.role === "user" ? "text-text-primary" : "text-accent"}`}>
-                  <span className="text-[11px] text-text-muted font-medium">
+                <div key={i} className={`text-[15px] ${t.role === "user" ? "text-text-primary" : "text-accent"}`}>
+                  <span className="text-[13px] text-text-muted font-medium">
                     {t.role === "user" ? "You" : "AI"}:
                   </span>{" "}
                   {t.text}
@@ -153,7 +153,7 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
           </div>
           <button
             onClick={handleStop}
-            className="w-full py-3 bg-surface-2 text-text-primary rounded-xl text-[14px] font-medium border border-border hover:bg-surface-3"
+            className="w-full py-3 bg-surface-2 text-text-primary rounded-xl text-[16px] font-medium border border-border hover:bg-surface-3"
           >
             End Interview
           </button>
@@ -163,27 +163,27 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
       {phase === "extracting" && (
         <div className="text-center py-16 text-text-muted">
           <div className="animate-spin h-6 w-6 border-2 border-accent border-t-transparent rounded-full mx-auto mb-3" />
-          <p className="text-[13px]">Extracting your profile...</p>
+          <p className="text-[15px]">Extracting your profile...</p>
         </div>
       )}
 
       {phase === "review" && (
         <div className="space-y-4">
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-[15px] text-text-secondary">
             Here's what we extracted. Edit anything that doesn't sound right.
           </p>
           <div>
-            <label className="text-[11px] text-text-muted block mb-1">Extracted profile</label>
+            <label className="text-[13px] text-text-muted block mb-1">Extracted profile</label>
             <textarea
               value={extractedText}
               onChange={(e) => setExtractedText(e.target.value)}
               rows={6}
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[15px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
             />
           </div>
           <button
             onClick={handleSave}
-            className="w-full py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90"
+            className="w-full py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90"
           >
             Save &amp; Continue
           </button>
@@ -192,7 +192,7 @@ export default function VoiceInterview({ onNext, onSkip }: VoiceInterviewProps) 
 
       <button
         onClick={onSkip}
-        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
+        className="w-full mt-4 py-2 text-[14px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
       >
         Skip for now
       </button>

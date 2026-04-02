@@ -154,10 +154,10 @@ export function TimingGrid({ slots }: { slots: TimingSlot[] }) {
     <div className="animate-fade-up" style={{ animationDelay: "360ms" }}>
       <button onClick={() => setTimingOpen((v) => !v)} className="flex items-center gap-2 mb-3 group">
         <span className={`text-[10px] text-text-muted transition-transform ${timingOpen ? "rotate-90" : ""}`}>&#9654;</span>
-        <h3 className="text-[13px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
+        <h3 className="text-[15px] font-semibold text-text-secondary group-hover:text-text-primary transition-colors duration-150 ease-[var(--ease-snappy)]">
           Best Times to Post
         </h3>
-        <span className="text-[11px] text-text-muted">When does your audience engage most?</span>
+        <span className="text-[13px] text-text-muted">When does your audience engage most?</span>
       </button>
       {timingOpen && (
         <div className="bg-surface-1 border border-border rounded-lg p-4 overflow-x-auto">
@@ -173,7 +173,7 @@ export function TimingGrid({ slots }: { slots: TimingSlot[] }) {
             <tbody>
               {DAY_LABELS.map((day, dayIdx) => (
                 <tr key={day}>
-                  <td className="px-2 py-1.5 font-medium text-text-secondary text-[11px]">{day}</td>
+                  <td className="px-2 py-1.5 font-medium text-text-secondary text-[13px]">{day}</td>
                   {TIME_WINDOWS.map((w) => {
                     const cell = cells[`${dayIdx}-${w.start}`];
                     const intensity = cell && maxER > 0 ? cell.er / maxER : 0;

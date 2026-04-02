@@ -99,7 +99,7 @@ export default function Rules() {
   };
 
   if (!rules) {
-    return <div className="text-gen-text-3 text-[14px] py-10 text-center">Loading rules...</div>;
+    return <div className="text-gen-text-3 text-[16px] py-10 text-center">Loading rules...</div>;
   }
 
   return (
@@ -110,12 +110,12 @@ export default function Rules() {
         <button
           onClick={handleReset}
           disabled={saving}
-          className="text-[12px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
+          className="text-[14px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
         >
           Reset to defaults
         </button>
       </div>
-      <p className="text-[13px] text-gen-text-2 mb-6">
+      <p className="text-[15px] text-gen-text-2 mb-6">
         Applied to every post you generate. Edit, delete, or add your own.
       </p>
 

@@ -60,15 +60,15 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
             </h2>
             <button
               onClick={onClose}
-              className="w-7 h-7 rounded-lg bg-gen-bg-3 text-gen-text-3 hover:text-gen-text-0 hover:bg-gen-bg-4 flex items-center justify-center text-[14px] transition-all cursor-pointer"
+              className="w-7 h-7 rounded-lg bg-gen-bg-3 text-gen-text-3 hover:text-gen-text-0 hover:bg-gen-bg-4 flex items-center justify-center text-[16px] transition-all cursor-pointer"
             >
               ✕
             </button>
           </div>
-          <p className="text-[13px] text-gen-text-2 leading-[1.5]">
+          <p className="text-[15px] text-gen-text-2 leading-[1.5]">
             Based on this week's post performance and coaching analysis, here are proposed updates to your writing guidance.
           </p>
-          <p className="text-[12px] text-gen-text-4 mt-1">
+          <p className="text-[14px] text-gen-text-4 mt-1">
             Week of {weekDate}
             {onViewHistory && (
               <>
@@ -87,11 +87,11 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
         {/* Cards */}
         <div className="px-7 flex-1 overflow-hidden">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-gen-text-3 text-[14px]">
+            <div className="flex items-center justify-center py-16 text-gen-text-3 text-[16px]">
               Analyzing your coaching insights...
             </div>
           ) : changes.length === 0 ? (
-            <div className="flex items-center justify-center py-16 text-gen-text-3 text-[14px]">
+            <div className="flex items-center justify-center py-16 text-gen-text-3 text-[16px]">
               No changes proposed this week. Your coaching insights are looking good.
             </div>
           ) : (
@@ -116,7 +116,7 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
               {page > 0 && (
                 <button
                   onClick={() => setPage((p) => p - 1)}
-                  className="text-[13px] font-medium text-gen-text-2 hover:text-gen-text-0 transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer bg-transparent border-none p-2"
+                  className="text-[15px] font-medium text-gen-text-2 hover:text-gen-text-0 transition-colors duration-150 ease-[var(--ease-snappy)] cursor-pointer bg-transparent border-none p-2"
                 >
                   ← Previous
                 </button>
@@ -124,7 +124,7 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
               {!isLastPage && (
                 <button
                   onClick={() => setPage((p) => p + 1)}
-                  className="px-[22px] py-2.5 bg-gen-text-0 text-gen-bg-0 rounded-[10px] text-[13px] font-medium hover:opacity-90 hover:-translate-y-px transition-all cursor-pointer border-none"
+                  className="px-[22px] py-2.5 bg-gen-text-0 text-gen-bg-0 rounded-[10px] text-[15px] font-medium hover:opacity-90 hover:-translate-y-px transition-all cursor-pointer border-none"
                   style={{ boxShadow: "0 4px 16px rgba(255,255,255,0.06)" }}
                 >
                   Next →
@@ -133,7 +133,7 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
               {isLastPage && (
                 <button
                   onClick={onClose}
-                  className="px-[22px] py-2.5 bg-gen-text-0 text-gen-bg-0 rounded-[10px] text-[13px] font-medium hover:opacity-90 hover:-translate-y-px transition-all cursor-pointer border-none"
+                  className="px-[22px] py-2.5 bg-gen-text-0 text-gen-bg-0 rounded-[10px] text-[15px] font-medium hover:opacity-90 hover:-translate-y-px transition-all cursor-pointer border-none"
                   style={{ boxShadow: "0 4px 16px rgba(255,255,255,0.06)" }}
                 >
                   Done
@@ -142,10 +142,10 @@ export default function CoachingSyncModal({ onClose, onViewHistory }: CoachingSy
             </div>
             {/* Meta row — page centered, accepted right-aligned */}
             <div className="relative flex justify-center">
-              <span className="text-[12px] text-gen-text-3">
+              <span className="text-[14px] text-gen-text-3">
                 {page + 1} of {totalPages}
               </span>
-              <span className="absolute right-0 text-[12px] text-gen-text-3">
+              <span className="absolute right-0 text-[14px] text-gen-text-3">
                 {acceptedCount} of {changes.length} accepted
               </span>
             </div>

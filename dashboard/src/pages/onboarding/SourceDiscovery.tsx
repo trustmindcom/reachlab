@@ -83,22 +83,22 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
     return (
       <div className="text-center py-24">
         <div className="animate-spin h-6 w-6 border-2 border-accent border-t-transparent rounded-full mx-auto mb-3" />
-        <p className="text-[13px] text-text-muted">Finding sources for your topics...</p>
+        <p className="text-[15px] text-text-muted">Finding sources for your topics...</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-lg mx-auto">
-      <h2 className="text-[20px] font-semibold text-text-primary mb-2">Your news sources</h2>
-      <p className="text-[13px] text-text-secondary mb-6">
+      <h2 className="text-[22px] font-semibold text-text-primary mb-2">Your news sources</h2>
+      <p className="text-[15px] text-text-secondary mb-6">
         {sources.length > 0
           ? "We found sources relevant to your topics. Uncheck any you don't want."
           : "Add websites you follow to help discover timely topics."}
       </p>
 
       {error && (
-        <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[13px] text-negative">
+        <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[15px] text-negative">
           {error}
         </div>
       )}
@@ -117,11 +117,11 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
                 className="mt-0.5 accent-accent"
               />
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium text-text-primary truncate">{s.name}</div>
+                <div className="text-[15px] font-medium text-text-primary truncate">{s.name}</div>
                 {s.description && (
-                  <div className="text-[11px] text-text-muted mt-0.5">{s.description}</div>
+                  <div className="text-[13px] text-text-muted mt-0.5">{s.description}</div>
                 )}
-                <div className="text-[11px] text-text-muted truncate">{s.url}</div>
+                <div className="text-[13px] text-text-muted truncate">{s.url}</div>
               </div>
             </label>
           ))}
@@ -135,12 +135,12 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
           onChange={(e) => setManualUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addManual()}
           placeholder="Add a website URL..."
-          className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent"
+          className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-[15px] text-text-primary placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent"
         />
         <button
           onClick={addManual}
           disabled={!manualUrl.trim() || addingManual}
-          className="px-4 py-2 bg-accent text-white rounded-lg text-[13px] font-medium hover:opacity-90 disabled:opacity-40"
+          className="px-4 py-2 bg-accent text-white rounded-lg text-[15px] font-medium hover:opacity-90 disabled:opacity-40"
         >
           {addingManual ? "..." : "Add"}
         </button>
@@ -149,14 +149,14 @@ export default function SourceDiscovery({ onNext, onSkip }: SourceDiscoveryProps
       <button
         onClick={saveAndContinue}
         disabled={phase === "saving"}
-        className="w-full py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90 disabled:opacity-50"
+        className="w-full py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90 disabled:opacity-50"
       >
         {phase === "saving" ? "Saving..." : "Save sources & continue"}
       </button>
 
       <button
         onClick={onSkip}
-        className="w-full mt-4 py-2 text-[12px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
+        className="w-full mt-4 py-2 text-[14px] text-text-muted hover:text-text-secondary transition-colors duration-150 ease-[var(--ease-snappy)]"
       >
         Use default sources
       </button>

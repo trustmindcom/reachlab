@@ -42,19 +42,19 @@ export default function DraftSidebar({
                   isActive ? "bg-gen-bg-2" : "hover:bg-gen-bg-2/50"
                 }`}
               >
-                <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-gen-bg-3 text-gen-text-2 mb-1.5">
+                <span className="inline-block px-2 py-0.5 rounded text-[13px] font-medium bg-gen-bg-3 text-gen-text-2 mb-1.5">
                   {draftLabels[draft.type] || draft.type}
                 </span>
-                <p className="text-[13px] text-gen-text-1 leading-snug line-clamp-2">
+                <p className="text-[15px] text-gen-text-1 leading-snug line-clamp-2">
                   {draft.hook}
                 </p>
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-[11px] text-gen-text-3">{draft.word_count} words</span>
+                  <span className="text-[13px] text-gen-text-3">{draft.word_count} words</span>
                   <label
                     onClick={(e) => e.stopPropagation()}
                     className="flex items-center gap-1.5 cursor-pointer"
                   >
-                    <span className="text-[11px] text-gen-text-3">Include</span>
+                    <span className="text-[13px] text-gen-text-3">Include</span>
                     <button
                       role="switch"
                       aria-checked={isIncluded}

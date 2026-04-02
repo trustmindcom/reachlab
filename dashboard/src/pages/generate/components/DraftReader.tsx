@@ -28,7 +28,7 @@ export default function DraftReader({ draft }: DraftReaderProps) {
       </div>
 
       {/* Meta */}
-      <div className="mt-4 text-[13px] text-gen-text-2">
+      <div className="mt-4 text-[15px] text-gen-text-2">
         <span className="font-semibold text-gen-text-1">{draft.word_count}</span> words
         <span className="mx-2 text-gen-text-4">|</span>
         {draft.structure_label}

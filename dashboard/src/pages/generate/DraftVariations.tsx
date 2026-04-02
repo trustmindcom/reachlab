@@ -150,20 +150,20 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
             setGen((prev: any) => ({ ...prev, combiningGuidance: e.target.value }));
           }}
           placeholder="Give direction — e.g. make them more opinionated, lead with the contrarian hook, shorter sentences..."
-          className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-4 py-3 text-[13px] text-gen-text-1 placeholder:text-gen-text-3 resize-none h-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
+          className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-4 py-3 text-[15px] text-gen-text-1 placeholder:text-gen-text-3 resize-none h-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
         />
         <div className="flex justify-end gap-2 mt-2">
           <button
             onClick={handleRevise}
             disabled={!reviseFeedback.trim()}
-            className="px-4 py-2 border border-gen-border-2 text-gen-text-1 text-[12px] font-medium rounded-lg hover:bg-gen-bg-2 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-4 py-2 border border-gen-border-2 text-gen-text-1 text-[14px] font-medium rounded-lg hover:bg-gen-bg-2 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Revise all 3
           </button>
           {selectedCount >= 2 && (
             <button
               onClick={handleCombineAndReview}
-              className="px-4 py-2 bg-gen-accent text-white text-[12px] font-medium rounded-lg hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)]"
+              className="px-4 py-2 bg-gen-accent text-white text-[14px] font-medium rounded-lg hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Use as merge guidance
             </button>
@@ -175,20 +175,20 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-gen-border-1">
         <button
           onClick={onBack}
-          className="text-[13px] text-gen-text-2 hover:text-gen-text-0 transition-colors duration-150 ease-[var(--ease-snappy)]"
+          className="text-[15px] text-gen-text-2 hover:text-gen-text-0 transition-colors duration-150 ease-[var(--ease-snappy)]"
         >
           Back to stories
         </button>
         <div className="flex items-center gap-3">
           {selectedCount > 0 && (
-            <span className="px-2.5 py-0.5 rounded-md text-[12px] font-bold bg-gen-accent-soft text-gen-accent border border-gen-accent-border">
+            <span className="px-2.5 py-0.5 rounded-md text-[14px] font-bold bg-gen-accent-soft text-gen-accent border border-gen-accent-border">
               {selectedCount}
             </span>
           )}
           <button
             onClick={handleCombineAndReview}
             disabled={selectedCount === 0}
-            className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[13px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {actionLabel}
           </button>

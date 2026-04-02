@@ -21,7 +21,7 @@ export default function CoachingChangeCard({ change, onDecide, decided }: Coachi
           <span className="px-2 py-[3px] rounded-[5px] text-[10px] font-bold uppercase tracking-[0.6px] bg-gen-bg-3 text-gen-text-2 border border-gen-border-2">
             {change.type}
           </span>
-          <span className="text-[14px] font-medium text-gen-text-0">{change.title}</span>
+          <span className="text-[16px] font-medium text-gen-text-0">{change.title}</span>
         </div>
       </div>
 
@@ -30,9 +30,9 @@ export default function CoachingChangeCard({ change, onDecide, decided }: Coachi
         {/* NEW card: evidence, then green editable block */}
         {change.type === "new" && (
           <>
-            <p className="text-[13px] text-gen-text-2 leading-[1.6] mb-3.5">{change.evidence}</p>
+            <p className="text-[15px] text-gen-text-2 leading-[1.6] mb-3.5">{change.evidence}</p>
             <div
-              className="bg-gen-bg-1 border border-gen-border-2 rounded-md px-3.5 py-2.5 mb-3.5 outline-none cursor-text text-[13px] text-gen-text-1 leading-[1.55] hover:border-gen-border-3 focus-within:border-gen-accent-border"
+              className="bg-gen-bg-1 border border-gen-border-2 rounded-md px-3.5 py-2.5 mb-3.5 outline-none cursor-text text-[15px] text-gen-text-1 leading-[1.55] hover:border-gen-border-3 focus-within:border-gen-accent-border"
               style={{ borderLeft: "3px solid var(--color-positive)" }}
             >
               <div
@@ -51,13 +51,13 @@ export default function CoachingChangeCard({ change, onDecide, decided }: Coachi
         {change.type === "updated" && (
           <>
             <div
-              className="bg-gen-bg-1 border border-gen-border-2 rounded-md px-3.5 py-2.5 mb-2 text-[13px] text-gen-text-3 leading-[1.55] line-through"
+              className="bg-gen-bg-1 border border-gen-border-2 rounded-md px-3.5 py-2.5 mb-2 text-[15px] text-gen-text-3 leading-[1.55] line-through"
               style={{ borderLeft: "3px solid var(--color-negative)" }}
             >
               {change.old_text}
             </div>
             <div
-              className="bg-gen-bg-1 border border-gen-border-2 rounded-md px-3.5 py-2.5 mb-3.5 outline-none cursor-text text-[13px] text-gen-text-1 leading-[1.55] hover:border-gen-border-3 focus-within:border-gen-accent-border"
+              className="bg-gen-bg-1 border border-gen-border-2 rounded-md px-3.5 py-2.5 mb-3.5 outline-none cursor-text text-[15px] text-gen-text-1 leading-[1.55] hover:border-gen-border-3 focus-within:border-gen-accent-border"
               style={{ borderLeft: "3px solid var(--color-positive)" }}
             >
               <div
@@ -69,13 +69,13 @@ export default function CoachingChangeCard({ change, onDecide, decided }: Coachi
                 {change.new_text}
               </div>
             </div>
-            <p className="text-[13px] text-gen-text-2 leading-[1.6] mb-3.5">{change.evidence}</p>
+            <p className="text-[15px] text-gen-text-2 leading-[1.6] mb-3.5">{change.evidence}</p>
           </>
         )}
 
         {/* RETIRE card: evidence only */}
         {change.type === "retire" && (
-          <p className="text-[13px] text-gen-text-2 leading-[1.6] mb-3.5">{change.evidence}</p>
+          <p className="text-[15px] text-gen-text-2 leading-[1.6] mb-3.5">{change.evidence}</p>
         )}
 
         {/* Action buttons */}
@@ -84,13 +84,13 @@ export default function CoachingChangeCard({ change, onDecide, decided }: Coachi
             <>
               <button
                 onClick={() => onDecide("retire")}
-                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium bg-gen-bg-4 border border-gen-border-3 text-gen-text-0 hover:bg-gen-bg-3 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg text-[14px] font-medium bg-gen-bg-4 border border-gen-border-3 text-gen-text-0 hover:bg-gen-bg-3 transition-colors cursor-pointer"
               >
                 Retire
               </button>
               <button
                 onClick={() => onDecide("keep")}
-                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium bg-transparent border border-gen-border-1 text-gen-text-3 hover:text-gen-text-0 hover:border-gen-border-3 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg text-[14px] font-medium bg-transparent border border-gen-border-1 text-gen-text-3 hover:text-gen-text-0 hover:border-gen-border-3 transition-colors cursor-pointer"
               >
                 Keep
               </button>
@@ -99,13 +99,13 @@ export default function CoachingChangeCard({ change, onDecide, decided }: Coachi
             <>
               <button
                 onClick={() => onDecide("accept", editedNewText || undefined)}
-                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium bg-gen-bg-4 border border-gen-border-3 text-gen-text-0 hover:bg-gen-bg-3 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg text-[14px] font-medium bg-gen-bg-4 border border-gen-border-3 text-gen-text-0 hover:bg-gen-bg-3 transition-colors cursor-pointer"
               >
                 Accept
               </button>
               <button
                 onClick={() => onDecide("skip")}
-                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium bg-transparent border border-gen-border-1 text-gen-text-3 hover:text-gen-text-0 hover:border-gen-border-3 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg text-[14px] font-medium bg-transparent border border-gen-border-1 text-gen-text-3 hover:text-gen-text-0 hover:border-gen-border-3 transition-colors cursor-pointer"
               >
                 Skip
               </button>

@@ -14,7 +14,7 @@ export default function SubTabBar({ active, onChange }: SubTabBarProps) {
           <button
             key={t}
             onClick={() => onChange(t)}
-            className={`pb-2.5 pt-1 text-[13px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] relative ${
+            className={`pb-2.5 pt-1 text-[15px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] relative ${
               active === t
                 ? "text-gen-text-0"
                 : "text-gen-text-3 hover:text-gen-text-1"

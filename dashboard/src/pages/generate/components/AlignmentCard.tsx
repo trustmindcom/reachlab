@@ -18,7 +18,7 @@ export default function AlignmentCard({ items }: AlignmentCardProps) {
 
   return (
     <div className="bg-gen-bg-2 border border-gen-border-2 rounded-xl p-4">
-      <h4 className="text-[13px] font-semibold text-gen-text-0 mb-3">
+      <h4 className="text-[15px] font-semibold text-gen-text-0 mb-3">
         Alignment
       </h4>
       <div className="space-y-2">
@@ -29,10 +29,10 @@ export default function AlignmentCard({ items }: AlignmentCardProps) {
               <path d="M4.5 7l1.5 1.5 3-3" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <div>
-              <p className="text-[12px] text-gen-text-1 font-medium">
+              <p className="text-[14px] text-gen-text-1 font-medium">
                 {dimensionLabels[item.dimension] ?? item.dimension}
               </p>
-              <p className="text-[11px] text-gen-text-3 leading-snug">{item.summary}</p>
+              <p className="text-[13px] text-gen-text-3 leading-snug">{item.summary}</p>
             </div>
           </div>
         ))}

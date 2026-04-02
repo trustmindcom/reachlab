@@ -108,7 +108,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
 
   if (phase === "checking") {
     return (
-      <div className="text-center py-20 text-text-muted text-[13px]">
+      <div className="text-center py-20 text-text-muted text-[15px]">
         Checking your posts...
       </div>
     );
@@ -117,13 +117,13 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
   if (phase === "no-posts") {
     return (
       <div className="max-w-lg mx-auto text-center">
-        <h2 className="text-[20px] font-semibold text-text-primary mb-2">No posts to analyze yet</h2>
-        <p className="text-[13px] text-text-secondary mb-6">
+        <h2 className="text-[22px] font-semibold text-text-primary mb-2">No posts to analyze yet</h2>
+        <p className="text-[15px] text-text-secondary mb-6">
           After your first LinkedIn sync, come back to Settings to run the analysis.
         </p>
         <button
           onClick={onSkip}
-          className="px-6 py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90"
+          className="px-6 py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90"
         >
           Continue
         </button>
@@ -134,14 +134,14 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
   if (phase === "not-enough") {
     return (
       <div className="max-w-lg mx-auto text-center">
-        <h2 className="text-[20px] font-semibold text-text-primary mb-2">Not enough data yet</h2>
-        <p className="text-[13px] text-text-secondary mb-6">
+        <h2 className="text-[22px] font-semibold text-text-primary mb-2">Not enough data yet</h2>
+        <p className="text-[15px] text-text-secondary mb-6">
           ReachLab needs at least 5 posts with engagement metrics before it can analyze your writing.
           Keep syncing from LinkedIn — once you hit 5 posts with metrics, head to the Coach tab to run the analysis.
         </p>
         <button
           onClick={onSkip}
-          className="px-6 py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90"
+          className="px-6 py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90"
         >
           Continue
         </button>
@@ -159,7 +159,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
             <div className="w-3 h-3 rounded-full bg-accent" />
           </div>
         </div>
-        <p className="text-[13px] text-text-muted">{message}</p>
+        <p className="text-[15px] text-text-muted">{message}</p>
       </div>
     );
   }
@@ -167,25 +167,25 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
   // Phase: done
   return (
     <div className="max-w-lg mx-auto">
-      <h2 className="text-[20px] font-semibold text-text-primary mb-2">Here's what we found</h2>
-      <p className="text-[13px] text-text-secondary mb-6">
+      <h2 className="text-[22px] font-semibold text-text-primary mb-2">Here's what we found</h2>
+      <p className="text-[15px] text-text-secondary mb-6">
         We analyzed your posts and identified your topics and writing style.
       </p>
 
       {error && (
-        <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[13px] text-negative">
+        <div className="mb-4 p-3 bg-negative/10 border border-negative/20 rounded-lg text-[15px] text-negative">
           {error}
         </div>
       )}
 
       {topics.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-[13px] font-medium text-text-primary mb-2">Your topics</h3>
+          <h3 className="text-[15px] font-medium text-text-primary mb-2">Your topics</h3>
           <div className="flex flex-wrap gap-2">
             {topics.map((t) => (
               <span
                 key={t}
-                className="px-3 py-1.5 bg-surface-2 border border-border rounded-full text-[12px] text-text-secondary"
+                className="px-3 py-1.5 bg-surface-2 border border-border rounded-full text-[14px] text-text-secondary"
               >
                 {t}
               </span>
@@ -197,11 +197,11 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
       {writingPrompt && (
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-[13px] font-medium text-text-primary">Writing prompt</h3>
+            <h3 className="text-[15px] font-medium text-text-primary">Writing prompt</h3>
             {!editing && (
               <button
                 onClick={() => setEditing(true)}
-                className="text-[12px] text-accent hover:underline"
+                className="text-[14px] text-accent hover:underline"
               >
                 Edit
               </button>
@@ -213,17 +213,17 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
                 value={writingPrompt}
                 onChange={(e) => setWritingPrompt(e.target.value)}
                 rows={6}
-                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[13px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
+                className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-[15px] text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:border-accent resize-none"
               />
               <button
                 onClick={savePrompt}
-                className="mt-2 px-4 py-2 bg-accent text-white rounded-lg text-[12px] font-medium hover:opacity-90"
+                className="mt-2 px-4 py-2 bg-accent text-white rounded-lg text-[14px] font-medium hover:opacity-90"
               >
                 Save
               </button>
             </div>
           ) : (
-            <div className="bg-surface-2 border border-border rounded-lg p-3 text-[12px] text-text-secondary max-h-32 overflow-y-auto whitespace-pre-wrap">
+            <div className="bg-surface-2 border border-border rounded-lg p-3 text-[14px] text-text-secondary max-h-32 overflow-y-auto whitespace-pre-wrap">
               {writingPrompt}
             </div>
           )}
@@ -232,7 +232,7 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
 
       <button
         onClick={onNext}
-        className="w-full py-3 bg-accent text-white rounded-xl text-[14px] font-medium hover:opacity-90"
+        className="w-full py-3 bg-accent text-white rounded-xl text-[16px] font-medium hover:opacity-90"
       >
         Looks good, continue
       </button>

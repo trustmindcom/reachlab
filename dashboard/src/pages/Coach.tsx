@@ -202,7 +202,7 @@ export default function Coach() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`relative px-5 py-2.5 text-[13px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
+            className={`relative px-5 py-2.5 text-[15px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
               tab === t.key
                 ? "text-text-primary font-semibold"
                 : "text-text-secondary hover:text-text-primary"
@@ -210,7 +210,7 @@ export default function Coach() {
           >
             {t.label}
             {t.count != null && t.count > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-semibold bg-accent/12 text-accent">
+              <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[13px] font-semibold bg-accent/12 text-accent">
                 {t.count}
               </span>
             )}
@@ -221,7 +221,7 @@ export default function Coach() {
         ))}
         <div className="ml-auto py-2.5 flex items-center gap-3">
           {status && (
-            <span className="text-[11px] text-text-muted">
+            <span className="text-[13px] text-text-muted">
               {status.running
                 ? "Analyzing..."
                 : status.last_run
@@ -237,7 +237,7 @@ export default function Coach() {
           )}
           <button
             onClick={() => setCoachChatOpen(true)}
-            className="px-3 py-1.5 bg-accent/10 text-accent text-[12px] font-medium rounded-lg hover:bg-accent/20 transition-colors"
+            className="px-3 py-1.5 bg-accent/10 text-accent text-[14px] font-medium rounded-lg hover:bg-accent/20 transition-colors"
           >
             Chat with Coach
           </button>
@@ -257,23 +257,23 @@ export default function Coach() {
           {/* Post Retro — auto-detected prompt improvements */}
           {pendingRetros.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider mb-2">
+              <h2 className="text-[15px] font-semibold text-text-primary uppercase tracking-wider mb-2">
                 Post Retro
               </h2>
-              <p className="text-[12px] text-text-muted mb-4">
+              <p className="text-[14px] text-text-muted mb-4">
                 Based on changes you made between AI drafts and what you published
               </p>
               {pendingRetros.map((retro) => (
                 <div key={retro.generation_id} className="bg-surface-1 rounded-xl border border-border p-5 mb-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-[12px] text-text-muted">{formatTimeAgo(retro.retro_at)}</span>
-                    <span className="text-[11px] text-text-muted">Draft #{retro.generation_id}</span>
+                    <span className="text-[14px] text-text-muted">{formatTimeAgo(retro.retro_at)}</span>
+                    <span className="text-[13px] text-text-muted">Draft #{retro.generation_id}</span>
                   </div>
-                  <p className="text-[13px] text-text-primary mb-4 leading-relaxed">{retro.analysis.summary}</p>
+                  <p className="text-[15px] text-text-primary mb-4 leading-relaxed">{retro.analysis.summary}</p>
 
                   {retro.analysis.prompt_edits && retro.analysis.prompt_edits.length > 0 && (
                     <div className="space-y-3">
-                      <span className="text-[11px] uppercase tracking-wider text-text-muted font-medium">
+                      <span className="text-[13px] uppercase tracking-wider text-text-muted font-medium">
                         Suggested prompt updates
                       </span>
                       {retro.analysis.prompt_edits.map((edit, i) => {
@@ -283,20 +283,20 @@ export default function Coach() {
                           <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
-                                <p className="text-[12px] text-text-muted mb-2">{edit.reason}</p>
+                                <p className="text-[14px] text-text-muted mb-2">{edit.reason}</p>
                                 {edit.remove_text && (
-                                  <div className="text-[12px] bg-negative/5 text-negative/80 rounded px-2 py-1 mb-1 font-mono">
+                                  <div className="text-[14px] bg-negative/5 text-negative/80 rounded px-2 py-1 mb-1 font-mono">
                                     − {edit.remove_text}
                                   </div>
                                 )}
-                                <div className="text-[12px] bg-positive/5 text-positive/80 rounded px-2 py-1 font-mono">
+                                <div className="text-[14px] bg-positive/5 text-positive/80 rounded px-2 py-1 font-mono">
                                   + {edit.add_text}
                                 </div>
                               </div>
                               <button
                                 onClick={() => handleApplyRetroEdit(retro.generation_id, i, edit)}
                                 disabled={applied}
-                                className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
+                                className={`shrink-0 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                                   applied
                                     ? "bg-positive/10 text-positive border border-positive/20"
                                     : "bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20"
