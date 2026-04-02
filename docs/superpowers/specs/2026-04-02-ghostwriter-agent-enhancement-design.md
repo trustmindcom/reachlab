@@ -27,13 +27,15 @@ The ghostwriter chat is stateless across turns — tool call/result messages are
 
 **Pattern:** Follows Claude Code's approach — the messages array IS the state. Full Anthropic message format (tool_use + tool_result content blocks) is preserved.
 
-**Storage:** The `generation_messages` table gets a new nullable column `tool_blocks_json` (TEXT) that stores the raw Anthropic content blocks for that turn as JSON. Existing messages get NULL (backward compatible).
+**Storage:** The `generation_messages` table gets a new nullable column `tool_blocks_json` (TEXT). Currently `ghostwriterTurn()` persists one assistant message (the final text response) — intermediate tool_use/tool_result pairs are ephemeral in `apiMessages`. The change: after the agent loop completes, serialize ALL intermediate content blocks (assistant tool_use messages + user tool_result messages) into the `tool_blocks_json` field on the assistant's message row. This is a single JSON blob per turn containing the full tool chain.
 
-**Replay:** When building the messages array for an API call, tool blocks are reconstructed from DB alongside chat messages. The full conversation including tool interactions is sent to the model.
+**Replay:** When building the messages array for the next API call, for each assistant message row that has `tool_blocks_json`, expand it back into the proper alternating assistant(tool_use)/user(tool_result) message pairs before the final assistant text message. Messages with NULL `tool_blocks_json` (legacy) replay as plain text only.
+
+**Microcompaction constant:** `const CLEARED_TOOL_RESULT = "[Old tool result content cleared]"` — defined once, used during compaction and recognized during replay to avoid the model interpreting it as real content.
 
 **Microcompaction:** Before each API call, apply Claude Code's compaction heuristic:
 - Keep last 5 turns fully hydrated (all tool_use + tool_result content intact)
-- Older turns: preserve tool_use blocks (knowing what it searched for is cheap context) but replace tool_result content with `[Old tool result content cleared]`
+- Older turns: preserve tool_use blocks (knowing what it searched for is cheap context) but replace tool_result content with the `CLEARED_TOOL_RESULT` constant
 - This keeps token usage bounded while preserving the reasoning chain
 
 ### 2. New Tools
@@ -41,6 +43,10 @@ The ghostwriter chat is stateless across turns — tool call/result messages are
 #### `web_search`
 
 Calls the existing `searchWithSonarPro()` function from `server/src/ai/perplexity.ts`. Takes a search query, returns synthesized content + source citations.
+
+**Dispatcher change:** `executeGhostwriterTool()` currently takes `(db, personaId, toolName, input, state)`. The `web_search` tool needs an `AiLogger` instance (required by `searchWithSonarPro`). Add `logger: AiLogger` to the dispatcher signature. This also benefits future tools that need logging.
+
+**Search prompt:** `searchWithSonarPro()` uses `buildSearchPrompt()` which adds research-oriented framing. For chat-context queries, create a lighter `buildChatSearchPrompt()` that passes the query more directly without the "find practitioner discussions" framing.
 
 The agent can call this multiple times per turn (up to the 10-iteration cap) to iteratively research — search, evaluate results, refine query, search again. This mirrors the Claude Code pattern where the model naturally iterates with search tools.
 
@@ -64,7 +70,13 @@ Sources are included in the agent's chat message but NOT in the draft text.
 
 Fetches a specific URL, extracts article content using Mozilla Readability + jsdom, returns clean text + title. For when the agent sees a specific source in search results it wants to read in full.
 
-Falls back to simple tag-stripping for non-article pages.
+Falls back to regex tag-stripping (`text.replace(/<[^>]*>/g, '')`) for non-article pages where Readability can't extract an article.
+
+**Guards:**
+- 15-second fetch timeout
+- 1MB max response body (truncate beyond that)
+- Block localhost/private IP ranges (10.x, 192.168.x, 127.x) to prevent SSRF
+- Truncate extracted text to 8,000 characters before returning to model
 
 ```typescript
 {
@@ -85,6 +97,8 @@ Falls back to simple tag-stripping for non-article pages.
 #### `add_or_update_rule`
 
 Creates a new writing rule or updates an existing one by ID. Rules created by the agent are marked with `origin: 'auto'`. Before adding, the agent should call `get_rules` to check for existing rules that cover the same territory — broaden an existing rule rather than creating duplicates.
+
+**New DB function:** `updateRule(db, ruleId, { rule_text, example_text })` — updates an existing rule's text fields. The current codebase only has `insertSingleRule()` and `replaceAllRules()` (bulk). The new function handles single-rule updates for the agent.
 
 ```typescript
 {
@@ -127,7 +141,7 @@ Added to the ghostwriter system prompt. Governs how the agent handles correction
 
 ### 4. Frontend Changes
 
-**Search status indicator:** When the agent is using web_search or fetch_url, show status text in the typing indicator area ("Searching the web..." / "Reading article..."). The existing `tools_used` field in the API response already carries this info. Add a lightweight mechanism to surface status during the turn (not just after).
+**Search status indicator:** When the agent is using web_search or fetch_url, show status text in the typing indicator area ("Searching the web..." / "Reading article..."). The current `/api/generate/ghostwrite` endpoint is request/response (no streaming). For v1, surface tool usage after the fact via the `tools_used` array in the response — the frontend can show "Searched the web" / "Read 2 articles" as a subtitle on the assistant message. Streaming status during the turn is a future enhancement that would require SSE on the ghostwrite endpoint.
 
 **Rule additions in chat:** No special UI — the agent mentions rule additions in its chat message naturally.
 
@@ -147,6 +161,14 @@ ALTER TABLE generation_rules ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual';
 
 No new tables. Both changes are backward compatible with defaults.
 
+**Type updates required:**
+- `GenerationRule` interface in `generate-queries.ts` — add `origin: string`
+- `GenRule` type in `dashboard/src/api/client.ts` — add `origin: string`
+- `insertSingleRule()` — accept optional `origin` parameter (default `'manual'`)
+- `replaceAllRules()` — preserve origin when bulk-replacing
+- Rules API GET endpoint — include `origin` in response objects
+- New `updateRule(db, ruleId, fields)` function for single-rule updates
+
 ### 6. Files Modified
 
 | File | Change |
@@ -156,7 +178,9 @@ No new tables. Both changes are backward compatible with defaults.
 | `server/src/routes/generate.ts` | Ghostwrite route stores/replays tool blocks |
 | `server/src/db/generate-queries.ts` | Queries for rule origin, tool block storage/retrieval |
 | `dashboard/src/pages/generate/GhostwriterChat.tsx` | Search status indicator during turns |
-| Rules settings UI component | Auto badge on auto-generated rules |
+| `dashboard/src/pages/generate/Rules.tsx` | Auto badge on auto-generated rules |
+| `dashboard/src/pages/generate/components/RuleSection.tsx` | Auto badge rendering |
+| `dashboard/src/api/client.ts` | Update `GenRule` type with `origin` field |
 | `server/src/db/migrations/` | New migration for column additions |
 
 **New dependencies:** `@mozilla/readability`, `jsdom`
