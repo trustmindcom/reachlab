@@ -149,7 +149,7 @@ export async function executeCoachTool(
       // Days back filter
       if (typeof input.days_back === "number" && input.days_back > 0) {
         conditions.push("p.published_at > datetime('now', '-' || ? || ' days')");
-        params.push(input.days_back);
+        params.push(Math.floor(input.days_back));
       }
 
       // Sort

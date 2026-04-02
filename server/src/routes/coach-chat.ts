@@ -98,7 +98,7 @@ export function registerCoachChatRoutes(app: FastifyInstance, db: Database.Datab
     const personaId = getPersonaId(request);
     const { title } = validateBody(createSessionBody, request.body);
     const id = createCoachSession(db, personaId, title);
-    return { id };
+    return { session_id: id };
   });
 
   // ── Get messages for a session ─────────────────────────

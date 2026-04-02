@@ -5,6 +5,7 @@ import { getEditorialPrinciples } from "../db/generate-queries.js";
 import { PLATFORM_KNOWLEDGE } from "./platform-knowledge.js";
 import type { AiLogger } from "./logger.js";
 import { SHARED_TOOLS, executeSharedTool } from "./shared-tools.js";
+import { computeWeightedER } from "./stats-report.js";
 
 // ── Per-request state ──────────────────────────────────────
 
@@ -176,10 +177,10 @@ export async function executeGhostwriterTool(
         if (limit > 10) limit = 10;
 
         const sql = `SELECT p.id, p.content_preview, p.full_text, p.published_at,
-                        m.impressions, m.engagement_rate, m.reactions, m.comments, m.reposts, m.saves
+                        m.impressions, m.reactions, m.comments, m.reposts, m.saves, m.sends
                  FROM posts p
                  LEFT JOIN (
-                   SELECT post_id, impressions, engagement_rate, reactions, comments, reposts, saves,
+                   SELECT post_id, impressions, reactions, comments, reposts, saves, sends,
                           ROW_NUMBER() OVER (PARTITION BY post_id ORDER BY scraped_at DESC) as rn
                    FROM post_metrics
                  ) m ON m.post_id = p.id AND m.rn = 1
@@ -195,11 +196,11 @@ export async function executeGhostwriterTool(
           full_text: string | null;
           published_at: string | null;
           impressions: number | null;
-          engagement_rate: number | null;
           reactions: number | null;
           comments: number | null;
           reposts: number | null;
           saves: number | null;
+          sends: number | null;
         }>;
 
         if (rows.length === 0) return `No posts found matching "${query}".`;
@@ -208,9 +209,12 @@ export async function executeGhostwriterTool(
           .map((r, i) => {
             const text = r.full_text || r.content_preview || "(no text)";
             const truncated = text.length > 300 ? text.slice(0, 300) + "..." : text;
+            const wer = r.impressions && r.impressions > 0
+              ? computeWeightedER(r.reactions ?? 0, r.comments ?? 0, r.reposts ?? 0, r.saves, r.sends, r.impressions)
+              : null;
             const metrics = [
               r.impressions != null ? `${r.impressions} impressions` : null,
-              r.engagement_rate != null ? `${r.engagement_rate.toFixed(1)}% engagement` : null,
+              wer != null ? `${wer.toFixed(1)}% weighted ER` : null,
               r.reactions != null ? `${r.reactions} reactions` : null,
               r.comments != null ? `${r.comments} comments` : null,
             ]
