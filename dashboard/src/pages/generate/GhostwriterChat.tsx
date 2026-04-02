@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  tools_used?: string[];
 }
 
 interface GhostwriterChatProps {
@@ -109,7 +110,7 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
           ? prev.originalDraft
           : (res.draft ?? prev.originalDraft),
         finalDraft: res.draft ?? prev.finalDraft,
-        chatMessages: [...prev.chatMessages, { role: "assistant", content: res.message }],
+        chatMessages: [...prev.chatMessages, { role: "assistant", content: res.message, tools_used: res.tools_used }],
       }));
       setChatInput("");
     } catch (err: any) {
@@ -190,6 +191,19 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
                 {msg.content.split("\n").map((line, j) => (
                   <p key={j} className={j > 0 ? "mt-1.5" : ""}>{line}</p>
                 ))}
+                {msg.role === "assistant" && msg.tools_used && msg.tools_used.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {msg.tools_used.includes("web_search") && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gen-bg-3 text-gen-text-3 border border-gen-border-1">Searched the web</span>
+                    )}
+                    {msg.tools_used.includes("fetch_url") && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gen-bg-3 text-gen-text-3 border border-gen-border-1">Read article</span>
+                    )}
+                    {msg.tools_used.includes("add_or_update_rule") && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gen-bg-3 text-gen-text-3 border border-gen-border-1">Updated rules</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
