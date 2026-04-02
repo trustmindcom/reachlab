@@ -109,12 +109,27 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
   // ── Source Discovery ─────────────────────────────────────
 
   app.post("/api/sources/discover", async (request) => {
+    const personaId = getPersonaId(request);
     const { topics } = validateBody(sourceDiscoverBody, request.body);
 
     // Fall back to taxonomy topics if none provided
     let topicList = topics;
     if (!topicList || topicList.length === 0) {
       topicList = getTaxonomyNames(dbc);
+    }
+
+    // Fall back to writing_topics from author profile (e.g. after voice interview)
+    if (topicList.length === 0) {
+      const { getAuthorProfile } = await import("../db/profile-queries.js");
+      const profile = getAuthorProfile(db, personaId);
+      if (profile?.profile_json) {
+        try {
+          const parsed = JSON.parse(profile.profile_json);
+          if (Array.isArray(parsed.writing_topics) && parsed.writing_topics.length > 0) {
+            topicList = parsed.writing_topics;
+          }
+        } catch { /* ignore parse errors */ }
+      }
     }
 
     if (topicList.length === 0) {
