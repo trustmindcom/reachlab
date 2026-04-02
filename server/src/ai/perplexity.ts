@@ -22,14 +22,15 @@ export function parseSonarResponse(json: any): SonarResult {
 
 export async function searchWithSonarPro(
   topic: string,
-  logger: AiLogger
+  logger: AiLogger,
+  customPrompt?: string
 ): Promise<SonarResult> {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
   if (!apiKey) {
     throw new Error("TRUSTMIND_LLM_API_KEY is required for web research");
   }
 
-  const searchPrompt = buildSearchPrompt(topic);
+  const searchPrompt = customPrompt ?? buildSearchPrompt(topic);
   const start = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
