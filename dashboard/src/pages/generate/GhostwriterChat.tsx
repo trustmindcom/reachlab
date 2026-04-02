@@ -1,11 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "../../api/client";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  tools_used?: string[];
-}
+import AgentChat, { type ChatMessage } from "../../components/AgentChat";
 
 interface GhostwriterChatProps {
   gen: {
@@ -23,7 +18,6 @@ interface GhostwriterChatProps {
 }
 
 export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBack, onRetro }: GhostwriterChatProps) {
-  const [chatInput, setChatInput] = useState("");
   const [localDraft, setLocalDraft] = useState(gen.finalDraft);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -32,7 +26,6 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
   const localDirtyRef = useRef(false);
   const serverDraftRef = useRef(gen.finalDraft);
   const startedRef = useRef(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -72,11 +65,6 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
     }
   }, [localDraft]);
 
-  // ── Scroll chat to bottom ──
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [gen.chatMessages, loading]);
-
   // ── Draft editing marks dirty flag ──
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setLocalDraft(e.target.value);
@@ -112,7 +100,6 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
         finalDraft: res.draft ?? prev.finalDraft,
         chatMessages: [...prev.chatMessages, { role: "assistant", content: res.message, tools_used: res.tools_used }],
       }));
-      setChatInput("");
     } catch (err: any) {
       setError(err.message ?? "Failed. Try again.");
       // Rollback optimistic user message
@@ -153,15 +140,6 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
     window.open("https://www.linkedin.com/feed/?shareActive=true", "_blank");
   };
 
-  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (chatInput.trim() && !loading) {
-        sendMessage(chatInput);
-      }
-    }
-  };
-
   const wordCount = localDraft.split(/\s+/).filter(Boolean).length;
   const isFirstTurn = gen.chatMessages.length === 0;
   const hasAssistantMessage = gen.chatMessages.some(m => m.role === "assistant");
@@ -170,58 +148,6 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
     <div className="flex flex-col lg:flex-row min-h-[70vh] gap-5">
       {/* ── Left panel: Chat ── */}
       <div className="w-full lg:w-1/2 flex flex-col min-h-0">
-        {/* Chat messages */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-3" style={{ maxHeight: "calc(70vh - 80px)" }}>
-          {gen.chatMessages.map((msg, i) => (
-            <div
-              key={i}
-              className={
-                msg.role === "user"
-                  ? "flex justify-end"
-                  : "flex justify-start"
-              }
-            >
-              <div
-                className={
-                  msg.role === "user"
-                    ? "max-w-[85%] px-4 py-2.5 rounded-2xl rounded-br-md bg-gen-accent/15 text-gen-text-1 text-[13px] leading-relaxed"
-                    : "max-w-[85%] px-4 py-2.5 rounded-2xl rounded-bl-md bg-gen-bg-2 border border-gen-border-1 text-gen-text-2 text-[13px] leading-relaxed"
-                }
-              >
-                {msg.content.split("\n").map((line, j) => (
-                  <p key={j} className={j > 0 ? "mt-1.5" : ""}>{line}</p>
-                ))}
-                {msg.role === "assistant" && msg.tools_used && msg.tools_used.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {msg.tools_used.includes("web_search") && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gen-bg-3 text-gen-text-3 border border-gen-border-1">Searched the web</span>
-                    )}
-                    {msg.tools_used.includes("fetch_url") && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gen-bg-3 text-gen-text-3 border border-gen-border-1">Read article</span>
-                    )}
-                    {msg.tools_used.includes("add_or_update_rule") && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gen-bg-3 text-gen-text-3 border border-gen-border-1">Updated rules</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Typing indicator */}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-gen-bg-2 border border-gen-border-1 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-gen-text-3 animate-pulse" style={{ animationDelay: "0ms" }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-gen-text-3 animate-pulse" style={{ animationDelay: "150ms" }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-gen-text-3 animate-pulse" style={{ animationDelay: "300ms" }} />
-              </div>
-            </div>
-          )}
-
-          <div ref={chatEndRef} />
-        </div>
-
         {/* Error banner */}
         {error && (
           <div className="mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[12px] text-red-400 flex items-center justify-between">
@@ -232,25 +158,12 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
           </div>
         )}
 
-        {/* Chat input */}
-        <div className="flex gap-2 mt-auto">
-          <textarea
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={handleChatKeyDown}
-            disabled={loading}
-            placeholder="Give feedback, ask questions, or request changes..."
-            rows={1}
-            className="flex-1 bg-gen-bg-2 border border-gen-border-2 rounded-lg px-3 py-2.5 text-[13px] text-gen-text-1 placeholder:text-gen-text-3 resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border disabled:opacity-50"
-          />
-          <button
-            onClick={() => { if (chatInput.trim() && !loading) sendMessage(chatInput); }}
-            disabled={!chatInput.trim() || loading}
-            className="px-4 py-2 bg-gen-accent text-white text-[12px] font-medium rounded-lg transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:bg-gen-bg-3 disabled:text-gen-text-3 self-end"
-          >
-            {loading ? "..." : "Send"}
-          </button>
-        </div>
+        <AgentChat
+          messages={gen.chatMessages}
+          onSend={sendMessage}
+          loading={loading}
+          placeholder="Give feedback, ask questions, or request changes..."
+        />
       </div>
 
       {/* ── Right panel: Editable draft ── */}
