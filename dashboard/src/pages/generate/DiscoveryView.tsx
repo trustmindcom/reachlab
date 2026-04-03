@@ -443,20 +443,20 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                       onClick={() => expandCard(i)}
                       className="relative rounded-xl bg-gen-bg-1 border border-gen-border-1 p-[18px_20px_16px] cursor-pointer hover:border-gen-border-2 transition-[border-color,box-shadow] duration-300 ease-out"
                     >
-                      <span
-                        className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-2.5"
-                        style={{ background: tagColor.bg, color: tagColor.text }}
-                      >
-                        {topic.category_tag}
-                      </span>
                       <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
                         {topic.label}
                       </div>
-                      <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-2 mb-3">
+                      <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-3 mb-3">
                         {topic.summary}
                       </div>
-                      <div className="flex items-center gap-2 text-[14px]">
+                      <div className="flex items-center justify-between text-[13px]">
                         <span className="text-gen-text-3">{domain}</span>
+                        <span
+                          className="text-[11px] font-medium px-1.5 py-0.5 rounded-md"
+                          style={{ background: tagColor.bg, color: tagColor.text }}
+                        >
+                          {topic.category_tag}
+                        </span>
                       </div>
                     </div>
                   );
