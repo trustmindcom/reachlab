@@ -723,10 +723,10 @@ Return JSON only:
 
   app.post("/api/generate/history/:id/discard", async (request, reply) => {
     const { id } = request.params as { id: string };
+    const personaId = getPersonaId(request);
     const gen = getGeneration(db, Number(id));
-    if (!gen) {
-      return reply.status(404).send({ error: "Generation not found" });
-    }
+    if (!gen) return reply.status(404).send({ error: "Generation not found" });
+    if (gen.persona_id !== personaId) return reply.status(403).send({ error: "Not authorized" });
     updateGeneration(db, Number(id), { status: "discarded" });
     return { ok: true };
   });

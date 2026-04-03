@@ -102,12 +102,14 @@ function extractDomain(url: string): string {
 }
 
 // ── FLIP animation helpers ────────────────────────────────
-type RectMap = Map<HTMLElement, DOMRect>;
+// Key by data-index (stable across React re-renders) not by HTMLElement ref
+type RectMap = Map<string, DOMRect>;
 
 function getCardRects(gridEl: HTMLElement): RectMap {
   const rects: RectMap = new Map();
   gridEl.querySelectorAll<HTMLElement>("[data-card]").forEach((card) => {
-    rects.set(card, card.getBoundingClientRect());
+    const key = card.getAttribute("data-index") ?? "";
+    if (key) rects.set(key, card.getBoundingClientRect());
   });
   return rects;
 }
@@ -130,7 +132,8 @@ function flipAnimate(
   const expandedIndex = expandedEl ? [...cards].indexOf(expandedEl) : -1;
 
   cards.forEach((card, i) => {
-    const oldRect = oldRects.get(card);
+    const key = card.getAttribute("data-index") ?? "";
+    const oldRect = key ? oldRects.get(key) : undefined;
     if (!oldRect) return;
     const newRect = card.getBoundingClientRect();
 
@@ -187,10 +190,13 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
   const gridRef = useRef<HTMLDivElement>(null);
   const expandPanelRef = useRef<HTMLDivElement>(null);
+  const discoverStartedRef = useRef(false);
 
-  // Auto-discover on mount: use daily cache if available
+  // Auto-discover on mount: use daily cache if available (StrictMode-safe)
   useEffect(() => {
+    if (discoverStartedRef.current) return;
     if (!gen.discoveryTopics && !gen.stories.length && !loading) {
+      discoverStartedRef.current = true;
       const cached = getCachedTopics();
       if (cached) {
         setGen((prev: any) => ({

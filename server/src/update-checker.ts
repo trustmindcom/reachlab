@@ -1,4 +1,7 @@
-import { execSync } from "child_process";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 export interface UpdateStatus {
   available: boolean;
@@ -16,17 +19,22 @@ let currentStatus: UpdateStatus = {
   last_checked: null,
 };
 
-function git(cmd: string): string {
+async function git(cmd: string): Promise<string> {
   try {
-    return execSync(`git ${cmd}`, { encoding: "utf-8", timeout: 30_000, cwd: getRepoRoot() }).trim();
+    const { stdout } = await execAsync(`git ${cmd}`, { encoding: "utf-8", timeout: 30_000, cwd: await getRepoRoot() });
+    return stdout.trim();
   } catch {
     return "";
   }
 }
 
-function getRepoRoot(): string {
+let _repoRoot: string | null = null;
+async function getRepoRoot(): Promise<string> {
+  if (_repoRoot) return _repoRoot;
   try {
-    return execSync("git rev-parse --show-toplevel", { encoding: "utf-8", timeout: 5000 }).trim();
+    const { stdout } = await execAsync("git rev-parse --show-toplevel", { encoding: "utf-8", timeout: 5000 });
+    _repoRoot = stdout.trim();
+    return _repoRoot;
   } catch {
     return process.cwd();
   }
@@ -34,24 +42,24 @@ function getRepoRoot(): string {
 
 export async function checkForUpdates(): Promise<UpdateStatus> {
   try {
-    git("fetch origin main --quiet");
+    await git("fetch origin main --quiet");
 
-    const localHead = git("rev-parse HEAD");
-    const remoteHead = git("rev-parse origin/main");
+    const localHead = await git("rev-parse HEAD");
+    const remoteHead = await git("rev-parse origin/main");
 
     if (!localHead || !remoteHead || localHead === remoteHead) {
       currentStatus = { available: false, can_auto_update: false, behind_count: 0, message: null, last_checked: new Date().toISOString() };
       return currentStatus;
     }
 
-    const behindCount = parseInt(git("rev-list --count HEAD..origin/main") || "0", 10);
+    const behindCount = parseInt(await git("rev-list --count HEAD..origin/main") || "0", 10);
     if (behindCount === 0) {
       currentStatus = { available: false, can_auto_update: false, behind_count: 0, message: null, last_checked: new Date().toISOString() };
       return currentStatus;
     }
 
-    const dirty = git("status --porcelain");
-    const aheadCount = parseInt(git("rev-list --count origin/main..HEAD") || "0", 10);
+    const dirty = await git("status --porcelain");
+    const aheadCount = parseInt(await git("rev-list --count origin/main..HEAD") || "0", 10);
 
     if (dirty || aheadCount > 0) {
       currentStatus = {
@@ -65,7 +73,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     }
 
     // Clean and not diverged — auto-pull
-    const pullResult = git("pull --ff-only origin main");
+    const pullResult = await git("pull --ff-only origin main");
     if (pullResult.includes("Already up to date") || pullResult.includes("Updating")) {
       currentStatus = {
         available: false,
