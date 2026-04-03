@@ -11,13 +11,9 @@ import { Line } from "react-chartjs-2";
 import { api, type Post, type MetricSnapshot } from "../api/client";
 import { useToast } from "../components/Toast";
 import { chartColors, chartGrid, chartTick } from "../lib/chartTheme";
+import { fmt } from "../utils/format";
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip);
-
-function fmt(n: number | null | undefined): string {
-  if (n == null) return "--";
-  return n.toLocaleString();
-}
 
 const contentTypes = ["all", "text", "image", "video", "carousel", "article"];
 const sortOptions = [

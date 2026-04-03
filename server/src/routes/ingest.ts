@@ -390,8 +390,9 @@ export function registerIngestRoutes(
 
   app.get(`${prefix}/posts/top-examples`, async (request) => {
     const personaId = getPersonaId(request);
-    const q = request.query as any;
-    const limit = q.limit ? Number(q.limit) : 10;
+    const q = request.query as Record<string, string | undefined>;
+    const parsed = q.limit ? parseInt(q.limit, 10) : 10;
+    const limit = Number.isInteger(parsed) && parsed >= 1 && parsed <= 100 ? parsed : 10;
 
     return { posts: getTopExamplePosts(db, personaId, limit) };
   });

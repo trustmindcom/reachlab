@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { backupDatabase } from "./backup.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +51,11 @@ export function initDatabase(dbPath: string): Database.Database {
     db.prepare("DELETE FROM ai_runs WHERE started_at < datetime('now', '-14 days')").run();
   });
   try { pruneOldRuns(); } catch { /* ignore if tables don't exist yet */ }
+
+  // Daily backup after init
+  try { backupDatabase(dbPath); } catch (err: any) {
+    console.error("[Backup] Failed:", err.message);
+  }
 
   return db;
 }

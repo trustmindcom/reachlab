@@ -9,6 +9,7 @@ import type {
   GhostwriteResponse,
   GenRulesResponse,
   GenHistoryResponse,
+  GenHistoryDetail,
   GenCoachingSyncResponse,
   GenCoachingInsight,
   GenSource,
@@ -151,13 +152,13 @@ export const generateApi = {
   // ── Generate History ──────────────────────────────────────
 
   getActiveGeneration: () =>
-    getUnscoped<{ generation: any | null }>("/generate/active"),
+    getUnscoped<{ generation: GenHistoryDetail | null }>("/generate/active"),
 
   generateHistory: (status = "all", offset = 0, limit = 20) =>
     getUnscoped<GenHistoryResponse>(`/generate/history?status=${status}&offset=${offset}&limit=${limit}`),
 
   generateHistoryDetail: (id: number) =>
-    getUnscoped<any>(`/generate/history/${id}`),
+    getUnscoped<GenHistoryDetail>(`/generate/history/${id}`),
 
   generateDiscard: (id: number) =>
     fetch(withPersonaId(`/api/generate/history/${id}/discard`), { method: "POST" }).then((r) => {
@@ -225,7 +226,7 @@ export const generateApi = {
     }),
 
   generateCoachingHistory: () =>
-    getUnscoped<{ syncs: any[] }>("/generate/coaching/history"),
+    getUnscoped<{ syncs: Array<{ id: number; created_at: string; changes_count: number }> }>("/generate/coaching/history"),
 
   generateCoachingInsights: () =>
     getUnscoped<{ insights: GenCoachingInsight[] }>("/generate/coaching/insights"),

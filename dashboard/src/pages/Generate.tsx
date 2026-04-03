@@ -14,6 +14,7 @@ import {
   type GenCoachingInsight,
   type DiscoveryTopic,
   type GenCoachCheckQuality,
+  type GenHistoryDetail,
 } from "../api/client";
 
 export interface GenerationState {
@@ -72,7 +73,7 @@ interface RestoreResult {
   step: 1 | 2 | 3;
 }
 
-async function restoreGeneration(data: any): Promise<RestoreResult | null> {
+async function restoreGeneration(data: GenHistoryDetail): Promise<RestoreResult | null> {
   let drafts: GenDraft[];
   let selectedIndices: number[];
   let qualityGate: GenCoachCheckQuality | null;
@@ -112,7 +113,7 @@ async function restoreGeneration(data: any): Promise<RestoreResult | null> {
     finalDraft: data.final_draft ?? "",
     qualityGate,
     personalConnection: data.personal_connection ?? "",
-    draftLength: ["short", "medium", "long"].includes(data.draft_length) ? data.draft_length : "medium",
+    draftLength: data.draft_length && ["short", "medium", "long"].includes(data.draft_length) ? data.draft_length as "short" | "medium" | "long" : "medium",
     chatMessages,
     status: data.status,
   };

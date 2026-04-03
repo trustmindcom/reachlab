@@ -217,9 +217,10 @@ export function registerSettingsRoutes(
 
   // ── Sync health ──────────────────────────────────────────
 
-  app.get("/api/settings/sync-health", async () => {
-    const warning = getSetting(db, "sync_warning");
-    const staleWarning = getSetting(db, "sync_stale_warning");
+  app.get("/api/settings/sync-health", async (request) => {
+    const personaId = getPersonaId(request);
+    const warning = getSetting(db, `sync_warning:${personaId}`);
+    const staleWarning = getSetting(db, `sync_stale_warning:${personaId}`);
     const safeParse = (s: string | null) => {
       if (!s) return null;
       try { return JSON.parse(s); } catch { return null; }

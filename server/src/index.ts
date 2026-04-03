@@ -32,3 +32,11 @@ app.listen({ port: PORT, host: "0.0.0.0" }, (err, address) => {
   }
   console.log(`ReachLab server running at ${address}`);
 });
+
+const shutdown = async () => {
+  console.log("[Server] Shutting down gracefully...");
+  await app.close();
+  process.exit(0);
+};
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

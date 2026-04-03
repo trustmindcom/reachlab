@@ -46,8 +46,8 @@ const profileSchema = z.object({
 });
 
 export const ingestPayloadSchema = z.object({
-  posts: z.array(postSchema).optional(),
-  post_metrics: z.array(postMetricsSchema).optional(),
+  posts: z.array(postSchema).max(500).optional(),
+  post_metrics: z.array(postMetricsSchema).max(500).optional(),
   followers: followersSchema.optional(),
   profile: profileSchema.optional(),
   author_photo_url: z.string().url().optional(),

@@ -6,16 +6,7 @@ import DateRangeSelector, {
 } from "../components/DateRangeSelector";
 import { useToast } from "../components/Toast";
 import CoachChatPanel from "../components/CoachChatPanel";
-
-function fmt(n: number | null | undefined): string {
-  if (n == null) return "--";
-  return n.toLocaleString();
-}
-
-function fmtPct(n: number | null | undefined): string {
-  if (n == null) return "--";
-  return (n * 100).toFixed(1) + "%";
-}
+import { fmt, fmtPct } from "../utils/format";
 
 function pctChange(
   current: number | null | undefined,
@@ -107,21 +98,21 @@ export default function Overview() {
   return (
     <div className="space-y-5">
       {syncWarnings.length > 0 && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-sm text-yellow-200">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg px-4 py-3 text-sm text-warning">
           <span className="font-medium">Sync issue detected:</span>{" "}
           {syncWarnings[0].message}
         </div>
       )}
       {scrapeErrors.length > 0 && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-3">
-          <p className="text-amber-200 text-sm font-medium">Scraping Issues Detected</p>
+        <div className="bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
+          <p className="text-warning text-sm font-medium">Scraping Issues Detected</p>
           {scrapeErrors.map((e) => (
-            <p key={`${e.error_type}-${e.page_type}`} className="text-amber-200/70 text-xs mt-1">
+            <p key={`${e.error_type}-${e.page_type}`} className="text-warning/70 text-xs mt-1">
               {e.page_type} scraper failing since {new Date(e.first_seen_at).toLocaleDateString()}
               {e.consecutive_count > 1 && ` (${e.consecutive_count} consecutive failures)`}
             </p>
           ))}
-          <p className="text-amber-200/50 text-xs mt-2 [text-wrap:pretty]">
+          <p className="text-warning/50 text-xs mt-2 [text-wrap:pretty]">
             This usually means LinkedIn changed their page structure. The extension may need an update.
           </p>
         </div>

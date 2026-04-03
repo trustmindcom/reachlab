@@ -37,7 +37,7 @@ import { validateBody } from "./validation.js";
 import { scrapeErrorBody, syncStateBody } from "./schemas/app.js";
 
 export function buildApp(dbPath: string) {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: { level: process.env.NODE_ENV === "development" ? "info" : "warn" } });
   const db = initDatabase(dbPath);
 
   // Auto-create default user with API token on first run
@@ -58,7 +58,11 @@ export function buildApp(dbPath: string) {
     },
   });
 
-  // Bearer token validation — permissive during migration period
+  // Bearer token validation
+  // TODO: Enforce auth once dashboard and extension send Bearer tokens.
+  // Currently neither client sends Authorization headers (see dashboard/src/api/helpers.ts
+  // and extension/src/ — no Bearer token logic). Until that's wired up, unauthenticated
+  // requests must be allowed through to avoid breaking the app.
   app.addHook("preHandler", async (request, reply) => {
     // Skip auth for health check, token retrieval, and static files
     const path = request.url.split("?")[0];
@@ -67,8 +71,7 @@ export function buildApp(dbPath: string) {
 
     const auth = request.headers.authorization;
     if (!auth?.startsWith("Bearer ")) {
-      // During migration period: allow unauthenticated requests
-      // Remove this fallback when ready to enforce auth
+      // TODO: Return 401 here once clients send tokens
       return;
     }
 
@@ -112,16 +115,20 @@ export function buildApp(dbPath: string) {
     // Posts
     app.get(`${prefix}/posts`, async (request) => {
       const personaId = getPersonaId(request);
-      const q = request.query as any;
+      const q = request.query as Record<string, string | undefined>;
+      const validSortBy = new Set(["published_at", "impressions", "reactions", "comments", "engagement_rate"]);
+      const validSortOrder = new Set(["asc", "desc"]);
+      const rawOffset = q.offset ? parseInt(q.offset, 10) : undefined;
+      const rawLimit = q.limit ? parseInt(q.limit, 10) : undefined;
       return queryPosts(db, personaId, {
         content_type: q.content_type,
         since: q.since,
         until: q.until,
         min_impressions: q.min_impressions != null ? Number(q.min_impressions) : undefined,
-        sort_by: q.sort_by,
-        sort_order: q.sort_order,
-        offset: q.offset ? Number(q.offset) : undefined,
-        limit: q.limit ? Number(q.limit) : undefined,
+        sort_by: q.sort_by && validSortBy.has(q.sort_by) ? q.sort_by : undefined,
+        sort_order: q.sort_order && validSortOrder.has(q.sort_order) ? q.sort_order : undefined,
+        offset: rawOffset != null && Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : undefined,
+        limit: rawLimit != null && Number.isInteger(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 100) : undefined,
       });
     });
 
@@ -138,7 +145,7 @@ export function buildApp(dbPath: string) {
     // Overview KPIs
     app.get(`${prefix}/overview`, async (request) => {
       const personaId = getPersonaId(request);
-      const q = request.query as any;
+      const q = request.query as Record<string, string | undefined>;
       return queryOverview(db, personaId, {
         since: q.since,
         until: q.until,
@@ -179,10 +186,11 @@ export function buildApp(dbPath: string) {
       return { ok: true };
     });
 
-    app.post(`${prefix}/scrape-health/resolve`, async (request) => {
+    app.post(`${prefix}/scrape-health/resolve`, async (request, reply) => {
       const personaId = getPersonaId(request);
-      const { page_type } = request.query as { page_type: string };
-      resolveScrapeErrors(db, personaId, page_type);
+      const q = request.query as Record<string, string | undefined>;
+      if (!q.page_type) return reply.status(400).send({ error: "page_type is required" });
+      resolveScrapeErrors(db, personaId, q.page_type);
       return { ok: true };
     });
   }

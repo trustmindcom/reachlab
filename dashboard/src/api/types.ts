@@ -325,6 +325,27 @@ export interface GenHistoryResponse {
   total: number;
 }
 
+export interface GenHistoryDetail {
+  id: number;
+  research_id: number | null;
+  post_type: string;
+  selected_story_index: number | null;
+  drafts_json: string | null;
+  selected_draft_indices: string | null;
+  final_draft: string | null;
+  quality_gate_json: string | null;
+  combining_guidance: string | null;
+  personal_connection: string | null;
+  draft_length: string | null;
+  prompt_snapshot: string | null;
+  status: string;
+  persona_id: number;
+  created_at: string;
+  stories: GenStory[];
+  article_count: number;
+  source_count: number;
+}
+
 export interface GenCoachingChange {
   id: number;
   type: "new" | "updated" | "retire";

@@ -35,6 +35,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
   }, [filter]);
 
   const handleDiscard = async (id: number) => {
+    if (!confirm("Discard this generation?")) return;
     try {
       await api.generateDiscard(id);
       setItems((prev) => prev.filter((item) => item.id !== id));
@@ -44,6 +45,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
   };
 
   const handleDelete = async (id: number) => {
+    if (!confirm("Permanently delete this generation? This cannot be undone.")) return;
     try {
       await api.generateDelete(id);
       setItems((prev) => prev.filter((item) => item.id !== id));
