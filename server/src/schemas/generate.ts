@@ -4,6 +4,11 @@ export const researchBody = z.object({
   topic: z.string().trim().min(1),
   avoid: z.array(z.string().max(500)).max(50).optional(),
   sources: z.array(z.string()).optional(),
+  source_context: z.object({
+    summary: z.string().max(2000),
+    source_headline: z.string().max(500),
+    source_url: z.string().max(2000),
+  }).optional(),
 });
 
 export const draftsBody = z.object({

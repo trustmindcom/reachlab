@@ -605,13 +605,14 @@ export const api = {
       return r.json() as Promise<DiscoveryResponse>;
     }),
 
-  generateResearch: (topic: string, avoid?: string[]) =>
+  generateResearch: (topic: string, avoid?: string[], sourceContext?: { summary: string; source_headline: string; source_url: string }) =>
     fetch(withPersonaId(`/api/generate/research`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         topic,
         ...(avoid && avoid.length > 0 && { avoid }),
+        ...(sourceContext && { source_context: sourceContext }),
       }),
     }).then((r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);

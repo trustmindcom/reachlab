@@ -60,7 +60,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
   app.post("/api/generate/research", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { topic, avoid } = validateBody(researchBody, request.body);
+    const { topic, avoid, source_context } = validateBody(researchBody, request.body);
     const safeAvoid = Array.isArray(avoid) ? avoid.slice(0, 50).map((s) => String(s).slice(0, 200)) : undefined;
 
     const client = getClient();
@@ -68,7 +68,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await researchStories(client, db, logger, topic, safeAvoid);
+      const result = await researchStories(client, db, logger, topic, safeAvoid, source_context);
 
       const researchId = insertResearch(db, personaId, {
         post_type: "general",

@@ -39,6 +39,10 @@ export function initDatabase(dbPath: string): Database.Database {
      WHERE status = 'running' AND started_at < datetime('now', '-1 hour')`
   ).run();
 
+  // Auto-prune old AI logs and runs (>14 days)
+  db.prepare("DELETE FROM ai_logs WHERE created_at < datetime('now', '-14 days')").run();
+  db.prepare("DELETE FROM ai_runs WHERE started_at < datetime('now', '-14 days')").run();
+
   return db;
 }
 

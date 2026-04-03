@@ -98,6 +98,57 @@ export function parseSynthesizedStories(text: string): Story[] {
   return [];
 }
 
+// ── Anchored synthesis prompt (discovery topics) ──────────
+
+export function buildAnchoredSynthesisPrompt(
+  topic: string,
+  sourceContext: { summary: string; source_headline: string; source_url: string },
+  avoid?: string[]
+): string {
+  const avoidSection =
+    avoid && avoid.length > 0
+      ? `\n\nAvoid overlapping with these previously covered angles:\n${avoid.map((a) => `- ${a}`).join("\n")}`
+      : "";
+
+  // Split topic on " — " to extract user's angle if present
+  const dashIdx = topic.indexOf(" — ");
+  const userAngle = dashIdx > 0 ? topic.slice(dashIdx + 3).trim() : "";
+
+  return `You are creating 3 distinct LinkedIn story card angles based on a specific news story.
+
+## Original Story
+Headline: ${sourceContext.source_headline}
+Summary: ${sourceContext.summary}
+Source: ${sourceContext.source_url}
+
+## User's Take
+${userAngle || "No specific angle — explore different perspectives"}
+${avoidSection}
+
+Create exactly 3 story cards, each offering a DISTINCT take on this same story:
+1. One that aligns with the user's perspective (or the most obvious practitioner angle)
+2. One contrarian or unexpected angle
+3. One "stretch" that connects this story to a broader theme
+
+Each story card MUST be about THIS story, not a different article. The source and source_url for all 3 should reference the original story above.
+
+Return JSON (no markdown fences):
+{
+  "stories": [
+    {
+      "headline": "string — newsreader-style headline, max 12 words",
+      "summary": "string — 2-3 sentences, practitioner-focused",
+      "source": "string — publication or source name",
+      "source_url": "string — URL of the original story",
+      "age": "string — e.g. 'This week', 'Emerging', 'Ongoing'",
+      "tag": "string — topic category tag",
+      "angles": ["string — angle 1", "string — angle 2"],
+      "is_stretch": false
+    }
+  ]
+}`;
+}
+
 // ── Orchestration ──────────────────────────────────────────
 
 export async function researchStories(
@@ -105,8 +156,22 @@ export async function researchStories(
   db: Database.Database,
   logger: AiLogger,
   topic: string,
-  avoid?: string[]
+  avoid?: string[],
+  sourceContext?: { summary: string; source_headline: string; source_url: string }
 ): Promise<ResearchResult> {
+  // When source context is provided (discovery topic click), skip Sonar and use anchored synthesis
+  if (sourceContext) {
+    const stories = await synthesizeAnchored(client, logger, topic, sourceContext, avoid);
+    const finalStories = markStretch(stories.slice(0, 3));
+    return {
+      stories: finalStories,
+      article_count: 1,
+      source_count: 1,
+      sources_metadata: [{ name: safeHostname(sourceContext.source_url), url: sourceContext.source_url }],
+    };
+  }
+
+  // Manual topic input — existing Sonar flow
   const sonarResult = await searchWithSonarPro(topic, logger);
   const stories = await synthesizeTopic(client, logger, topic, sonarResult, avoid);
   const finalStories = markStretch(stories.slice(0, 3));
@@ -119,6 +184,37 @@ export async function researchStories(
 }
 
 // ── Internal helpers ───────────────────────────────────────
+
+async function synthesizeAnchored(
+  client: Anthropic,
+  logger: AiLogger,
+  topic: string,
+  sourceContext: { summary: string; source_headline: string; source_url: string },
+  avoid?: string[]
+): Promise<Story[]> {
+  const prompt = buildAnchoredSynthesisPrompt(topic, sourceContext, avoid);
+  const start = Date.now();
+  const response = await client.messages.create({
+    model: MODELS.HAIKU,
+    max_tokens: 2000,
+    system: "You are a content researcher. Return only valid JSON.",
+    messages: [{ role: "user", content: prompt }],
+  }, { timeout: 45_000, maxRetries: 2 });
+  const duration = Date.now() - start;
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  logger.log({
+    step: "anchored_synthesis",
+    model: MODELS.HAIKU,
+    input_messages: JSON.stringify([{ role: "user", content: prompt }]),
+    output_text: text,
+    tool_calls: null,
+    input_tokens: response.usage.input_tokens,
+    output_tokens: response.usage.output_tokens,
+    thinking_tokens: 0,
+    duration_ms: duration,
+  });
+  return parseSynthesizedStories(text);
+}
 
 async function synthesizeTopic(
   client: Anthropic,

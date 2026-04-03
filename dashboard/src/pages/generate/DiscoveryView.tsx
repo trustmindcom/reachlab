@@ -259,7 +259,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     handleDiscover();
   };
 
-  const handleTopicClick = async (label: string, guidance?: string) => {
+  const handleTopicClick = async (label: string, guidance?: string, sourceContext?: { summary: string; source_headline: string; source_url: string }) => {
     setLoading(true);
     setError(null);
     setActiveMessages(RESEARCH_MESSAGES);
@@ -269,7 +269,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     const avoid = gen.stories.map((s) => s.headline).filter(Boolean);
 
     try {
-      const res = await api.generateResearch(fullTopic, avoid.length > 0 ? avoid : undefined);
+      const res = await api.generateResearch(fullTopic, avoid.length > 0 ? avoid : undefined, sourceContext);
       setGen((prev: any) => ({
         ...prev,
         researchId: res.research_id,
@@ -537,7 +537,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                         />
                         <div className="flex items-center gap-3">
                           <button
-                            onClick={() => handleTopicClick(topic.label, guidanceText.trim() || undefined)}
+                            onClick={() => handleTopicClick(topic.label, guidanceText.trim() || undefined, { summary: topic.summary, source_headline: topic.source_headline, source_url: topic.source_url })}
                             className="px-7 py-3 bg-gen-accent text-white text-[15px] font-medium rounded-[10px] hover:opacity-90 transition-opacity duration-150"
                           >
                             Write about this
