@@ -98,12 +98,35 @@ export function parseSynthesizedStories(text: string): Story[] {
   return [];
 }
 
+// ── Angle classification prompt ───────────────────────────
+
+export function buildAngleClassificationPrompt(
+  sourceHeadline: string,
+  userAngle: string
+): string {
+  return `Classify whether this user angle requires additional web research beyond the source article context, or if it can be written from opinion/perspective alone.
+
+## Source Article
+${sourceHeadline}
+
+## User's Angle
+${userAngle}
+
+If the angle references specific external facts, data, companies, funding rounds, statistics, or claims that need verification — respond with RESEARCH_NEEDED and a focused search query to find that information.
+
+If the angle is an opinion, framing, perspective, or commentary that can be written from the existing article context — respond with SUFFICIENT.
+
+Return JSON only (no markdown fences):
+{"verdict": "RESEARCH_NEEDED" or "SUFFICIENT", "search_query": "targeted search query if RESEARCH_NEEDED, empty string if SUFFICIENT"}`;
+}
+
 // ── Anchored synthesis prompt (discovery topics) ──────────
 
 export function buildAnchoredSynthesisPrompt(
   topic: string,
   sourceContext: { summary: string; source_headline: string; source_url: string },
-  avoid?: string[]
+  avoid?: string[],
+  supplementalResearch?: { content: string; citations: string[] }
 ): string {
   const avoidSection =
     avoid && avoid.length > 0
@@ -114,6 +137,14 @@ export function buildAnchoredSynthesisPrompt(
   const dashIdx = topic.indexOf(" — ");
   const userAngle = dashIdx > 0 ? topic.slice(dashIdx + 3).trim() : "";
 
+  const researchSection = supplementalResearch
+    ? `\n\n## Additional Research\n${supplementalResearch.content}${
+        supplementalResearch.citations.length > 0
+          ? `\n\nAdditional sources:\n${supplementalResearch.citations.map((c, i) => `[${i + 1}] ${c}`).join("\n")}`
+          : ""
+      }`
+    : "";
+
   return `You are creating 3 distinct LinkedIn story card angles based on a specific news story.
 
 ## Original Story
@@ -123,7 +154,7 @@ Source: ${sourceContext.source_url}
 
 ## User's Take
 ${userAngle || "No specific angle — explore different perspectives"}
-${avoidSection}
+${researchSection}${avoidSection}
 
 Create exactly 3 story cards, each offering a DISTINCT take on this same story:
 1. One that aligns with the user's perspective (or the most obvious practitioner angle)
@@ -159,15 +190,35 @@ export async function researchStories(
   avoid?: string[],
   sourceContext?: { summary: string; source_headline: string; source_url: string }
 ): Promise<ResearchResult> {
-  // When source context is provided (discovery topic click), skip Sonar and use anchored synthesis
+  // Discovery topic click — classify whether angle needs additional research
   if (sourceContext) {
-    const stories = await synthesizeAnchored(client, logger, topic, sourceContext, avoid);
+    const dashIdx = topic.indexOf(" — ");
+    const userAngle = dashIdx > 0 ? topic.slice(dashIdx + 3).trim() : "";
+
+    let supplemental: { content: string; citations: string[] } | undefined;
+    const sourcesMetadata: Array<{ name: string; url?: string }> = [
+      { name: safeHostname(sourceContext.source_url), url: sourceContext.source_url },
+    ];
+
+    // Only classify if the user actually provided an angle
+    if (userAngle) {
+      const classification = await classifyAngle(client, logger, sourceContext.source_headline, userAngle);
+      if (classification.verdict === "RESEARCH_NEEDED" && classification.search_query) {
+        const sonarResult = await searchWithSonarPro(classification.search_query, logger);
+        supplemental = { content: sonarResult.content, citations: sonarResult.citations };
+        for (const url of sonarResult.citations) {
+          sourcesMetadata.push({ name: safeHostname(url), url });
+        }
+      }
+    }
+
+    const stories = await synthesizeAnchored(client, logger, topic, sourceContext, avoid, supplemental);
     const finalStories = markStretch(stories.slice(0, 3));
     return {
       stories: finalStories,
-      article_count: 1,
-      source_count: 1,
-      sources_metadata: [{ name: safeHostname(sourceContext.source_url), url: sourceContext.source_url }],
+      article_count: sourcesMetadata.length,
+      source_count: sourcesMetadata.length,
+      sources_metadata: sourcesMetadata,
     };
   }
 
@@ -185,14 +236,58 @@ export async function researchStories(
 
 // ── Internal helpers ───────────────────────────────────────
 
+async function classifyAngle(
+  client: Anthropic,
+  logger: AiLogger,
+  sourceHeadline: string,
+  userAngle: string
+): Promise<{ verdict: "RESEARCH_NEEDED" | "SUFFICIENT"; search_query: string }> {
+  const prompt = buildAngleClassificationPrompt(sourceHeadline, userAngle);
+  const start = Date.now();
+  const response = await client.messages.create({
+    model: MODELS.HAIKU,
+    max_tokens: 200,
+    system: "You are a classification assistant. Return only valid JSON.",
+    messages: [{ role: "user", content: prompt }],
+  }, { timeout: 15_000, maxRetries: 2 });
+  const duration = Date.now() - start;
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  logger.log({
+    step: "angle_classification",
+    model: MODELS.HAIKU,
+    input_messages: JSON.stringify([{ role: "user", content: prompt }]),
+    output_text: text,
+    tool_calls: null,
+    input_tokens: response.usage.input_tokens,
+    output_tokens: response.usage.output_tokens,
+    thinking_tokens: 0,
+    duration_ms: duration,
+  });
+
+  try {
+    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (parsed.verdict === "RESEARCH_NEEDED" || parsed.verdict === "SUFFICIENT") {
+        return { verdict: parsed.verdict, search_query: parsed.search_query ?? "" };
+      }
+    }
+  } catch { /* fall through to default */ }
+
+  // Default to SUFFICIENT if classification fails — avoids unnecessary Sonar calls
+  return { verdict: "SUFFICIENT", search_query: "" };
+}
+
 async function synthesizeAnchored(
   client: Anthropic,
   logger: AiLogger,
   topic: string,
   sourceContext: { summary: string; source_headline: string; source_url: string },
-  avoid?: string[]
+  avoid?: string[],
+  supplementalResearch?: { content: string; citations: string[] }
 ): Promise<Story[]> {
-  const prompt = buildAnchoredSynthesisPrompt(topic, sourceContext, avoid);
+  const prompt = buildAnchoredSynthesisPrompt(topic, sourceContext, avoid, supplementalResearch);
   const start = Date.now();
   const response = await client.messages.create({
     model: MODELS.HAIKU,
