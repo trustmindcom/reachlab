@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { api } from "../../api/client";
+import type { SetGen } from "../Generate";
 import AgentChat, { type ChatMessage } from "../../components/AgentChat";
 
 interface GhostwriterChatProps {
@@ -11,7 +12,7 @@ interface GhostwriterChatProps {
     originalDraft: string;
     status?: string;
   };
-  setGen: (fn: (prev: any) => any) => void;
+  setGen: SetGen;
   loading: boolean;
   setLoading: (v: boolean) => void;
   onBack: () => void;
@@ -84,7 +85,7 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
     cancelSaveTimer();
 
     // Optimistic user message
-    setGen((prev: any) => ({
+    setGen((prev) => ({
       ...prev,
       chatMessages: [...prev.chatMessages, { role: "user", content: message.trim() }],
     }));
@@ -95,7 +96,7 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
 
       localDirtyRef.current = false;
 
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         // Set originalDraft on first response (explicit null check, not ||)
         originalDraft: prev.originalDraft != null && prev.originalDraft !== ""
@@ -107,7 +108,7 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
     } catch (err: any) {
       setError(err.message ?? "Failed. Try again.");
       // Rollback optimistic user message
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         chatMessages: prev.chatMessages.slice(0, -1),
       }));

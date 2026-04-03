@@ -16,7 +16,7 @@ import {
   type GenCoachCheckQuality,
 } from "../api/client";
 
-interface GenerationState {
+export interface GenerationState {
   // Discovery
   discoveryTopics: DiscoveryTopic[] | null;
   selectedTopic: string | null;
@@ -43,6 +43,8 @@ interface GenerationState {
   // Status
   status?: string;
 }
+
+export type SetGen = React.Dispatch<React.SetStateAction<GenerationState>>;
 
 const initialState: GenerationState = {
   discoveryTopics: null,

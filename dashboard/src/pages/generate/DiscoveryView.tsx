@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api, type GenStory, type DiscoveryTopic } from "../../api/client";
+import type { SetGen } from "../Generate";
 import StoryCard from "./components/StoryCard";
 import ScannerLoader from "./components/ScannerLoader";
 
@@ -15,7 +16,7 @@ interface DiscoveryViewProps {
     personalConnection: string;
     draftLength: "short" | "medium" | "long";
   };
-  setGen: (fn: (prev: any) => any) => void;
+  setGen: SetGen;
   loading: boolean;
   setLoading: (v: boolean) => void;
   onNext: () => void;
@@ -199,7 +200,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
       discoverStartedRef.current = true;
       const cached = getCachedTopics();
       if (cached) {
-        setGen((prev: any) => ({
+        setGen((prev) => ({
           ...prev,
           discoveryTopics: cached,
           stories: [],
@@ -242,7 +243,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     try {
       const res = await api.generateDiscover();
       setCachedTopics(res.topics);
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         discoveryTopics: res.topics,
         stories: [],
@@ -261,7 +262,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const handleRefresh = () => {
     clearCachedTopics();
     setExpandedIndex(null);
-    setGen((prev: any) => ({ ...prev, discoveryTopics: null }));
+    setGen((prev) => ({ ...prev, discoveryTopics: null }));
     handleDiscover();
   };
 
@@ -270,13 +271,13 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     setError(null);
     setActiveMessages(RESEARCH_MESSAGES);
     const fullTopic = guidance ? `${label} — ${guidance}` : label;
-    setGen((prev: any) => ({ ...prev, selectedTopic: fullTopic }));
+    setGen((prev) => ({ ...prev, selectedTopic: fullTopic }));
 
     const avoid = gen.stories.map((s) => s.headline).filter(Boolean);
 
     try {
       const res = await api.generateResearch(fullTopic, avoid.length > 0 ? avoid : undefined, sourceContext);
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         researchId: res.research_id,
         stories: res.stories,
@@ -298,7 +299,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   };
 
   const handleBackToTopics = () => {
-    setGen((prev: any) => ({
+    setGen((prev) => ({
       ...prev,
       stories: [],
       researchId: null,
@@ -313,7 +314,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     setActiveMessages(DRAFTS_MESSAGES);
     try {
       const res = await api.generateDrafts(gen.researchId, gen.selectedStoryIndex, gen.personalConnection || undefined, gen.draftLength);
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         generationId: res.generation_id,
         drafts: res.drafts,
@@ -611,7 +612,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 index={i}
                 selected={gen.selectedStoryIndex === i}
                 onSelect={() =>
-                  setGen((prev: any) => ({ ...prev, selectedStoryIndex: i }))
+                  setGen((prev) => ({ ...prev, selectedStoryIndex: i }))
                 }
               />
             ))}
@@ -628,7 +629,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               </p>
               <textarea
                 value={gen.personalConnection}
-                onChange={(e) => setGen((prev: any) => ({ ...prev, personalConnection: e.target.value }))}
+                onChange={(e) => setGen((prev) => ({ ...prev, personalConnection: e.target.value }))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -652,7 +653,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 {(["short", "medium", "long"] as const).map((len) => (
                   <button
                     key={len}
-                    onClick={() => setGen((prev: any) => ({ ...prev, draftLength: len }))}
+                    onClick={() => setGen((prev) => ({ ...prev, draftLength: len }))}
                     className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
                       gen.draftLength === len
                         ? "bg-gen-bg-0 text-gen-text-0 shadow-sm"

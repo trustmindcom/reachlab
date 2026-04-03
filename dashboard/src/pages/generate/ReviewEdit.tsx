@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { api, type GenDraft, type GenCoachCheckQuality, type GenStory } from "../../api/client";
+import type { SetGen } from "../Generate";
 import AlignmentCard from "./components/AlignmentCard";
 import PostDetailsCard from "./components/PostDetailsCard";
 import ScannerLoader from "./components/ScannerLoader";
@@ -33,7 +34,7 @@ interface ReviewEditProps {
     selectedStoryIndex: number | null;
     chatMessages: ChatMessage[];
   };
-  setGen: (fn: (prev: any) => any) => void;
+  setGen: SetGen;
   loading: boolean;
   setLoading: (v: boolean) => void;
   onBack: () => void;
@@ -68,7 +69,7 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
     setChatError(null);
 
     // Add user message optimistically
-    setGen((prev: any) => ({
+    setGen((prev) => ({
       ...prev,
       chatMessages: [...prev.chatMessages, { role: "user", content: message.trim() }],
     }));
@@ -76,7 +77,7 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
     try {
       const draftChanged = localDraft !== gen.finalDraft ? localDraft : undefined;
       const res = await api.generateChat(gen.generationId, message.trim(), draftChanged);
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         finalDraft: res.draft,
         qualityGate: res.quality,
@@ -87,7 +88,7 @@ export default function ReviewEdit({ gen, setGen, loading, setLoading, onBack, o
       console.error("Chat failed:", err);
       setChatError(err.message ?? "Revision failed. Try again.");
       // Remove optimistic user message on error
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         chatMessages: prev.chatMessages.slice(0, -1),
       }));

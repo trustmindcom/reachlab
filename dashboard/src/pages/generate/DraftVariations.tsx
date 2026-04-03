@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, type GenDraft } from "../../api/client";
+import type { SetGen } from "../Generate";
 import DraftSidebar from "./components/DraftSidebar";
 import DraftReader from "./components/DraftReader";
 import ScannerLoader from "./components/ScannerLoader";
@@ -42,7 +43,7 @@ interface DraftVariationsProps {
     selectedDraftIndices: number[];
     combiningGuidance: string;
   };
-  setGen: (fn: (prev: any) => any) => void;
+  setGen: SetGen;
   loading: boolean;
   setLoading: (v: boolean) => void;
   onBack: () => void;
@@ -62,7 +63,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
     setLoading(true);
     try {
       const res = await api.reviseDrafts(gen.generationId, reviseFeedback.trim());
-      setGen((prev: any) => ({
+      setGen((prev) => ({
         ...prev,
         drafts: res.drafts,
         selectedDraftIndices: [],
@@ -76,7 +77,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
   };
 
   const handleToggleInclude = (index: number) => {
-    setGen((prev: any) => {
+    setGen((prev) => {
       const current = prev.selectedDraftIndices as number[];
       const next = current.includes(index)
         ? current.filter((i: number) => i !== index)
@@ -101,7 +102,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
       if (firstDraft) {
         const sentinel = `${firstDraft.hook}\n\n${firstDraft.body}\n\n${firstDraft.closing}`;
         await api.saveDraft(gen.generationId, sentinel);
-        setGen((prev: any) => ({
+        setGen((prev) => ({
           ...prev,
           finalDraft: sentinel,
           originalDraft: sentinel,
@@ -147,7 +148,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
           value={reviseFeedback}
           onChange={(e) => {
             setReviseFeedback(e.target.value);
-            setGen((prev: any) => ({ ...prev, combiningGuidance: e.target.value }));
+            setGen((prev) => ({ ...prev, combiningGuidance: e.target.value }));
           }}
           placeholder="Give direction — e.g. make them more opinionated, lead with the contrarian hook, shorter sentences..."
           className="w-full bg-gen-bg-2 border border-gen-border-2 rounded-lg px-4 py-3 text-[15px] text-gen-text-1 placeholder:text-gen-text-3 resize-none h-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent-border"
