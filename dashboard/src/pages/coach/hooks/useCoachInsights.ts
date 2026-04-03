@@ -17,8 +17,8 @@ export function useCoachInsights(showError: (msg: string) => void) {
     const fail = (what: string) => () => showError(`Failed to load ${what}`);
 
     api.insights().then((r) => setInsights(r.insights)).catch(fail("insights"));
-    api.insightsChangelog().then(setChangelog).catch(() => {}); // non-critical
-    api.insightsGaps().then((r) => setGaps(r.gaps)).catch(() => {}); // non-critical
+    api.insightsChangelog().then(setChangelog).catch(err => console.error("[Coach] Failed to load changelog:", err));
+    api.insightsGaps().then((r) => setGaps(r.gaps)).catch(err => console.error("[Coach] Failed to load gaps:", err));
     api.timing().then((r) => setTimingSlots(r.slots)).catch(fail("timing data"));
   };
 

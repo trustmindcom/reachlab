@@ -226,7 +226,7 @@ export function registerIngestRoutes(
               console.error(`[Image Download] Failed for ${post.id}:`, err.message);
             });
           }
-        }).catch(() => {});
+        }).catch(err => console.error("[Image Download] Failed to load image-downloader module:", err));
       }
     }
 
@@ -237,7 +237,7 @@ export function registerIngestRoutes(
         transcribeAllPending(db, dataDir).catch((err: any) => {
           console.error("[Transcribe] Auto-transcription failed:", err.message);
         });
-      }).catch(() => {});
+      }).catch(err => console.error("[Transcribe] Failed to load video-transcriber module:", err));
     }
 
     // Auto-trigger AI pipeline (two-tier)
@@ -291,7 +291,7 @@ export function registerIngestRoutes(
         }).catch((err: any) => {
           console.error("[AI Pipeline] Auto-trigger failed:", err.message);
         });
-      }).catch(() => {});
+      }).catch(err => console.error("[AI Pipeline] Failed to load AI modules:", err));
     }
 
     // Auto-retro: match new posts with full_text to existing drafts
@@ -313,7 +313,7 @@ export function registerIngestRoutes(
               console.error("[Auto-Retro] Failed:", err.message);
             });
           })
-          .catch(() => {});
+          .catch(err => console.error("[Auto-Retro] Failed to load auto-retro modules:", err));
       }
     }
 

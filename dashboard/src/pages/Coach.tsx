@@ -48,10 +48,10 @@ export default function Coach() {
               setRefreshing(false);
               loadAll();
             }
-          }).catch(() => {});
+          }).catch(err => console.error("[Coach] Status poll failed:", err));
         }, 3000);
       }
-    }).catch(() => {});
+    }).catch(err => console.error("[Coach] Initial status check failed:", err));
   }, []);
 
   const handleRefresh = (force = false) => {
@@ -67,10 +67,13 @@ export default function Coach() {
               setRefreshing(false);
               loadAll();
             }
-          }).catch(() => {});
+          }).catch(err => console.error("[Coach] Refresh poll failed:", err));
         }, 3000);
       })
-      .catch(() => setRefreshing(false));
+      .catch(err => {
+        console.error("[Coach] Refresh trigger failed:", err);
+        setRefreshing(false);
+      });
   };
 
   const tabs: { key: CoachTab; label: string; count?: number }[] = [

@@ -17,12 +17,12 @@ export function useCoachActions(showError: (msg: string) => void) {
   const load = () => {
     const fail = (what: string) => () => showError(`Failed to load ${what}`);
 
-    api.getPendingRetros().then((r) => setPendingRetros(r.retros)).catch(() => {}); // non-critical
+    api.getPendingRetros().then((r) => setPendingRetros(r.retros)).catch(err => console.error("[Coach] Failed to load retros:", err));
     api.recommendationsWithCooldown().then((r) => {
       setActiveRecs(r.active);
       setResolvedRecs(r.resolved);
     }).catch(fail("recommendations"));
-    api.insightsPromptSuggestions().then((r) => setPromptSuggestions(r.prompt_suggestions)).catch(() => {}); // non-critical
+    api.insightsPromptSuggestions().then((r) => setPromptSuggestions(r.prompt_suggestions)).catch(err => console.error("[Coach] Failed to load prompt suggestions:", err));
   };
 
   const handleResolve = (id: number, type: "accepted" | "dismissed") => {
@@ -80,7 +80,7 @@ export function useCoachActions(showError: (msg: string) => void) {
       await api.markRetroApplied(retroId);
       setAppliedRetroEdits((prev) => new Set(prev).add(key));
       setPendingRetros((prev) => prev.filter((r) => r.generation_id !== retroId));
-    } catch { /* ignore */ }
+    } catch (err) { console.error("[Coach] Failed to apply retro edit:", err); }
   };
 
   return {

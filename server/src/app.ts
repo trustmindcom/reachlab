@@ -256,7 +256,7 @@ export function buildApp(dbPath: string) {
             console.error(`[Image Download] Retry failed for ${post.id}:`, err.message);
           });
         }
-      }).catch(() => {});
+      }).catch(err => console.error("[Image Download] Failed to load image-downloader module:", err));
     }
 
     // Also auto-transcribe any video posts that need it
@@ -264,7 +264,7 @@ export function buildApp(dbPath: string) {
       transcribeAllPending(db, dataDir).catch((err: any) => {
         console.error("[Transcribe] Startup transcription failed:", err.message);
       });
-    }).catch(() => {});
+    }).catch(err => console.error("[Transcribe] Failed to load video-transcriber module:", err));
   });
 
   // Serve dashboard static files (production only — in dev, Vite handles this)
