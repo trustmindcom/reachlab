@@ -505,23 +505,18 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                               <div className="text-[15px] leading-[1.7] text-gen-text-2 mb-5">
                                 {topic.summary}
                               </div>
-                              <div className="text-[11px] uppercase tracking-[0.8px] text-gen-text-4 font-medium mb-1.5">
-                                Original story
-                              </div>
-                              <div className="text-[14px] text-gen-text-2 leading-[1.55] italic mb-1.5">
-                                &ldquo;{topic.source_headline}&rdquo;
-                              </div>
-                              <a
-                                href={topic.source_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[13px] text-gen-accent opacity-70 hover:opacity-100 hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {domain}
-                              </a>
-                              <div className="flex items-center gap-2 text-[14px] mt-5 pt-4 border-t border-gen-border-1">
-                                <span className="text-gen-text-3">{domain}</span>
+                              <div className="flex items-center gap-2 text-[13px] mt-auto pt-4 border-t border-gen-border-1">
+                                <a
+                                  href={topic.source_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-gen-text-3 hover:text-gen-accent transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {domain}
+                                </a>
+                                <span className="text-gen-text-4">·</span>
+                                <span className="text-gen-text-4 italic truncate">{topic.source_headline}</span>
                               </div>
                             </div>
 

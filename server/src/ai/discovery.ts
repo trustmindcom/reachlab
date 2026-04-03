@@ -41,7 +41,7 @@ IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST ea
 
 Select exactly 12 distinct topics. For each topic:
 - "label": a 3-5 word provocative title capturing an angle or debate
-- "summary": 1-2 sentences explaining the story and why it matters
+- "summary": 3-4 sentences explaining what happened, the key details, and why it matters. Give enough context that someone could write a LinkedIn post about it without reading the original article.
 - "source_headline": the original article headline
 - "source_url": the article URL from the list
 - "category_tag": a short category label for color coding (e.g., "Security", "AI", "Dev Tools", "Trust & Safety", "Infrastructure", "Strategy")
