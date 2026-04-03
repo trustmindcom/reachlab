@@ -39,9 +39,17 @@ export function initDatabase(dbPath: string): Database.Database {
      WHERE status = 'running' AND started_at < datetime('now', '-1 hour')`
   ).run();
 
-  // Auto-prune old AI logs and runs (>14 days)
-  db.prepare("DELETE FROM ai_logs WHERE created_at < datetime('now', '-14 days')").run();
-  db.prepare("DELETE FROM ai_runs WHERE started_at < datetime('now', '-14 days')").run();
+  // Auto-prune old AI data (>14 days) — must delete from all child tables before ai_runs
+  const pruneOldRuns = db.transaction(() => {
+    const oldRunIds = "SELECT id FROM ai_runs WHERE started_at < datetime('now', '-14 days')";
+    db.prepare(`DELETE FROM ai_logs WHERE run_id IN (${oldRunIds})`).run();
+    db.prepare(`DELETE FROM insights WHERE run_id IN (${oldRunIds})`).run();
+    db.prepare(`DELETE FROM recommendations WHERE run_id IN (${oldRunIds})`).run();
+    db.prepare(`DELETE FROM ai_overview WHERE run_id IN (${oldRunIds})`).run();
+    db.prepare(`DELETE FROM ai_analysis_gaps WHERE run_id IN (${oldRunIds})`).run();
+    db.prepare("DELETE FROM ai_runs WHERE started_at < datetime('now', '-14 days')").run();
+  });
+  try { pruneOldRuns(); } catch { /* ignore if tables don't exist yet */ }
 
   return db;
 }
