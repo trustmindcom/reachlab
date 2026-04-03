@@ -2,7 +2,7 @@ import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import type Database from "better-sqlite3";
 import type { AiLogger } from "./logger.js";
 import { chatWebSearch, fetchUrl } from "./web-tools.js";
-import { getRules, updateRule, insertSingleRule, getMaxRuleSortOrder } from "../db/generate-queries.js";
+import { getRules, updateRule, insertSingleRule, getMaxRuleSortOrder, softDeleteRule } from "../db/generate-queries.js";
 
 /** Weighted ER SQL expression for ORDER BY clauses — must match computeWeightedER in stats-report.ts */
 export const WEIGHTED_ER_SQL = "(CASE WHEN m.impressions > 0 THEN CAST((m.comments * 5 + m.reposts * 3 + COALESCE(m.saves, 0) * 3 + COALESCE(m.sends, 0) * 3 + m.reactions) AS REAL) / m.impressions ELSE 0 END)";
@@ -72,6 +72,21 @@ export const SHARED_TOOLS: Tool[] = [
       required: ["category", "rule_text"],
     },
   },
+  {
+    name: "delete_rule",
+    description:
+      "Soft-delete a writing rule by ID. The rule can be restored later. Use when the user wants to remove a rule that's no longer relevant. Always confirm with the user before deleting.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        rule_id: {
+          type: "number",
+          description: "ID of the rule to delete (get IDs from get_rules)",
+        },
+      },
+      required: ["rule_id"],
+    },
+  },
 ];
 
 // Returns null if toolName is not a shared tool
@@ -105,6 +120,14 @@ export async function executeSharedTool(
       const url = typeof input.url === "string" ? input.url : "";
       if (!url.trim()) return "Error: url is required.";
       return fetchUrl(url);
+    }
+
+    case "delete_rule": {
+      const ruleId = typeof input.rule_id === "number" ? input.rule_id : null;
+      if (ruleId === null) return "Error: rule_id is required.";
+      const deleted = softDeleteRule(db, ruleId, personaId);
+      if (!deleted) return `Error: Rule id:${ruleId} not found or already deleted. Use get_rules to find valid rule IDs.`;
+      return `Rule deleted (id:${ruleId}). It can be restored from the Rules settings page.`;
     }
 
     case "add_or_update_rule": {

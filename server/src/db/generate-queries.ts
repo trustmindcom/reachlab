@@ -104,7 +104,7 @@ export interface EditorialPrinciple {
 
 export function getRules(db: Database.Database, personaId: number): GenerationRule[] {
   return db
-    .prepare("SELECT * FROM generation_rules WHERE persona_id = ? ORDER BY category, sort_order")
+    .prepare("SELECT * FROM generation_rules WHERE persona_id = ? AND deleted_at IS NULL ORDER BY category, sort_order")
     .all(personaId) as GenerationRule[];
 }
 
@@ -114,8 +114,22 @@ export function getRulesByCategory(
   category: string
 ): GenerationRule[] {
   return db
-    .prepare("SELECT * FROM generation_rules WHERE persona_id = ? AND category = ? ORDER BY sort_order")
+    .prepare("SELECT * FROM generation_rules WHERE persona_id = ? AND category = ? AND deleted_at IS NULL ORDER BY sort_order")
     .all(personaId, category) as GenerationRule[];
+}
+
+export function softDeleteRule(db: Database.Database, ruleId: number, personaId: number): boolean {
+  const result = db.prepare(
+    "UPDATE generation_rules SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND persona_id = ? AND deleted_at IS NULL"
+  ).run(ruleId, personaId);
+  return result.changes > 0;
+}
+
+export function restoreRule(db: Database.Database, ruleId: number, personaId: number): boolean {
+  const result = db.prepare(
+    "UPDATE generation_rules SET deleted_at = NULL WHERE id = ? AND persona_id = ?"
+  ).run(ruleId, personaId);
+  return result.changes > 0;
 }
 
 export function replaceAllRules(

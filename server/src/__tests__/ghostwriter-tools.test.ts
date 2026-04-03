@@ -69,8 +69,8 @@ afterAll(() => {
 });
 
 describe("GHOSTWRITER_TOOLS definitions", () => {
-  it("has 9 tools, each with name, description, and input_schema", () => {
-    expect(GHOSTWRITER_TOOLS).toHaveLength(9);
+  it("has 10 tools, each with name, description, and input_schema", () => {
+    expect(GHOSTWRITER_TOOLS).toHaveLength(10);
     for (const tool of GHOSTWRITER_TOOLS) {
       expect(tool.name).toBeTruthy();
       expect(tool.description).toBeTruthy();
@@ -86,6 +86,7 @@ describe("GHOSTWRITER_TOOLS definitions", () => {
       "web_search",
       "fetch_url",
       "add_or_update_rule",
+      "delete_rule",
       "get_author_profile",
       "lookup_principles",
       "search_past_posts",
