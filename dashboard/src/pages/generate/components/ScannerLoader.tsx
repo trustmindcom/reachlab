@@ -40,6 +40,12 @@ interface RingWave {
   hue: number;
   width: number;
   speed: number;
+  waveFreq: number;    // how fast the ring oscillates bigger/smaller
+  waveAmp: number;     // how much the ring radius oscillates (fraction of base radius)
+  phase: number;       // starting phase offset for variety
+  wobbleX: number;     // slight horizontal wobble amount
+  wobbleY: number;     // slight vertical wobble amount
+  wobbleFreq: number;  // wobble speed
 }
 
 export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoaderProps) {
@@ -62,7 +68,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const size = 400;
+    const size = 520;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -193,11 +199,17 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
     const spawnRing = () => {
       rings.push({
         radius: 6 + Math.random() * 4,
-        maxRadius: 100 + Math.random() * 80,
+        maxRadius: 140 + Math.random() * 100,
         alpha: 0.18 + Math.random() * 0.08,
         hue: hues[Math.floor(Math.random() * hues.length)],
         width: 1.5 + Math.random() * 2,
-        speed: 0.3 + Math.random() * 1.2,   // some crawl, some shoot
+        speed: 0.3 + Math.random() * 1.2,
+        waveFreq: 2 + Math.random() * 6,      // different frequencies create interference
+        waveAmp: 0.06 + Math.random() * 0.12,  // 6-18% radius modulation
+        phase: Math.random() * Math.PI * 2,     // random start phase
+        wobbleX: Math.random() * 1.5,           // slight off-center wobble
+        wobbleY: Math.random() * 1.5,
+        wobbleFreq: 1 + Math.random() * 3,
       });
     };
 
@@ -251,21 +263,32 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         ctx.fillRect(0, 0, size, size);
       }
 
-      // ── Layer 3: Ring waves ──
-      if (frame % 90 === 0) spawnRing();
+      // ── Layer 3: Ring waves with sine modulation ──
+      if (frame % 55 === 0) spawnRing();  // spawn more frequently for overlapping waves
       for (let i = rings.length - 1; i >= 0; i--) {
         const r = rings[i];
         r.radius += r.speed + (r.radius / r.maxRadius) * r.speed * 0.5;
         const progress = r.radius / r.maxRadius;
         if (progress >= 1) { rings.splice(i, 1); continue; }
 
+        // Wave modulation: ring breathes bigger/smaller as it expands
+        // The wave amplitude grows with radius so outer rings undulate more
+        const wave = Math.sin(t * r.waveFreq + r.phase + progress * 4) * r.waveAmp * r.radius;
+        const modulatedRadius = r.radius + wave;
+
+        // Slight center wobble so rings aren't perfectly concentric
+        const wobX = Math.sin(t * r.wobbleFreq + r.phase) * r.wobbleX;
+        const wobY = Math.cos(t * r.wobbleFreq * 0.7 + r.phase) * r.wobbleY;
+
         const alpha = r.alpha * (1 - progress) * (1 - progress);
+        const lineWidth = r.width * (1 - progress * 0.5) * (1 + Math.sin(t * r.waveFreq * 0.5 + r.phase) * 0.15);
+
         ctx.save();
         ctx.globalCompositeOperation = "screen";
         ctx.beginPath();
-        ctx.arc(cx, cy, r.radius, 0, Math.PI * 2);
+        ctx.arc(cx + wobX, cy + wobY, Math.max(1, modulatedRadius), 0, Math.PI * 2);
         ctx.strokeStyle = `hsla(${r.hue + progress * 30},70%,70%,${alpha})`;
-        ctx.lineWidth = r.width * (1 - progress * 0.5);
+        ctx.lineWidth = lineWidth;
         ctx.stroke();
         ctx.restore();
       }
@@ -558,7 +581,7 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
       <canvas
         ref={canvasRef}
         className="mb-6"
-        style={{ width: 400, height: 400 }}
+        style={{ width: 520, height: 520 }}
       />
       <p
         key={msgIndex}
