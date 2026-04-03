@@ -62,13 +62,17 @@ export function registerCoachingRoutes(app: FastifyInstance, db: Database.Databa
 
     const changeId = Number(id);
 
-    // Get the change record
+    const personaId = getPersonaId(request);
+
+    // Get the change record and verify ownership via sync
     const change = getCoachingChange(db, changeId);
     if (!change) {
       return reply.status(404).send({ error: "Change not found" });
     }
-
-    const personaId = getPersonaId(request);
+    const sync = db.prepare("SELECT persona_id FROM coaching_syncs WHERE id = ?").get(change.sync_id) as { persona_id: number } | undefined;
+    if (sync && sync.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
 
     // Apply the decision
     if (action === "accept") {

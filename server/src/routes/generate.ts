@@ -101,6 +101,9 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     if (!research) {
       return reply.status(404).send({ error: "Research not found" });
     }
+    if ((research as any).persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
 
     const stories: Story[] = JSON.parse(research.stories_json);
     if (story_index < 0 || story_index >= stories.length) {
@@ -158,6 +161,9 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     if (!generation) {
       return reply.status(404).send({ error: "Generation not found" });
     }
+    if (generation.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
 
     const currentDrafts: Draft[] = JSON.parse(generation.drafts_json!);
     const client = getClient();
@@ -187,11 +193,15 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
   // ── Combine ──────────────────────────────────────────────
 
   app.post("/api/generate/combine", async (request, reply) => {
+    const personaId = getPersonaId(request);
     const { generation_id, selected_drafts, combining_guidance } = validateBody(combineBody, request.body);
 
     const gen = getGeneration(db, generation_id);
     if (!gen) {
       return reply.status(404).send({ error: "Generation not found" });
+    }
+    if (gen.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
     }
 
     const drafts: Draft[] = gen.drafts_json ? JSON.parse(gen.drafts_json) : [];
@@ -204,7 +214,6 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(400).send({ error: `Invalid draft index: ${invalidIndex}` });
     }
 
-    const personaId = getPersonaId(request);
     const client = getClient();
     const runId = createRun(db, personaId, "generate_combine", 0);
     const logger = new AiLogger(db, runId);
