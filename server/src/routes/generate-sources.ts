@@ -112,14 +112,9 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
     const personaId = getPersonaId(request);
     const { topics } = validateBody(sourceDiscoverBody, request.body);
 
-    // Fall back to taxonomy topics if none provided
+    // Prefer author profile topics (from voice interview) over taxonomy
     let topicList = topics;
     if (!topicList || topicList.length === 0) {
-      topicList = getTaxonomyNames(dbc);
-    }
-
-    // Fall back to writing_topics from author profile (e.g. after voice interview)
-    if (topicList.length === 0) {
       const { getAuthorProfile } = await import("../db/profile-queries.js");
       const profile = getAuthorProfile(db, personaId);
       if (profile?.profile_json) {
@@ -130,6 +125,11 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
           }
         } catch { /* ignore parse errors */ }
       }
+    }
+
+    // Fall back to taxonomy topics if no author profile
+    if (topicList.length === 0) {
+      topicList = getTaxonomyNames(dbc);
     }
 
     if (topicList.length === 0) {
