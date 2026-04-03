@@ -31,7 +31,7 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
       const result = await discoverTopics(client, db, personaId, logger, previousLabels);
 
       // Store this round's labels for next time
-      const allLabels = result.categories.flatMap(c => c.topics.map(t => t.label));
+      const allLabels = result.topics.map(t => t.label);
       upsertPersonaSetting(db, personaId, "last_discovery_labels", JSON.stringify(allLabels));
 
       completeRun(db, runId, getRunCost(db, runId));

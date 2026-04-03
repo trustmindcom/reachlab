@@ -7,17 +7,14 @@ import { getPersonaSetting } from "../db/ai-queries.js";
 
 export interface DiscoveryTopic {
   label: string;
+  summary: string;
   source_headline: string;
   source_url: string;
-}
-
-export interface DiscoveryCategory {
-  name: string;
-  topics: DiscoveryTopic[];
+  category_tag: string;
 }
 
 export interface DiscoveryResult {
-  categories: DiscoveryCategory[];
+  topics: DiscoveryTopic[];
 }
 
 export function buildClusteringPrompt(items: RssItem[], authorContext?: string, previousLabels?: string[]): string {
@@ -33,49 +30,49 @@ export function buildClusteringPrompt(items: RssItem[], authorContext?: string, 
     ? `\nAVOID THESE TOPICS — they were already suggested. Find DIFFERENT angles and topics:\n${previousLabels.map(l => `- ${l}`).join("\n")}\n`
     : "";
 
-  return `You are organizing RSS feed items into topic clusters for a LinkedIn content creator.
+  return `You are a content researcher selecting trending topics for a LinkedIn content creator.
 ${contextBlock}${avoidBlock}
 RSS items from the past week:
 ${itemList}
 
 Filter to only items relevant to the author's expertise and interests described above. Discard general news, politics, and anything outside their domain.
 
-IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST each be represented by at least one category. For example, if the author writes about security AND AI, you must have categories covering BOTH — don't let one area dominate. If the RSS feed doesn't have strong items for a core topic, still create a category with the best available items from that area.
+IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST each be represented. For example, if the author writes about security AND AI, include topics covering BOTH — don't let one area dominate.
 
-Organize the relevant items into 4-6 thematic categories. For each category:
-- Give it a short, descriptive name (e.g., "AI & Automation", "Cloud Security", "Developer Tools")
-- List 3-5 topics, each a 3-5 word label that captures an interesting angle or debate
-- Each topic should reference a source headline and URL from the list
+Select 8-10 distinct topics. For each topic:
+- "label": a 3-5 word provocative title capturing an angle or debate
+- "summary": 1-2 sentences explaining the story and why it matters
+- "source_headline": the original article headline
+- "source_url": the article URL from the list
+- "category_tag": a short category label for color coding (e.g., "Security", "AI", "Dev Tools", "Trust & Safety", "Infrastructure", "Strategy")
+
+DIVERSITY RULES:
+- Max 2 topics from the same source domain. At least 3 distinct source domains.
+- No two topics should cover the same story from different angles — each topic must be a distinct news item.
+- No overlap: if two RSS items are about the same event, pick the better one.
 
 Return JSON only (no markdown fences):
 {
-  "categories": [
-    {
-      "name": "Category Name",
-      "topics": [
-        { "label": "3-5 word topic label", "source_headline": "original headline", "source_url": "https://..." }
-      ]
-    }
+  "topics": [
+    { "label": "3-5 word topic label", "summary": "1-2 sentence summary", "source_headline": "original headline", "source_url": "https://...", "category_tag": "Category" }
   ]
-}
-
-Aim for ~20 topics total across all categories. Make labels provocative and specific — not generic summaries.`;
+}`;
 }
 
 export function parseClusteringResponse(text: string): DiscoveryResult {
   const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    return { categories: [] };
+    return { topics: [] };
   }
   try {
     const parsed = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed.categories)) {
-      return { categories: [] };
+    if (!Array.isArray(parsed.topics)) {
+      return { topics: [] };
     }
-    return { categories: parsed.categories };
+    return { topics: parsed.topics };
   } catch {
-    return { categories: [] };
+    return { topics: [] };
   }
 }
 
@@ -132,8 +129,8 @@ export async function discoverTopics(
   });
 
   const result = parseClusteringResponse(text);
-  if (result.categories.length === 0) {
-    throw new Error("Topic clustering returned no categories");
+  if (result.topics.length === 0) {
+    throw new Error("Topic discovery returned no topics");
   }
   return result;
 }

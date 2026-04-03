@@ -16,24 +16,19 @@ describe("buildClusteringPrompt", () => {
 });
 
 describe("parseClusteringResponse", () => {
-  it("parses valid categories", () => {
+  it("parses valid topics", () => {
     const json = JSON.stringify({
-      categories: [
-        {
-          name: "AI & Automation",
-          topics: [
-            { label: "AI agents replacing SREs", source_headline: "AI Agents Take Over SRE", source_url: "https://example.com/1" },
-          ],
-        },
+      topics: [
+        { label: "AI agents replacing SREs", summary: "AI agents are now handling SRE tasks.", source_headline: "AI Agents Take Over SRE", source_url: "https://example.com/1", category_tag: "AI" },
       ],
     });
     const result = parseClusteringResponse(json);
-    expect(result.categories).toHaveLength(1);
-    expect(result.categories[0].topics).toHaveLength(1);
+    expect(result.topics).toHaveLength(1);
+    expect(result.topics[0].label).toBe("AI agents replacing SREs");
   });
 
-  it("returns empty categories on parse failure", () => {
+  it("returns empty topics on parse failure", () => {
     const result = parseClusteringResponse("not json");
-    expect(result.categories).toEqual([]);
+    expect(result.topics).toEqual([]);
   });
 });

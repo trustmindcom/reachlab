@@ -278,17 +278,14 @@ export interface GenDraftsResponse {
 
 export interface DiscoveryTopic {
   label: string;
+  summary: string;
   source_headline: string;
   source_url: string;
-}
-
-export interface DiscoveryCategory {
-  name: string;
-  topics: DiscoveryTopic[];
+  category_tag: string;
 }
 
 export interface DiscoveryResponse {
-  categories: DiscoveryCategory[];
+  topics: DiscoveryTopic[];
 }
 
 // New quality shape from coach-check

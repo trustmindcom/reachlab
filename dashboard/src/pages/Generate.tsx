@@ -12,13 +12,13 @@ import {
   type GenStory,
   type GenDraft,
   type GenCoachingInsight,
-  type DiscoveryCategory,
+  type DiscoveryTopic,
   type GenCoachCheckQuality,
 } from "../api/client";
 
 interface GenerationState {
   // Discovery
-  discoveryTopics: DiscoveryCategory[] | null;
+  discoveryTopics: DiscoveryTopic[] | null;
   selectedTopic: string | null;
   // Research
   researchId: number | null;
