@@ -39,7 +39,7 @@ Filter to only items relevant to the author's expertise and interests described 
 
 IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST each be represented. For example, if the author writes about security AND AI, include topics covering BOTH — don't let one area dominate.
 
-Select 8-10 distinct topics. For each topic:
+Select exactly 12 distinct topics. For each topic:
 - "label": a 3-5 word provocative title capturing an angle or debate
 - "summary": 1-2 sentences explaining the story and why it matters
 - "source_headline": the original article headline
