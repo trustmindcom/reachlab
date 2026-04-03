@@ -731,6 +731,17 @@ Return JSON only:
     return { ok: true };
   });
 
+  app.delete("/api/generate/history/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const personaId = getPersonaId(request);
+    const gen = getGeneration(db, Number(id));
+    if (!gen) return reply.status(404).send({ error: "Generation not found" });
+    if (gen.persona_id !== personaId) return reply.status(403).send({ error: "Not authorized" });
+    db.prepare("DELETE FROM generation_messages WHERE generation_id = ?").run(Number(id));
+    db.prepare("DELETE FROM generations WHERE id = ?").run(Number(id));
+    return { ok: true };
+  });
+
   // ── Retro: compare draft vs published ───────────────────
 
   app.post("/api/generate/history/:id/retro", async (request, reply) => {

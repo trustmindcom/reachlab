@@ -740,6 +740,12 @@ export const api = {
       return r.json();
     }),
 
+  generateDelete: (id: number) =>
+    fetch(withPersonaId(`/api/generate/history/${id}`), { method: "DELETE" }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json();
+    }),
+
   generateRetro: (id: number, publishedText: string) =>
     fetch(withPersonaId(`/api/generate/history/${id}/retro`), {
       method: "POST",

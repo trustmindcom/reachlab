@@ -43,6 +43,16 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    try {
+      await api.generateDelete(id);
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      setTotal((t) => t - 1);
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  };
+
   const statusBadge = (status: string) => {
     switch (status) {
       case "published":
@@ -111,7 +121,7 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
                     {new Date(item.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => onOpen(item.id)}
                         className="text-[13px] text-gen-accent hover:underline"
@@ -126,6 +136,15 @@ export default function GenerationHistory({ onOpen }: GenerationHistoryProps) {
                           Discard
                         </button>
                       )}
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="p-1 text-gen-text-4 hover:text-negative transition-colors"
+                        title="Delete permanently"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 011.34-1.34h2.66a1.33 1.33 0 011.34 1.34V4M6.67 7.33v4M9.33 7.33v4M12.67 4v9.33a1.33 1.33 0 01-1.34 1.34H4.67a1.33 1.33 0 01-1.34-1.34V4" />
+                        </svg>
+                      </button>
                     </div>
                   </td>
                 </tr>
