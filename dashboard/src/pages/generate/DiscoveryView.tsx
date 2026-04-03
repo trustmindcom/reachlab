@@ -333,9 +333,8 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!gridRef.current) return;
-        const cards = gridRef.current.querySelectorAll<HTMLElement>("[data-card]");
-        const expandedEl = cards[index] ?? null;
-        const anims = flipAnimate(gridRef.current, oldRects, expandedEl, expandedIndex !== null ? 480 : 450);
+        // Expanded card is rendered outside grid, so no hero — just animate siblings
+        const anims = flipAnimate(gridRef.current, oldRects, null, expandedIndex !== null ? 480 : 450);
 
         if (anims.length === 0) {
           setIsAnimating(false);
@@ -344,7 +343,6 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
         Promise.all(anims.map((a) => a.finished)).then(() => {
           setIsAnimating(false);
-          expandedEl?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         });
       });
     });
@@ -432,7 +430,8 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
               >
                 {gen.discoveryTopics!.map((topic, i) => {
-                  const isExpanded = expandedIndex === i;
+                  // Skip the expanded card in the grid — it renders below
+                  if (expandedIndex === i) return null;
                   const tagColor = getTagColor(topic.category_tag);
                   const domain = extractDomain(topic.source_url);
 
@@ -440,119 +439,99 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                     <div
                       key={topic.label}
                       data-card
-                      onClick={() => {
-                        if (!isExpanded) expandCard(i);
-                      }}
-                      className={`relative rounded-xl transition-[border-color,box-shadow] duration-300 ease-out ${
-                        isExpanded
-                          ? "border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] cursor-default p-0 z-10"
-                          : "bg-gen-bg-1 border border-gen-border-1 p-[18px_20px_16px] cursor-pointer hover:border-gen-border-2"
-                      }`}
-                      style={isExpanded ? { gridColumn: "1 / -1" } : undefined}
+                      data-index={i}
+                      onClick={() => expandCard(i)}
+                      className="relative rounded-xl bg-gen-bg-1 border border-gen-border-1 p-[18px_20px_16px] cursor-pointer hover:border-gen-border-2 transition-[border-color,box-shadow] duration-300 ease-out"
                     >
-                      {/* Accent bar when expanded */}
-                      {isExpanded && (
-                        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gen-accent rounded-l-xl" />
-                      )}
-
-                      {/* Collapsed card content */}
-                      {!isExpanded && (
-                        <div>
-                          <span
-                            className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-2.5"
-                            style={{ background: tagColor.bg, color: tagColor.text }}
-                          >
-                            {topic.category_tag}
-                          </span>
-                          <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
-                            {topic.label}
-                          </div>
-                          <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-2 mb-3">
-                            {topic.summary}
-                          </div>
-                          <div className="flex items-center gap-2 text-[14px]">
-                            <span className="text-gen-text-3">{domain}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Expanded panel content */}
-                      {isExpanded && (
-                        <>
-                          {/* Close button */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); collapseCard(); }}
-                            className="absolute top-4 right-4 z-20 w-8 h-8 bg-gen-bg-3 border border-gen-border-1 rounded-lg flex items-center justify-center text-gen-text-3 hover:text-gen-text-0 hover:bg-gen-bg-4 transition-colors duration-150"
-                            aria-label="Close"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                              <path d="M2 2l10 10M12 2L2 12" />
-                            </svg>
-                          </button>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 min-h-[300px]">
-                            {/* Left: story details */}
-                            <div className="p-7 pr-8 border-b md:border-b-0 md:border-r border-gen-border-1">
-                              <span
-                                className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-3.5"
-                                style={{ background: tagColor.bg, color: tagColor.text }}
-                              >
-                                {topic.category_tag}
-                              </span>
-                              <div className="font-serif-gen font-medium text-[24px] leading-[1.3] text-gen-text-0 mb-3 tracking-[-0.3px]">
-                                {topic.label}
-                              </div>
-                              <div className="text-[15px] leading-[1.7] text-gen-text-2 mb-5">
-                                {topic.summary}
-                              </div>
-                              <div className="mt-auto pt-4 border-t border-gen-border-1">
-                                <a
-                                  href={topic.source_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[13px] text-gen-text-3 hover:text-gen-accent transition-colors"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {domain}
-                                </a>
-                              </div>
-                            </div>
-
-                            {/* Right: guidance + write */}
-                            <div className="p-7 flex flex-col">
-                              <div className="text-[15px] font-medium text-gen-text-0 mb-1">
-                                Your angle
-                              </div>
-                              <div className="text-[13px] text-gen-text-4 mb-4">
-                                What perspective do you want to bring? Leave blank to explore freely.
-                              </div>
-                              <textarea
-                                value={guidanceText}
-                                onChange={(e) => setGuidanceText(e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                rows={5}
-                                placeholder="e.g. 'focus on what this means for engineering leaders'"
-                                className="flex-1 w-full min-h-[120px] bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3.5 text-[15px] text-gen-text-0 placeholder:text-gen-text-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/30 focus-visible:border-gen-accent resize-none leading-[1.6] mb-4"
-                              />
-                              <div className="flex items-center gap-3">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTopicClick(topic.label, guidanceText.trim() || undefined);
-                                  }}
-                                  className="px-7 py-3 bg-gen-accent text-white text-[15px] font-medium rounded-[10px] hover:opacity-90 transition-opacity duration-150"
-                                >
-                                  Write about this
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                      <span
+                        className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-2.5"
+                        style={{ background: tagColor.bg, color: tagColor.text }}
+                      >
+                        {topic.category_tag}
+                      </span>
+                      <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
+                        {topic.label}
+                      </div>
+                      <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-2 mb-3">
+                        {topic.summary}
+                      </div>
+                      <div className="flex items-center gap-2 text-[14px]">
+                        <span className="text-gen-text-3">{domain}</span>
+                      </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Expanded panel — rendered outside grid so cards reflow with no gaps */}
+              {expandedIndex !== null && gen.discoveryTopics![expandedIndex] && (() => {
+                const topic = gen.discoveryTopics![expandedIndex];
+                const tagColor = getTagColor(topic.category_tag);
+                const domain = extractDomain(topic.source_url);
+                return (
+                  <div className="relative rounded-xl border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] mt-3 z-10">
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gen-accent rounded-l-xl" />
+                    <button
+                      onClick={collapseCard}
+                      className="absolute top-4 right-4 z-20 w-8 h-8 bg-gen-bg-3 border border-gen-border-1 rounded-lg flex items-center justify-center text-gen-text-3 hover:text-gen-text-0 hover:bg-gen-bg-4 transition-colors duration-150"
+                      aria-label="Close"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <path d="M2 2l10 10M12 2L2 12" />
+                      </svg>
+                    </button>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 min-h-[300px]">
+                      <div className="p-7 pr-8 border-b md:border-b-0 md:border-r border-gen-border-1 flex flex-col">
+                        <span
+                          className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-3.5 self-start"
+                          style={{ background: tagColor.bg, color: tagColor.text }}
+                        >
+                          {topic.category_tag}
+                        </span>
+                        <div className="font-serif-gen font-medium text-[24px] leading-[1.3] text-gen-text-0 mb-3 tracking-[-0.3px]">
+                          {topic.label}
+                        </div>
+                        <div className="text-[15px] leading-[1.7] text-gen-text-2 mb-5">
+                          {topic.summary}
+                        </div>
+                        <div className="mt-auto pt-4 border-t border-gen-border-1">
+                          <a
+                            href={topic.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[13px] text-gen-text-3 hover:text-gen-accent transition-colors"
+                          >
+                            {domain}
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="p-7 flex flex-col">
+                        <div className="text-[15px] font-medium text-gen-text-0 mb-1">Your angle</div>
+                        <div className="text-[13px] text-gen-text-4 mb-4">
+                          What perspective do you want to bring? Leave blank to explore freely.
+                        </div>
+                        <textarea
+                          value={guidanceText}
+                          onChange={(e) => setGuidanceText(e.target.value)}
+                          rows={5}
+                          placeholder="e.g. 'focus on what this means for engineering leaders'"
+                          className="flex-1 w-full min-h-[120px] bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3.5 text-[15px] text-gen-text-0 placeholder:text-gen-text-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/30 focus-visible:border-gen-accent resize-none leading-[1.6] mb-4"
+                        />
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleTopicClick(topic.label, guidanceText.trim() || undefined)}
+                            className="px-7 py-3 bg-gen-accent text-white text-[15px] font-medium rounded-[10px] hover:opacity-90 transition-opacity duration-150"
+                          >
+                            Write about this
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Footer */}
               <div
