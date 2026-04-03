@@ -40,6 +40,8 @@ interface GenerationState {
   appliedInsights: GenCoachingInsight[];
   // Chat
   chatMessages: Array<{ role: "user" | "assistant"; content: string }>;
+  // Status
+  status?: string;
 }
 
 const initialState: GenerationState = {
@@ -110,6 +112,7 @@ async function restoreGeneration(data: any): Promise<RestoreResult | null> {
     personalConnection: data.personal_connection ?? "",
     draftLength: ["short", "medium", "long"].includes(data.draft_length) ? data.draft_length : "medium",
     chatMessages,
+    status: data.status,
   };
 
   // Step mapping: final_draft exists -> step 3 (GhostwriterChat), drafts exist -> step 2 (DraftVariations), else step 1

@@ -9,6 +9,7 @@ interface GhostwriterChatProps {
     chatMessages: ChatMessage[];
     combiningGuidance: string;
     originalDraft: string;
+    status?: string;
   };
   setGen: (fn: (prev: any) => any) => void;
   loading: boolean;
@@ -18,6 +19,9 @@ interface GhostwriterChatProps {
 }
 
 export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBack, onRetro }: GhostwriterChatProps) {
+  // Published/copied/discarded posts default to full-width draft, chat hidden
+  const isFinished = gen.status === "published" || gen.status === "copied" || gen.status === "discarded";
+  const [chatVisible, setChatVisible] = useState(!isFinished);
   const [localDraft, setLocalDraft] = useState(gen.finalDraft);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -145,29 +149,31 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
   const hasAssistantMessage = gen.chatMessages.some(m => m.role === "assistant");
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[70vh] gap-5">
-      {/* ── Left panel: Chat ── */}
-      <div className="w-full lg:w-1/2 flex flex-col min-h-0">
-        {/* Error banner */}
-        {error && (
-          <div className="mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400 flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-2 text-red-400/60 hover:text-red-400 text-[13px]">
-              Dismiss
-            </button>
-          </div>
-        )}
+    <div className={`flex flex-col lg:flex-row min-h-[70vh] gap-5`}>
+      {/* ── Left panel: Chat (togglable) ── */}
+      {chatVisible && (
+        <div className="w-full lg:w-1/2 flex flex-col min-h-0">
+          {/* Error banner */}
+          {error && (
+            <div className="mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400 flex items-center justify-between">
+              <span>{error}</span>
+              <button onClick={() => setError(null)} className="ml-2 text-red-400/60 hover:text-red-400 text-[13px]">
+                Dismiss
+              </button>
+            </div>
+          )}
 
-        <AgentChat
-          messages={gen.chatMessages}
-          onSend={sendMessage}
-          loading={loading}
-          placeholder="Give feedback, ask questions, or request changes..."
-        />
-      </div>
+          <AgentChat
+            messages={gen.chatMessages}
+            onSend={sendMessage}
+            loading={loading}
+            placeholder="Give feedback, ask questions, or request changes..."
+          />
+        </div>
+      )}
 
-      {/* ── Right panel: Editable draft ── */}
-      <div className="w-full lg:w-1/2 flex flex-col min-h-0">
+      {/* ── Draft panel: full-width when chat hidden, half when visible ── */}
+      <div className={`w-full ${chatVisible ? "lg:w-1/2" : ""} flex flex-col min-h-0`}>
         {/* First-turn sentinel label */}
         {isFirstTurn && loading && (
           <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide animate-pulse">
@@ -204,6 +210,12 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
               className="text-[14px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Back to drafts
+            </button>
+            <button
+              onClick={() => setChatVisible((v) => !v)}
+              className="text-[14px] text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)]"
+            >
+              {chatVisible ? "Hide chat" : "Show chat"}
             </button>
           </div>
           <div className="flex items-center gap-3">
