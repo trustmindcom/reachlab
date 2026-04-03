@@ -112,6 +112,9 @@ function getCardRects(gridEl: HTMLElement): RectMap {
   return rects;
 }
 
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 function flipAnimate(
   gridEl: HTMLElement,
   oldRects: RectMap,
@@ -120,6 +123,10 @@ function flipAnimate(
 ): Animation[] {
   const cards = gridEl.querySelectorAll<HTMLElement>("[data-card]");
   const animations: Animation[] = [];
+
+  // Skip animations entirely for reduced motion preference
+  if (prefersReducedMotion()) return animations;
+
   const expandedIndex = expandedEl ? [...cards].indexOf(expandedEl) : -1;
 
   cards.forEach((card, i) => {
@@ -151,9 +158,15 @@ function flipAnimate(
     const anim = card.animate(keyframes, {
       duration,
       easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-      fill: "both",
+      fill: "forwards",
       delay: isHero ? 0 : stagger,
     });
+
+    // Clean up stale transforms after animation completes
+    anim.onfinish = () => {
+      card.style.transform = "";
+      card.style.opacity = "";
+    };
 
     animations.push(anim);
   });
