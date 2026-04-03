@@ -10,6 +10,12 @@ dist/
 !**/data/.gitkeep
 backups/
 
+# Stray SQLite DB files
+reachlab.db
+**/reachlab.db
+**/reachlab.db-shm
+**/reachlab.db-wal
+
 # Spike files with personal data
 spike/*.json
 spike/*.txt

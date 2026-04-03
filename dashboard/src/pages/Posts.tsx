@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -199,9 +199,8 @@ export default function Posts() {
           </thead>
           <tbody>
             {posts.map((p) => (
-              <>
+              <Fragment key={p.id}>
                 <tr
-                  key={p.id}
                   onClick={() => handleSelect(p.id)}
                   className={`border-b border-border/50 cursor-pointer transition-colors duration-150 ease-[var(--ease-snappy)] hover:bg-surface-2 ${
                     selected === p.id ? "bg-surface-2 border-l-2 border-l-accent" : ""
@@ -406,7 +405,7 @@ export default function Posts() {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
             {posts.length === 0 && (
               <tr>

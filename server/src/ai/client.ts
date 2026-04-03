@@ -42,6 +42,12 @@ function getProviderPrefs(): string {
   });
 }
 
+export function getClient(): Anthropic {
+  const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
+  if (!apiKey) throw new Error("TRUSTMIND_LLM_API_KEY is required");
+  return createClient(apiKey);
+}
+
 export function createClient(apiKey: string): Anthropic {
   if (!apiKey)
     throw new Error("TRUSTMIND_LLM_API_KEY is required for AI features");

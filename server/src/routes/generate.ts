@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
-import type Anthropic from "@anthropic-ai/sdk";
 import {
   insertResearch,
   getResearch,
@@ -24,7 +23,7 @@ import {
 } from "../db/generate-queries.js";
 import { createRun, completeRun, failRun, getRunCost } from "../db/ai-queries.js";
 import { streamWithIdleTimeout } from "../ai/stream-with-idle.js";
-import { createClient, MODELS } from "../ai/client.js";
+import { getClient, MODELS } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
 import { generateDrafts, reviseDrafts } from "../ai/drafter.js";
@@ -39,12 +38,6 @@ import { validateBody } from "../validation.js";
 import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
 import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt, expandMessageRow } from "../ai/ghostwriter.js";
 import { createPersonaGuard } from "../middleware/persona-guard.js";
-
-function getClient(): Anthropic {
-  const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
-  if (!apiKey) throw new Error("TRUSTMIND_LLM_API_KEY is required");
-  return createClient(apiKey);
-}
 
 export function registerGenerateRoutes(app: FastifyInstance, db: Database.Database): void {
   const personaGuard = createPersonaGuard(db);

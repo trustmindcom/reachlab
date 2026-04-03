@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
-import type Anthropic from "@anthropic-ai/sdk";
 import {
   createCoachSession,
   getCoachSession,
@@ -9,7 +8,7 @@ import {
   getCoachMessages,
 } from "../db/coach-chat-queries.js";
 import { createRun, completeRun, failRun, getRunCost } from "../db/ai-queries.js";
-import { createClient } from "../ai/client.js";
+import { getClient } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { coachChatTurn } from "../ai/coach-chat.js";
 import { expandMessageRow } from "../ai/agent-loop.js";
@@ -17,12 +16,6 @@ import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
 import { coachChatBody, createSessionBody } from "../schemas/coach-chat.js";
 import { createCoachSessionGuard } from "../middleware/persona-guard.js";
-
-function getClient(): Anthropic {
-  const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
-  if (!apiKey) throw new Error("TRUSTMIND_LLM_API_KEY is required");
-  return createClient(apiKey);
-}
 
 export function registerCoachChatRoutes(app: FastifyInstance, db: Database.Database): void {
   const coachSessionGuard = createCoachSessionGuard(db);

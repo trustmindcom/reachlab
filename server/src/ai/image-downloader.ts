@@ -4,6 +4,12 @@ import path from "path";
 const MAX_RETRIES = 3;
 export const RETRY_DELAYS_MS = [1000, 3000, 10000];
 
+const ALLOWED_CDN_PATTERN = /^https:\/\/(media(-exp\d+)?|static)\.licdn\.com\//;
+
+export function isAllowedImageUrl(url: string): boolean {
+  return ALLOWED_CDN_PATTERN.test(url);
+}
+
 async function fetchWithRetry(
   url: string,
   retryDelays: number[] = RETRY_DELAYS_MS
@@ -45,6 +51,13 @@ export async function downloadPostImages(
     const filename = `${i}.jpg`;
     const filePath = path.join(postDir, filename);
     const relativePath = path.join(postId, filename);
+
+    if (!isAllowedImageUrl(imageUrls[i])) {
+      console.warn(
+        `[Image Download] Rejected non-LinkedIn CDN URL for post ${postId}, image ${i}: ${imageUrls[i]}`
+      );
+      continue;
+    }
 
     try {
       const data = await fetchWithRetry(imageUrls[i], retryDelays);
