@@ -30,6 +30,7 @@ import { registerPersonaRoutes } from "./routes/personas.js";
 import { registerIngestRoutes } from "./routes/ingest.js";
 import { registerCoachChatRoutes } from "./routes/coach-chat.js";
 
+import { getUpdateStatus, startUpdateChecker } from "./update-checker.js";
 import { getPersonaId } from "./utils.js";
 import { ensureDefaultUser, getUserByToken } from "./db/user-queries.js";
 import { validateBody } from "./validation.js";
@@ -222,6 +223,14 @@ export function buildApp(dbPath: string) {
 
   // Coach chat routes
   registerCoachChatRoutes(app, db);
+
+  // System routes
+  app.get("/api/system/update-status", async () => getUpdateStatus());
+
+  // Start background update checker
+  app.addHook("onReady", async () => {
+    startUpdateChecker();
+  });
 
   // On startup, prune old AI logs and retry image downloads
   app.addHook("onReady", async () => {
