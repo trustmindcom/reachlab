@@ -113,7 +113,7 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
     const { topics } = validateBody(sourceDiscoverBody, request.body);
 
     // Prefer author profile topics (from voice interview) over taxonomy
-    let topicList = topics;
+    let topicList: string[] = topics ?? [];
     if (!topicList || topicList.length === 0) {
       const { getAuthorProfile } = await import("../db/profile-queries.js");
       const profile = getAuthorProfile(db, personaId);

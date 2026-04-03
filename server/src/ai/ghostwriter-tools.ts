@@ -4,7 +4,7 @@ import { getAuthorProfile } from "../db/profile-queries.js";
 import { getEditorialPrinciples } from "../db/generate-queries.js";
 import { PLATFORM_KNOWLEDGE } from "./platform-knowledge.js";
 import type { AiLogger } from "./logger.js";
-import { SHARED_TOOLS, executeSharedTool } from "./shared-tools.js";
+import { SHARED_TOOLS, executeSharedTool, WEIGHTED_ER_SQL } from "./shared-tools.js";
 import { computeWeightedER } from "./stats-report.js";
 
 // ── Per-request state ──────────────────────────────────────
@@ -118,7 +118,7 @@ export const GHOSTWRITER_TOOLS: Tool[] = [
 
 const SORT_CLAUSES: Record<string, string> = {
   impressions: "ORDER BY m.impressions DESC NULLS LAST",
-  engagement_rate: "ORDER BY (CASE WHEN m.impressions > 0 THEN CAST((m.comments * 5 + m.reposts * 3 + COALESCE(m.saves, 0) * 3 + COALESCE(m.sends, 0) * 3 + m.reactions) AS REAL) / m.impressions ELSE 0 END) DESC",
+  engagement_rate: `ORDER BY ${WEIGHTED_ER_SQL} DESC`,
   reactions: "ORDER BY m.reactions DESC NULLS LAST",
   comments: "ORDER BY m.comments DESC NULLS LAST",
 };

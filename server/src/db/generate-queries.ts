@@ -638,14 +638,15 @@ export function updateRule(
   ruleId: number,
   personaId: number,
   fields: { rule_text?: string; example_text?: string }
-): void {
+): boolean {
   const sets: string[] = [];
   const params: any[] = [];
   if (fields.rule_text !== undefined) { sets.push("rule_text = ?"); params.push(fields.rule_text); }
   if (fields.example_text !== undefined) { sets.push("example_text = ?"); params.push(fields.example_text); }
-  if (sets.length === 0) return;
+  if (sets.length === 0) return false;
   params.push(ruleId, personaId);
-  db.prepare(`UPDATE generation_rules SET ${sets.join(", ")} WHERE id = ? AND persona_id = ?`).run(...params);
+  const result = db.prepare(`UPDATE generation_rules SET ${sets.join(", ")} WHERE id = ? AND persona_id = ?`).run(...params);
+  return result.changes > 0;
 }
 
 export function getRuleCount(db: Database.Database, personaId: number): number {

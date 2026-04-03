@@ -4,6 +4,9 @@ import type { AiLogger } from "./logger.js";
 import { chatWebSearch, fetchUrl } from "./web-tools.js";
 import { getRules, updateRule, insertSingleRule, getMaxRuleSortOrder } from "../db/generate-queries.js";
 
+/** Weighted ER SQL expression for ORDER BY clauses — must match computeWeightedER in stats-report.ts */
+export const WEIGHTED_ER_SQL = "(CASE WHEN m.impressions > 0 THEN CAST((m.comments * 5 + m.reposts * 3 + COALESCE(m.saves, 0) * 3 + COALESCE(m.sends, 0) * 3 + m.reactions) AS REAL) / m.impressions ELSE 0 END)";
+
 export const SHARED_TOOLS: Tool[] = [
   {
     name: "get_rules",
@@ -111,7 +114,8 @@ export async function executeSharedTool(
       const exampleText = typeof input.example_text === "string" ? input.example_text : undefined;
 
       if (typeof input.rule_id === "number") {
-        updateRule(db, input.rule_id, personaId, { rule_text: ruleText, example_text: exampleText });
+        const updated = updateRule(db, input.rule_id, personaId, { rule_text: ruleText, example_text: exampleText });
+        if (!updated) return `Error: Rule id:${input.rule_id} not found or not owned by this persona. Use get_rules to find valid rule IDs.`;
         return `Rule updated (id:${input.rule_id}): ${ruleText}`;
       }
 

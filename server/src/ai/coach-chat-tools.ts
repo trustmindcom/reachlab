@@ -1,7 +1,7 @@
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import type Database from "better-sqlite3";
 import type { AiLogger } from "./logger.js";
-import { SHARED_TOOLS, executeSharedTool } from "./shared-tools.js";
+import { SHARED_TOOLS, executeSharedTool, WEIGHTED_ER_SQL } from "./shared-tools.js";
 import {
   getCategoryPerformance,
   getEngagementQuality,
@@ -16,7 +16,7 @@ import { computeWeightedER } from "./stats-report.js";
 
 const SORT_CLAUSES: Record<string, string> = {
   impressions: "ORDER BY m.impressions DESC NULLS LAST",
-  engagement_rate: "ORDER BY (CASE WHEN m.impressions > 0 THEN CAST((m.comments * 5 + m.reposts * 3 + COALESCE(m.saves, 0) * 3 + COALESCE(m.sends, 0) * 3 + m.reactions) AS REAL) / m.impressions ELSE 0 END) DESC",
+  engagement_rate: `ORDER BY ${WEIGHTED_ER_SQL} DESC`,
   reactions: "ORDER BY m.reactions DESC NULLS LAST",
   comments: "ORDER BY m.comments DESC NULLS LAST",
   published_at: "ORDER BY p.published_at DESC",

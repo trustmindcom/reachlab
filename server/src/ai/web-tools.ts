@@ -13,7 +13,7 @@ export function buildChatSearchPrompt(query: string): string {
 
 export function isPrivateUrl(url: string): boolean {
   try {
-    const hostname = new URL(url).hostname;
+    const hostname = new URL(url).hostname.replace(/^\[|\]$/g, "");
     return (
       hostname === "localhost" ||
       hostname.startsWith("127.") ||
@@ -21,8 +21,12 @@ export function isPrivateUrl(url: string): boolean {
       hostname.startsWith("192.168.") ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
       hostname === "::1" ||
-      hostname === "[::1]" ||
-      hostname.startsWith("0.")
+      hostname === "0.0.0.0" ||
+      hostname === "169.254.169.254" ||
+      hostname.startsWith("0.") ||
+      hostname.startsWith("fc") ||
+      hostname.startsWith("fd") ||
+      hostname.startsWith("fe80")
     );
   } catch {
     return true;
@@ -67,8 +71,19 @@ export async function fetchUrl(url: string): Promise<string> {
   try {
     const response = await fetch(url, {
       signal: controller.signal,
+      redirect: "manual",
       headers: { "User-Agent": "ReachLab/1.0 (content research)" },
     });
+
+    // Handle redirects safely — check destination before following
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) return "Error: Redirect with no location header";
+      if (isPrivateUrl(new URL(location, url).href)) {
+        return "Error: Redirect to private/internal URL blocked.";
+      }
+      return fetchUrl(new URL(location, url).href);
+    }
 
     if (!response.ok) {
       return `Error: HTTP ${response.status} fetching ${url}`;
