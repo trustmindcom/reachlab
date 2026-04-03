@@ -13,6 +13,7 @@ import OnboardingWizard from "./pages/onboarding/OnboardingWizard";
 import ApiKeySetup from "./pages/onboarding/ApiKeySetup";
 import { ToastProvider } from "./components/Toast";
 import UpdateBadge from "./components/UpdateBadge";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const tabs = ["Overview", "Posts", "Coach", "Generate", "Timing", "Followers", "Settings"] as const;
 type Tab = (typeof tabs)[number];
@@ -27,17 +28,23 @@ export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
 
   useEffect(() => {
-    api.health().then(setHealth).catch(() => {});
+    api.health().then(setHealth).catch(err => console.error("[App] Health check failed:", err));
     // Check API keys first, then onboarding status
     api.getConfigKeys()
       .then(({ keys }) => {
         const requiredMissing = keys.some((k) => k.required && !k.configured);
         setKeysConfigured(!requiredMissing);
       })
-      .catch(() => setKeysConfigured(true)); // On error, skip key check
+      .catch(err => {
+        console.error("[App] API key check failed:", err);
+        setKeysConfigured(true); // On error, skip key check — show main app
+      });
     api.getSetting("onboarding_complete")
       .then((val) => setOnboardingComplete(val === "true"))
-      .catch(() => setOnboardingComplete(true)); // On error, show main app
+      .catch(err => {
+        console.error("[App] Onboarding check failed:", err);
+        setOnboardingComplete(true); // On error, show main app
+      });
   }, []);
 
   useEffect(() => {
@@ -46,7 +53,7 @@ export default function App() {
 
   useEffect(() => {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    api.setTimezone(tz).catch(() => {});
+    api.setTimezone(tz).catch(err => console.error("[App] Failed to set timezone:", err));
   }, []);
 
   const hasErrors = health?.sources
@@ -158,13 +165,13 @@ export default function App() {
 
       {/* Content */}
       <main className="px-6 py-6 max-w-[1400px] mx-auto">
-        {tab === "Overview" && <Overview />}
-        {tab === "Posts" && <Posts />}
-        {tab === "Coach" && <Coach />}
-        {tab === "Generate" && <Generate />}
-        {tab === "Timing" && <Timing />}
-        {tab === "Followers" && <Followers />}
-        {tab === "Settings" && <Settings />}
+        {tab === "Overview" && <ErrorBoundary><Overview /></ErrorBoundary>}
+        {tab === "Posts" && <ErrorBoundary><Posts /></ErrorBoundary>}
+        {tab === "Coach" && <ErrorBoundary><Coach /></ErrorBoundary>}
+        {tab === "Generate" && <ErrorBoundary><Generate /></ErrorBoundary>}
+        {tab === "Timing" && <ErrorBoundary><Timing /></ErrorBoundary>}
+        {tab === "Followers" && <ErrorBoundary><Followers /></ErrorBoundary>}
+        {tab === "Settings" && <ErrorBoundary><Settings /></ErrorBoundary>}
       </main>
     </div>
     </PersonaProvider>
