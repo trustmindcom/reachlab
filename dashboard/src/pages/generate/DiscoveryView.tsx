@@ -505,18 +505,16 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                               <div className="text-[15px] leading-[1.7] text-gen-text-2 mb-5">
                                 {topic.summary}
                               </div>
-                              <div className="flex items-center gap-2 text-[13px] mt-auto pt-4 border-t border-gen-border-1">
+                              <div className="mt-auto pt-4 border-t border-gen-border-1">
                                 <a
                                   href={topic.source_url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-gen-text-3 hover:text-gen-accent transition-colors"
+                                  className="text-[13px] text-gen-text-3 hover:text-gen-accent transition-colors"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {domain}
                                 </a>
-                                <span className="text-gen-text-4">·</span>
-                                <span className="text-gen-text-4 italic truncate">{topic.source_headline}</span>
                               </div>
                             </div>
 
