@@ -10,6 +10,9 @@ const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-server.db")
 let app: FastifyInstance;
 let db: BetterSqlite3.Database;
 
+/** Default headers for all inject calls — includes x-persona-id */
+const P1 = { "x-persona-id": "1" };
+
 beforeAll(async () => {
   app = buildApp(TEST_DB_PATH);
   await app.ready();
@@ -28,7 +31,7 @@ afterAll(async () => {
 
 describe("GET /api/health", () => {
   it("returns health status with null last_sync when never synced", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/health" });
+    const res = await app.inject({ method: "GET", url: "/api/health", headers: P1 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.last_sync_at).toBeNull();
@@ -44,6 +47,7 @@ describe("POST /api/ingest", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {},
     });
     expect(res.statusCode).toBe(200);
@@ -57,6 +61,7 @@ describe("POST /api/ingest", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -77,6 +82,7 @@ describe("POST /api/ingest", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -92,6 +98,7 @@ describe("POST /api/ingest", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -107,6 +114,7 @@ describe("POST /api/ingest", () => {
     const postsRes = await app.inject({
       method: "GET",
       url: "/api/posts",
+      headers: P1,
     });
     const posts = postsRes.json().posts;
     const post = posts.find((p: any) => p.id === "2001");
@@ -119,6 +127,7 @@ describe("POST /api/ingest", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -134,6 +143,7 @@ describe("POST /api/ingest", () => {
     const res1 = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         post_metrics: [
           {
@@ -152,6 +162,7 @@ describe("POST /api/ingest", () => {
     const res2 = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         post_metrics: [
           {
@@ -181,6 +192,7 @@ describe("POST /api/ingest", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -216,6 +228,7 @@ describe("POST /api/ingest", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         followers: { total_followers: 4848 },
       },
@@ -228,6 +241,7 @@ describe("POST /api/ingest", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         profile: {
           profile_views: 1023,
@@ -244,6 +258,7 @@ describe("POST /api/ingest", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -267,6 +282,7 @@ describe("POST /api/ingest", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -282,6 +298,7 @@ describe("POST /api/ingest", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -308,6 +325,7 @@ describe("POST /api/ingest", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -325,6 +343,7 @@ describe("POST /api/ingest", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         post_metrics: [
           {
@@ -347,6 +366,7 @@ describe("GET /api/health after ingest", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -360,7 +380,7 @@ describe("GET /api/health after ingest", () => {
       },
     });
 
-    const res = await app.inject({ method: "GET", url: "/api/health" });
+    const res = await app.inject({ method: "GET", url: "/api/health", headers: P1 });
     const body = res.json();
     expect(body.last_sync_at).not.toBeNull();
     expect(body.sources.posts.status).toBe("ok");
@@ -372,7 +392,7 @@ describe("GET /api/health after ingest", () => {
 
 describe("GET /api/posts", () => {
   it("returns posts with latest metrics and engagement_rate", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/posts" });
+    const res = await app.inject({ method: "GET", url: "/api/posts", headers: P1 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toHaveProperty("posts");
@@ -384,7 +404,7 @@ describe("GET /api/posts", () => {
 
   it("computes engagement_rate at query time", async () => {
     // post 3001 has latest metrics: impressions=200, reactions=10, comments=4, reposts=2
-    const res = await app.inject({ method: "GET", url: "/api/posts" });
+    const res = await app.inject({ method: "GET", url: "/api/posts", headers: P1 });
     const post = res.json().posts.find((p: any) => p.id === "3001");
     expect(post).toBeDefined();
     // engagement_rate = (10 + 4 + 2) / 200 = 0.08
@@ -395,6 +415,7 @@ describe("GET /api/posts", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts?content_type=video",
+      headers: P1,
     });
     const posts = res.json().posts;
     expect(posts.length).toBeGreaterThan(0);
@@ -405,6 +426,7 @@ describe("GET /api/posts", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts?since=2026-03-09T00:00:00Z&until=2026-03-11T00:00:00Z",
+      headers: P1,
     });
     expect(res.statusCode).toBe(200);
     const posts = res.json().posts;
@@ -419,6 +441,7 @@ describe("GET /api/posts", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts?sort_by=impressions&sort_order=desc",
+      headers: P1,
     });
     const posts = res.json().posts;
     for (let i = 1; i < posts.length; i++) {
@@ -430,6 +453,7 @@ describe("GET /api/posts", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts?limit=2&offset=0",
+      headers: P1,
     });
     const body = res.json();
     expect(body.posts.length).toBeLessThanOrEqual(2);
@@ -441,6 +465,7 @@ describe("GET /api/posts", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts?limit=999",
+      headers: P1,
     });
     const body = res.json();
     expect(body.limit).toBe(100);
@@ -472,7 +497,7 @@ describe("GET /api/metrics/:postId", () => {
 
 describe("GET /api/overview", () => {
   it("returns KPI aggregates", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/overview" });
+    const res = await app.inject({ method: "GET", url: "/api/overview", headers: P1 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body).toHaveProperty("total_impressions");
@@ -485,7 +510,7 @@ describe("GET /api/overview", () => {
 
 describe("GET /api/timing", () => {
   it("returns day/hour heatmap data", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/timing" });
+    const res = await app.inject({ method: "GET", url: "/api/timing", headers: P1 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Array.isArray(body.slots)).toBe(true);
@@ -505,10 +530,11 @@ describe("GET /api/followers", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: { followers: { total_followers: 4860 } },
     });
 
-    const res = await app.inject({ method: "GET", url: "/api/followers" });
+    const res = await app.inject({ method: "GET", url: "/api/followers", headers: P1 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Array.isArray(body.snapshots)).toBe(true);
@@ -517,7 +543,7 @@ describe("GET /api/followers", () => {
 
 describe("GET /api/profile", () => {
   it("returns profile views and search appearances time series", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/profile" });
+    const res = await app.inject({ method: "GET", url: "/api/profile", headers: P1 });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Array.isArray(body.snapshots)).toBe(true);
@@ -535,6 +561,7 @@ describe("GET /api/posts/needs-content", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -549,6 +576,7 @@ describe("GET /api/posts/needs-content", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -564,6 +592,7 @@ describe("GET /api/posts/needs-content", () => {
     const response = await app.inject({
       method: "GET",
       url: "/api/posts/needs-content",
+      headers: P1,
     });
     expect(response.statusCode).toBe(200);
     const body = response.json();
@@ -582,6 +611,7 @@ describe("GET /api/posts/top-examples", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -601,6 +631,7 @@ describe("GET /api/posts/top-examples", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -630,6 +661,7 @@ describe("GET /api/posts/top-examples", () => {
     await app.inject({
       method: "POST",
       url: "/api/ingest",
+      headers: P1,
       payload: {
         posts: [
           {
@@ -650,6 +682,7 @@ describe("GET /api/posts/top-examples", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts/top-examples",
+      headers: P1,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -668,6 +701,7 @@ describe("GET /api/posts/top-examples", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts/top-examples?limit=1",
+      headers: P1,
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -678,6 +712,7 @@ describe("GET /api/posts/top-examples", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/posts/top-examples",
+      headers: P1,
     });
     const body = res.json();
     if (body.posts.length > 0) {

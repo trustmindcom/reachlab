@@ -19,6 +19,7 @@ beforeAll(async () => {
   await app.inject({
     method: "POST",
     url: "/api/ingest",
+    headers: { "x-persona-id": "1" },
     payload: {
       posts: Array.from({ length: 15 }, (_, i) => ({
         id: `insight-test-${i}`,
@@ -49,7 +50,7 @@ afterAll(async () => {
 
 describe("GET /api/insights", () => {
   it("returns empty when no analysis has run", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights" });
+    const res = await app.inject({ method: "GET", url: "/api/insights", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.recommendations).toEqual([]);
@@ -59,7 +60,7 @@ describe("GET /api/insights", () => {
 
 describe("GET /api/insights/overview", () => {
   it("returns null overview when no analysis has run", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights/overview" });
+    const res = await app.inject({ method: "GET", url: "/api/insights/overview", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     expect(res.json().overview).toBeNull();
   });
@@ -67,7 +68,7 @@ describe("GET /api/insights/overview", () => {
 
 describe("GET /api/insights/tags", () => {
   it("returns empty tags when nothing tagged", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights/tags" });
+    const res = await app.inject({ method: "GET", url: "/api/insights/tags", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     expect(res.json().tags).toEqual({});
   });
@@ -75,7 +76,7 @@ describe("GET /api/insights/tags", () => {
 
 describe("GET /api/insights/taxonomy", () => {
   it("returns empty taxonomy initially", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights/taxonomy" });
+    const res = await app.inject({ method: "GET", url: "/api/insights/taxonomy", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     expect(res.json().taxonomy).toEqual([]);
   });
@@ -83,7 +84,7 @@ describe("GET /api/insights/taxonomy", () => {
 
 describe("GET /api/insights/changelog", () => {
   it("returns empty changelog when no analysis has run", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights/changelog" });
+    const res = await app.inject({ method: "GET", url: "/api/insights/changelog", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.confirmed).toEqual([]);
@@ -97,7 +98,7 @@ describe("POST /api/insights/refresh", () => {
     const originalKey = process.env.TRUSTMIND_LLM_API_KEY;
     delete process.env.TRUSTMIND_LLM_API_KEY;
 
-    const res = await app.inject({ method: "POST", url: "/api/insights/refresh" });
+    const res = await app.inject({ method: "POST", url: "/api/insights/refresh", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toContain("API key");
 
@@ -165,7 +166,7 @@ describe("GET /api/insights/logs/:runId", () => {
 
 describe("GET /api/insights/gaps", () => {
   it("returns empty array when no gaps logged", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights/gaps" });
+    const res = await app.inject({ method: "GET", url: "/api/insights/gaps", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     expect(res.json().gaps).toEqual([]);
   });
@@ -173,7 +174,7 @@ describe("GET /api/insights/gaps", () => {
 
 describe("GET /api/insights/prompt-suggestions", () => {
   it("returns null when no analysis has run", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/insights/prompt-suggestions" });
+    const res = await app.inject({ method: "GET", url: "/api/insights/prompt-suggestions", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     expect(res.json().prompt_suggestions).toBeNull();
   });

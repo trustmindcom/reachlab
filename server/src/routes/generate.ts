@@ -43,6 +43,7 @@ import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
 import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, retroBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
 import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt, expandMessageRow } from "../ai/ghostwriter.js";
+import { createPersonaGuard } from "../middleware/persona-guard.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -51,6 +52,8 @@ function getClient(): Anthropic {
 }
 
 export function registerGenerateRoutes(app: FastifyInstance, db: Database.Database): void {
+  const personaGuard = createPersonaGuard(db);
+
   // Seed default rules for persona 1 if none exist (first run)
   if (getRuleCount(db, 1) === 0) {
     seedDefaultRules(db, 1);
@@ -379,7 +382,7 @@ Return JSON only:
     }
   });
 
-  app.get("/api/generate/:id/messages", async (request, reply) => {
+  app.get("/api/generate/:id/messages", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const genId = parseInt(id, 10);
     if (isNaN(genId)) return reply.status(400).send({ error: "Invalid id" });
@@ -409,18 +412,13 @@ Return JSON only:
 
   // ── Selection (persist draft picks) ──────────────────────
 
-  app.patch("/api/generate/:id/selection", async (request, reply) => {
+  app.patch("/api/generate/:id/selection", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const genId = parseInt(id, 10);
     if (isNaN(genId)) return reply.status(400).send({ error: "Invalid id" });
 
     const gen = getGeneration(db, genId);
     if (!gen) return reply.status(404).send({ error: "Generation not found" });
-
-    const personaId = getPersonaId(request);
-    if (gen.persona_id !== personaId) {
-      return reply.status(403).send({ error: "Not authorized" });
-    }
 
     const { selected_draft_indices, combining_guidance } = validateBody(selectionBody, request.body);
     const updates: Parameters<typeof updateGeneration>[2] = {
@@ -435,18 +433,13 @@ Return JSON only:
 
   // ── Draft auto-save ─────────────────────────────────────
 
-  app.patch("/api/generate/:id/draft", async (request, reply) => {
+  app.patch("/api/generate/:id/draft", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const genId = parseInt(id, 10);
     if (isNaN(genId)) return reply.status(400).send({ error: "Invalid id" });
 
     const gen = getGeneration(db, genId);
     if (!gen) return reply.status(404).send({ error: "Generation not found" });
-
-    const personaId = getPersonaId(request);
-    if (gen.persona_id !== personaId) {
-      return reply.status(403).send({ error: "Not authorized" });
-    }
 
     const { draft } = validateBody(draftSaveBody, request.body);
     updateGeneration(db, genId, { final_draft: draft });
@@ -700,7 +693,7 @@ Return JSON only:
     return { generations: summaries, total: result.total };
   });
 
-  app.get("/api/generate/history/:id", async (request, reply) => {
+  app.get("/api/generate/history/:id", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const gen = getGeneration(db, Number(id));
     if (!gen) {
@@ -721,22 +714,18 @@ Return JSON only:
     return { ...gen, stories, article_count: articleCount, source_count: sourceCount };
   });
 
-  app.post("/api/generate/history/:id/discard", async (request, reply) => {
+  app.post("/api/generate/history/:id/discard", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const personaId = getPersonaId(request);
     const gen = getGeneration(db, Number(id));
     if (!gen) return reply.status(404).send({ error: "Generation not found" });
-    if (gen.persona_id !== personaId) return reply.status(403).send({ error: "Not authorized" });
     updateGeneration(db, Number(id), { status: "discarded" });
     return { ok: true };
   });
 
-  app.delete("/api/generate/history/:id", async (request, reply) => {
+  app.delete("/api/generate/history/:id", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const personaId = getPersonaId(request);
     const gen = getGeneration(db, Number(id));
     if (!gen) return reply.status(404).send({ error: "Generation not found" });
-    if (gen.persona_id !== personaId) return reply.status(403).send({ error: "Not authorized" });
     db.prepare("DELETE FROM generation_messages WHERE generation_id = ?").run(Number(id));
     db.prepare("DELETE FROM generations WHERE id = ?").run(Number(id));
     return { ok: true };
@@ -744,7 +733,7 @@ Return JSON only:
 
   // ── Retro: compare draft vs published ───────────────────
 
-  app.post("/api/generate/history/:id/retro", async (request, reply) => {
+  app.post("/api/generate/history/:id/retro", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = validateBody(retroBody, request.body);
     if (!body.published_text?.trim()) {
@@ -808,7 +797,7 @@ Return JSON only:
   });
 
   // Get retro results for a generation
-  app.get("/api/generate/history/:id/retro", async (request, reply) => {
+  app.get("/api/generate/history/:id/retro", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const gen = getGeneration(db, Number(id));
     if (!gen) {
@@ -845,7 +834,7 @@ Return JSON only:
     };
   });
 
-  app.patch("/api/generate/retros/:id/apply", async (request) => {
+  app.patch("/api/generate/retros/:id/apply", { preHandler: personaGuard }, async (request) => {
     const { id } = request.params as { id: string };
     markRetroApplied(db, Number(id));
     return { ok: true };

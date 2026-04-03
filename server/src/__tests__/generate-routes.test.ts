@@ -25,7 +25,7 @@ afterAll(async () => {
 
 describe("GET /api/generate/rules", () => {
   it("returns empty categories when no rules exist", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/generate/rules" });
+    const res = await app.inject({ method: "GET", url: "/api/generate/rules?personaId=1" });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.categories).toBeDefined();
@@ -37,7 +37,7 @@ describe("GET /api/generate/rules", () => {
 
 describe("POST /api/generate/rules/reset", () => {
   it("seeds default rules and returns them", async () => {
-    const res = await app.inject({ method: "POST", url: "/api/generate/rules/reset" });
+    const res = await app.inject({ method: "POST", url: "/api/generate/rules/reset?personaId=1" });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.categories.voice_tone.length).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe("PUT /api/generate/rules", () => {
   it("replaces all rules", async () => {
     const res = await app.inject({
       method: "PUT",
-      url: "/api/generate/rules",
+      url: "/api/generate/rules?personaId=1",
       payload: {
         categories: {
           voice_tone: [{ rule_text: "Be direct", sort_order: 0 }],
@@ -65,7 +65,7 @@ describe("PUT /api/generate/rules", () => {
     expect(res.statusCode).toBe(200);
 
     // Verify
-    const getRes = await app.inject({ method: "GET", url: "/api/generate/rules" });
+    const getRes = await app.inject({ method: "GET", url: "/api/generate/rules?personaId=1" });
     const body = getRes.json();
     expect(body.categories.voice_tone).toHaveLength(1);
     expect(body.categories.voice_tone[0].rule_text).toBe("Be direct");
@@ -74,7 +74,7 @@ describe("PUT /api/generate/rules", () => {
 
 describe("GET /api/generate/history", () => {
   it("returns empty list initially", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/generate/history" });
+    const res = await app.inject({ method: "GET", url: "/api/generate/history?personaId=1" });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.generations).toEqual([]);
@@ -84,14 +84,14 @@ describe("GET /api/generate/history", () => {
 
 describe("GET /api/generate/history/:id", () => {
   it("returns 404 for non-existent generation", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/generate/history/999" });
+    const res = await app.inject({ method: "GET", url: "/api/generate/history/999?personaId=1" });
     expect(res.statusCode).toBe(404);
   });
 });
 
 describe("POST /api/generate/history/:id/discard", () => {
   it("returns 404 for non-existent generation", async () => {
-    const res = await app.inject({ method: "POST", url: "/api/generate/history/999/discard" });
+    const res = await app.inject({ method: "POST", url: "/api/generate/history/999/discard?personaId=1" });
     expect(res.statusCode).toBe(404);
   });
 });
@@ -100,7 +100,7 @@ describe("POST /api/generate/research", () => {
   it("rejects missing topic", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/research",
+      url: "/api/generate/research?personaId=1",
       payload: {},
     });
     expect(res.statusCode).toBe(400);
@@ -113,7 +113,7 @@ describe("POST /api/generate/drafts", () => {
   it("returns 404 for non-existent research", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/drafts",
+      url: "/api/generate/drafts?personaId=1",
       payload: { research_id: 999, story_index: 0 },
     });
     expect(res.statusCode).toBe(404);
@@ -124,7 +124,7 @@ describe("POST /api/generate/combine", () => {
   it("returns 404 for non-existent generation", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/combine",
+      url: "/api/generate/combine?personaId=1",
       payload: { generation_id: 999, selected_drafts: [0] },
     });
     expect(res.statusCode).toBe(404);
@@ -135,7 +135,7 @@ describe("POST /api/generate/chat", () => {
   it("returns 404 for non-existent generation", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/chat",
+      url: "/api/generate/chat?personaId=1",
       payload: { generation_id: 999, message: "make it shorter" },
     });
     expect(res.statusCode).toBe(404);
@@ -144,7 +144,7 @@ describe("POST /api/generate/chat", () => {
   it("rejects missing message", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/chat",
+      url: "/api/generate/chat?personaId=1",
       payload: { generation_id: 1 },
     });
     expect(res.statusCode).toBe(400);
@@ -153,7 +153,7 @@ describe("POST /api/generate/chat", () => {
 
 describe("GET /api/generate/coaching/insights", () => {
   it("returns empty insights initially", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/generate/coaching/insights" });
+    const res = await app.inject({ method: "GET", url: "/api/generate/coaching/insights?personaId=1" });
     expect(res.statusCode).toBe(200);
     expect(res.json().insights).toEqual([]);
   });
@@ -161,7 +161,7 @@ describe("GET /api/generate/coaching/insights", () => {
 
 describe("GET /api/generate/coaching/history", () => {
   it("returns empty history initially", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/generate/coaching/history" });
+    const res = await app.inject({ method: "GET", url: "/api/generate/coaching/history?personaId=1" });
     expect(res.statusCode).toBe(200);
     expect(res.json().syncs).toEqual([]);
   });
@@ -171,7 +171,7 @@ describe("PATCH /api/generate/coaching/changes/:id", () => {
   it("returns 404 for non-existent change", async () => {
     const res = await app.inject({
       method: "PATCH",
-      url: "/api/generate/coaching/changes/999",
+      url: "/api/generate/coaching/changes/999?personaId=1",
       payload: { action: "skip" },
     });
     expect(res.statusCode).toBe(404);
@@ -221,7 +221,7 @@ describe("GET /api/generate/active", () => {
 
 describe("POST /api/generate/discover", () => {
   it("endpoint is registered and returns error without API key", async () => {
-    const res = await app.inject({ method: "POST", url: "/api/generate/discover" });
+    const res = await app.inject({ method: "POST", url: "/api/generate/discover?personaId=1" });
     expect(res.statusCode).toBe(500);
   });
 });
@@ -230,7 +230,7 @@ describe("POST /api/generate/ghostwrite", () => {
   it("returns 400 for missing message", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/ghostwrite",
+      url: "/api/generate/ghostwrite?personaId=1",
       payload: { generation_id: 1 },
     });
     expect(res.statusCode).toBe(400);
@@ -239,7 +239,7 @@ describe("POST /api/generate/ghostwrite", () => {
   it("returns 404 for non-existent generation", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/generate/ghostwrite",
+      url: "/api/generate/ghostwrite?personaId=1",
       payload: { generation_id: 999999, message: "combine these" },
     });
     expect(res.statusCode).toBe(404);
@@ -301,7 +301,7 @@ describe("PATCH /api/generate/:id/selection", () => {
 
     const res = await app.inject({
       method: "PATCH",
-      url: `/api/generate/${genId}/selection`,
+      url: `/api/generate/${genId}/selection?personaId=1`,
       payload: { selected_draft_indices: [0, 2], combining_guidance: "Make it punchy" },
     });
     expect(res.statusCode).toBe(200);
@@ -362,7 +362,7 @@ describe("PATCH /api/generate/:id/draft", () => {
 
     const res = await app.inject({
       method: "PATCH",
-      url: `/api/generate/${genId}/draft`,
+      url: `/api/generate/${genId}/draft?personaId=1`,
       payload: { draft: "My updated draft text" },
     });
     expect(res.statusCode).toBe(200);

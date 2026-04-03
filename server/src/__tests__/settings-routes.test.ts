@@ -45,7 +45,7 @@ describe("PUT /api/settings/timezone", () => {
 
 describe("GET /api/settings/writing-prompt", () => {
   it("returns the seeded default prompt", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/settings/writing-prompt" });
+    const res = await app.inject({ method: "GET", url: "/api/settings/writing-prompt", headers: { "x-persona-id": "1" } });
     expect(res.statusCode).toBe(200);
     // Migration 008 seeds a default writing prompt
     expect(res.json().text).toBeTruthy();
@@ -57,6 +57,7 @@ describe("PUT /api/settings/writing-prompt", () => {
     const res = await app.inject({
       method: "PUT",
       url: "/api/settings/writing-prompt",
+      headers: { "x-persona-id": "1" },
       payload: { text: "Always start with a hook", source: "manual_edit" },
     });
     expect(res.statusCode).toBe(200);
@@ -64,7 +65,7 @@ describe("PUT /api/settings/writing-prompt", () => {
   });
 
   it("retrieves the saved prompt", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/settings/writing-prompt" });
+    const res = await app.inject({ method: "GET", url: "/api/settings/writing-prompt", headers: { "x-persona-id": "1" } });
     expect(res.json().text).toBe("Always start with a hook");
   });
 });
@@ -74,6 +75,7 @@ describe("GET /api/settings/writing-prompt/history", () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/settings/writing-prompt/history",
+      headers: { "x-persona-id": "1" },
     });
     expect(res.statusCode).toBe(200);
     const history = res.json().history;

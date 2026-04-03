@@ -16,6 +16,7 @@ import { expandMessageRow } from "../ai/agent-loop.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
 import { coachChatBody, createSessionBody } from "../schemas/coach-chat.js";
+import { createCoachSessionGuard } from "../middleware/persona-guard.js";
 
 function getClient(): Anthropic {
   const apiKey = process.env.TRUSTMIND_LLM_API_KEY;
@@ -24,6 +25,7 @@ function getClient(): Anthropic {
 }
 
 export function registerCoachChatRoutes(app: FastifyInstance, db: Database.Database): void {
+  const coachSessionGuard = createCoachSessionGuard(db);
   const activeRequests = new Set<number>();
 
   // ── Send message ────────────────────────────────────────
@@ -103,15 +105,13 @@ export function registerCoachChatRoutes(app: FastifyInstance, db: Database.Datab
 
   // ── Get messages for a session ─────────────────────────
 
-  app.get("/api/coach/chat/sessions/:id/messages", async (request, reply) => {
+  app.get("/api/coach/chat/sessions/:id/messages", { preHandler: coachSessionGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const sessionId = parseInt(id, 10);
     if (isNaN(sessionId)) return reply.status(400).send({ error: "Invalid session id" });
 
-    const personaId = getPersonaId(request);
     const session = getCoachSession(db, sessionId);
     if (!session) return reply.status(404).send({ error: "Session not found" });
-    if (session.persona_id !== personaId) return reply.status(403).send({ error: "Not authorized" });
 
     const messages = getCoachMessages(db, sessionId, 50).reverse();
     return { messages };
