@@ -201,8 +201,8 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
           />
         </div>
 
-        {/* Draft footer */}
-        <div className="flex items-center justify-between mt-3">
+        {/* Draft footer — sticky at bottom */}
+        <div className="flex items-center justify-between mt-3 sticky bottom-0 py-3 bg-gen-bg-0 z-20">
           <div className="flex items-center gap-3">
             <span className="text-[14px] text-gen-text-3 tabular-nums">{wordCount} words</span>
             <button

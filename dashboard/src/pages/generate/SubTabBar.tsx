@@ -8,7 +8,7 @@ interface SubTabBarProps {
 
 export default function SubTabBar({ active, onChange }: SubTabBarProps) {
   return (
-    <div className="border-b border-gen-border-2 -mx-6 px-8">
+    <div className="border-b border-gen-border-2 -mx-6 px-8 sticky top-0 z-30 bg-gen-bg-0">
       <div className="flex gap-6">
         {subTabs.map((t) => (
           <button
