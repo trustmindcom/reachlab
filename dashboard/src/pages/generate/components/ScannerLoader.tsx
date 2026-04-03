@@ -40,9 +40,13 @@ interface RingWave {
   hue: number;
   width: number;
   speed: number;
-  waveFreq: number;    // how fast the ring oscillates bigger/smaller
-  waveAmp: number;     // how much the ring radius oscillates (fraction of base radius)
-  phase: number;       // starting phase offset for variety
+  waveFreq: number;
+  waveAmp: number;
+  phase: number;
+  // Width lifecycle: how the ring's thickness evolves over its life
+  widthBehavior: "steady" | "swell-fade" | "pulse" | "thin-fade";
+  widthPeak: number;       // max width multiplier (1-4x)
+  widthPulseFreq: number;  // for "pulse" behavior
   wobbleX: number;     // slight horizontal wobble amount
   wobbleY: number;     // slight vertical wobble amount
   wobbleFreq: number;  // wobble speed
@@ -196,20 +200,25 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
     };
 
     // Spawn a ring wave from the core
+    const widthBehaviors: RingWave["widthBehavior"][] = ["steady", "swell-fade", "pulse", "thin-fade"];
     const spawnRing = () => {
+      const behavior = widthBehaviors[Math.floor(Math.random() * widthBehaviors.length)];
       rings.push({
         radius: 6 + Math.random() * 4,
         maxRadius: 140 + Math.random() * 100,
-        alpha: 0.18 + Math.random() * 0.08,
+        alpha: behavior === "thin-fade" ? 0.22 + Math.random() * 0.06 : 0.18 + Math.random() * 0.08,
         hue: hues[Math.floor(Math.random() * hues.length)],
-        width: 1.5 + Math.random() * 2,
+        width: behavior === "swell-fade" ? 0.8 : 1.5 + Math.random() * 2,
         speed: 0.3 + Math.random() * 1.2,
-        waveFreq: 2 + Math.random() * 6,      // different frequencies create interference
-        waveAmp: 0.06 + Math.random() * 0.12,  // 6-18% radius modulation
-        phase: Math.random() * Math.PI * 2,     // random start phase
-        wobbleX: Math.random() * 1.5,           // slight off-center wobble
+        waveFreq: 2 + Math.random() * 6,
+        waveAmp: 0.06 + Math.random() * 0.12,
+        phase: Math.random() * Math.PI * 2,
+        wobbleX: Math.random() * 1.5,
         wobbleY: Math.random() * 1.5,
         wobbleFreq: 1 + Math.random() * 3,
+        widthBehavior: behavior,
+        widthPeak: behavior === "swell-fade" ? 2.5 + Math.random() * 2 : 1.5 + Math.random() * 1.5,
+        widthPulseFreq: 3 + Math.random() * 5,
       });
     };
 
@@ -280,8 +289,33 @@ export default function ScannerLoader({ messages, interval = 2500 }: ScannerLoad
         const wobX = Math.sin(t * r.wobbleFreq + r.phase) * r.wobbleX;
         const wobY = Math.cos(t * r.wobbleFreq * 0.7 + r.phase) * r.wobbleY;
 
-        const alpha = r.alpha * (1 - progress) * (1 - progress);
-        const lineWidth = r.width * (1 - progress * 0.5) * (1 + Math.sin(t * r.waveFreq * 0.5 + r.phase) * 0.15);
+        // Width lifecycle based on behavior type
+        let widthMult = 1;
+        switch (r.widthBehavior) {
+          case "steady":
+            // Gentle taper as it expands
+            widthMult = 1 - progress * 0.5;
+            break;
+          case "swell-fade":
+            // Starts thin, swells to peak at ~30%, then thins out and fades
+            widthMult = progress < 0.3
+              ? r.widthPeak * (progress / 0.3)
+              : r.widthPeak * Math.max(0, 1 - (progress - 0.3) / 0.7);
+            break;
+          case "pulse":
+            // Oscillates thick/thin as it expands, overall tapering
+            widthMult = (1 - progress * 0.4) * (1 + Math.sin(t * r.widthPulseFreq + r.phase) * 0.6);
+            break;
+          case "thin-fade":
+            // Starts at normal width, progressively thins to a whisper, then gone
+            widthMult = Math.pow(1 - progress, 1.5) * 1.2;
+            break;
+        }
+
+        // Extra alpha fade for thin-fade rings so they dissolve gracefully
+        const behaviorAlphaBoost = r.widthBehavior === "swell-fade" && progress < 0.4 ? 1.3 : 1;
+        const alpha = r.alpha * (1 - progress) * (1 - progress) * behaviorAlphaBoost;
+        const lineWidth = Math.max(0.3, r.width * widthMult * (1 + Math.sin(t * r.waveFreq * 0.5 + r.phase) * 0.1));
 
         ctx.save();
         ctx.globalCompositeOperation = "screen";
