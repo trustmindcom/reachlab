@@ -186,6 +186,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const [isAnimating, setIsAnimating] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const expandPanelRef = useRef<HTMLDivElement>(null);
 
   // Auto-discover on mount: use daily cache if available
   useEffect(() => {
@@ -205,6 +206,15 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
       }
     }
   }, []);
+
+  // Scroll expanded panel into view when it appears
+  useEffect(() => {
+    if (expandedIndex !== null && expandPanelRef.current) {
+      setTimeout(() => {
+        expandPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
+    }
+  }, [expandedIndex]);
 
   // Escape key to collapse
   useEffect(() => {
@@ -430,8 +440,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
               >
                 {gen.discoveryTopics!.map((topic, i) => {
-                  // Skip the expanded card in the grid — it renders below
-                  if (expandedIndex === i) return null;
+                  const isSelected = expandedIndex === i;
                   const tagColor = getTagColor(topic.category_tag);
                   const domain = extractDomain(topic.source_url);
 
@@ -441,7 +450,11 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                       data-card
                       data-index={i}
                       onClick={() => expandCard(i)}
-                      className="relative rounded-xl bg-gen-bg-1 border border-gen-border-1 p-[18px_20px_16px] cursor-pointer hover:border-gen-border-2 transition-[border-color,box-shadow] duration-300 ease-out"
+                      className={`relative rounded-xl p-[18px_20px_16px] cursor-pointer transition-[border-color,box-shadow] duration-300 ease-out flex flex-col ${
+                        isSelected
+                          ? "border border-gen-accent/25 bg-gen-bg-2 shadow-[inset_3px_0_0_0_var(--color-gen-accent)]"
+                          : "bg-gen-bg-1 border border-gen-border-1 hover:border-gen-border-2"
+                      }`}
                     >
                       <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
                         {topic.label}
@@ -449,7 +462,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                       <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-3 mb-3">
                         {topic.summary}
                       </div>
-                      <div className="flex items-center justify-between text-[13px]">
+                      <div className="flex items-center justify-between text-[13px] mt-auto">
                         <span className="text-gen-text-3">{domain}</span>
                         <span
                           className="text-[11px] font-medium px-1.5 py-0.5 rounded-md"
@@ -463,13 +476,16 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 })}
               </div>
 
-              {/* Expanded panel — rendered outside grid so cards reflow with no gaps */}
+              {/* Expanded panel — rendered outside grid, scrolls into view */}
               {expandedIndex !== null && gen.discoveryTopics![expandedIndex] && (() => {
                 const topic = gen.discoveryTopics![expandedIndex];
                 const tagColor = getTagColor(topic.category_tag);
                 const domain = extractDomain(topic.source_url);
                 return (
-                  <div className="relative rounded-xl border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] mt-3 z-10">
+                  <div
+                    ref={expandPanelRef}
+                    className="relative rounded-xl border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] mt-3 z-10"
+                  >
                     <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gen-accent rounded-l-xl" />
                     <button
                       onClick={collapseCard}
