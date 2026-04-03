@@ -1,23 +1,8 @@
 import { useState, useEffect } from "react";
 import {
   api,
-  type Recommendation,
-  type Insight,
-  type Changelog,
-  type PromptSuggestions,
   type PromptSuggestion,
-  type AnalysisGap,
-  type ProgressData,
-  type CategoryPerformance,
-  type EngagementQuality,
-  type TimingSlot,
-  type SparklinePoint,
-  type TopicPerformance,
-  type HookPerformance,
-  type ImageSubtypePerformance,
   type AnalysisStatus,
-  type PendingRetro,
-  type RetroPromptEdit,
 } from "../api/client";
 import { formatTimeAgo, formatTimeUntil } from "./coach/components";
 import { ActionsTab } from "./coach/ActionsTab";
@@ -25,6 +10,9 @@ import { InsightsTab } from "./coach/InsightsTab";
 import { DeepDiveTab } from "./coach/DeepDiveTab";
 import { useToast } from "../components/Toast";
 import CoachChatPanel from "../components/CoachChatPanel";
+import { useCoachActions } from "./coach/hooks/useCoachActions";
+import { useCoachInsights } from "./coach/hooks/useCoachInsights";
+import { useCoachDeepDive } from "./coach/hooks/useCoachDeepDive";
 
 type CoachTab = "actions" | "insights" | "deep-dive";
 
@@ -35,86 +23,15 @@ export default function Coach() {
   const [refreshing, setRefreshing] = useState(false);
   const [status, setStatus] = useState<AnalysisStatus | null>(null);
 
-  // Actions data
-  const [activeRecs, setActiveRecs] = useState<Recommendation[]>([]);
-  const [resolvedRecs, setResolvedRecs] = useState<Recommendation[]>([]);
-  const [promptSuggestions, setPromptSuggestions] = useState<PromptSuggestions | null>(null);
-
-  // Insights data
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [changelog, setChangelog] = useState<Changelog | null>(null);
-  const [gaps, setGaps] = useState<AnalysisGap[]>([]);
-  const [timingSlots, setTimingSlots] = useState<TimingSlot[]>([]);
-
-  // Deep Dive / Breakdowns data
-  const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [categories, setCategories] = useState<CategoryPerformance[]>([]);
-  const [engagement, setEngagement] = useState<EngagementQuality | null>(null);
-  const [sparklinePoints, setSparklinePoints] = useState<SparklinePoint[]>([]);
-  const [topics, setTopics] = useState<TopicPerformance[]>([]);
-  const [hooks, setHooks] = useState<{ by_hook_type: HookPerformance[]; by_format_style: HookPerformance[] }>({ by_hook_type: [], by_format_style: [] });
-  const [imageSubtypes, setImageSubtypes] = useState<ImageSubtypePerformance[]>([]);
-
-  // Post Retro
-  const [pendingRetros, setPendingRetros] = useState<PendingRetro[]>([]);
-  const [appliedRetroEdits, setAppliedRetroEdits] = useState<Set<string>>(new Set());
-
-  const handleApplyRetroEdit = async (retroId: number, editIndex: number, edit: RetroPromptEdit) => {
-    const key = `${retroId}-${editIndex}`;
-    try {
-      const res = await api.getWritingPrompt();
-      const current = res.text ?? "";
-      let updated: string;
-      if (edit.type === "add") {
-        if (current.includes(edit.add_text)) return;
-        updated = current.trimEnd() + "\n\n" + edit.add_text;
-      } else if (edit.type === "remove" && edit.remove_text) {
-        if (!current.includes(edit.remove_text)) return;
-        updated = current.replace(edit.remove_text, "").replace(/\n{3,}/g, "\n\n").trim();
-      } else if (edit.type === "replace" && edit.remove_text) {
-        if (!current.includes(edit.remove_text)) {
-          updated = current.trimEnd() + "\n\n" + edit.add_text;
-        } else {
-          updated = current.replace(edit.remove_text, edit.add_text);
-        }
-      } else {
-        return;
-      }
-      await api.saveWritingPrompt(updated, "ai_suggestion", edit.reason);
-      await api.markRetroApplied(retroId);
-      setAppliedRetroEdits((prev) => new Set(prev).add(key));
-      setPendingRetros((prev) => prev.filter((r) => r.generation_id !== retroId));
-    } catch { /* ignore */ }
-  };
+  const actions = useCoachActions(showError);
+  const insights = useCoachInsights(showError);
+  const deepDive = useCoachDeepDive(showError);
 
   const loadAll = () => {
-    const fail = (what: string) => () => showError(`Failed to load ${what}`);
-
-    // Status
-    api.insightsStatus().then(setStatus).catch(fail("analysis status"));
-
-    // Actions + Retros
-    api.getPendingRetros().then((r) => setPendingRetros(r.retros)).catch(() => {}); // non-critical
-    api.recommendationsWithCooldown().then((r) => {
-      setActiveRecs(r.active);
-      setResolvedRecs(r.resolved);
-    }).catch(fail("recommendations"));
-    api.insightsPromptSuggestions().then((r) => setPromptSuggestions(r.prompt_suggestions)).catch(() => {}); // non-critical
-
-    // Insights
-    api.insights().then((r) => setInsights(r.insights)).catch(fail("insights"));
-    api.insightsChangelog().then(setChangelog).catch(() => {}); // non-critical
-    api.insightsGaps().then((r) => setGaps(r.gaps)).catch(() => {}); // non-critical
-    api.timing().then((r) => setTimingSlots(r.slots)).catch(fail("timing data"));
-
-    // Deep Dive / Breakdowns
-    api.deepDiveProgress().then(setProgress).catch(fail("progress metrics"));
-    api.deepDiveCategories().then((r) => setCategories(r.categories)).catch(fail("categories"));
-    api.deepDiveEngagement().then((r) => setEngagement(r.engagement)).catch(fail("engagement"));
-    api.deepDiveSparkline(90).then((r) => setSparklinePoints(r.points)).catch(() => {}); // non-critical
-    api.deepDiveTopics().then((r) => setTopics(r.topics)).catch(fail("topics"));
-    api.deepDiveHooks().then(setHooks).catch(fail("hook performance"));
-    api.deepDiveImageSubtypes().then((r) => setImageSubtypes(r.subtypes)).catch(() => {}); // non-critical
+    api.insightsStatus().then(setStatus).catch(() => showError("Failed to load analysis status"));
+    actions.load();
+    insights.load();
+    deepDive.load();
   };
 
   useEffect(() => {
@@ -156,40 +73,8 @@ export default function Coach() {
       .catch(() => setRefreshing(false));
   };
 
-  const handleResolve = (id: number, type: "accepted" | "dismissed") => {
-    api.resolveRecommendation(id, type).then(() => {
-      // Move from active to resolved locally
-      setActiveRecs((prev) => prev.filter((r) => r.id !== id));
-      setResolvedRecs((prev) => {
-        const rec = activeRecs.find((r) => r.id === id);
-        if (rec) return [{ ...rec, resolved_type: type, resolved_at: new Date().toISOString() }, ...prev];
-        return prev;
-      });
-    }).catch(() => showError("Failed to save recommendation"));
-  };
-
-  const handleFeedback = (id: number, rating: string) => {
-    api.recommendationFeedback(id, rating).catch(() => showError("Failed to save feedback"));
-  };
-
-  const handleAcceptSuggestion = async (_index: number, suggestion: PromptSuggestion) => {
-    const currentPromptRes = await api.getWritingPrompt().catch(() => ({ text: null }));
-    const currentText = currentPromptRes.text ?? "";
-    let newText: string;
-    if (currentText.includes(suggestion.current)) {
-      newText = currentText.replace(suggestion.current, suggestion.suggested);
-    } else if (currentText.includes(suggestion.suggested)) {
-      // Already applied — don't duplicate
-      return;
-    } else {
-      newText = currentText + "\n" + suggestion.suggested;
-    }
-    await api.saveWritingPrompt(newText, "ai_suggestion", suggestion.evidence).catch(() => showError("Failed to save prompt"));
-    setPromptSuggestions(null); // Clear the UI immediately
-  };
-
   const tabs: { key: CoachTab; label: string; count?: number }[] = [
-    { key: "actions", label: "Overview", count: activeRecs.length || undefined },
+    { key: "actions", label: "Overview", count: actions.activeRecs.length || undefined },
     { key: "insights", label: "Insights" },
     { key: "deep-dive", label: "Breakdowns" },
   ];
@@ -255,7 +140,7 @@ export default function Coach() {
       {tab === "actions" && (
         <>
           {/* Post Retro — auto-detected prompt improvements */}
-          {pendingRetros.length > 0 && (
+          {actions.pendingRetros.length > 0 && (
             <div className="mb-8">
               <h2 className="text-[15px] font-semibold text-text-primary uppercase tracking-wider mb-2">
                 Post Retro
@@ -263,7 +148,7 @@ export default function Coach() {
               <p className="text-[14px] text-text-muted mb-4">
                 Based on changes you made between AI drafts and what you published
               </p>
-              {pendingRetros.map((retro) => (
+              {actions.pendingRetros.map((retro) => (
                 <div key={retro.generation_id} className="bg-surface-1 rounded-xl border border-border p-5 mb-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[14px] text-text-muted">{formatTimeAgo(retro.retro_at)}</span>
@@ -278,7 +163,7 @@ export default function Coach() {
                       </span>
                       {retro.analysis.prompt_edits.map((edit, i) => {
                         const key = `${retro.generation_id}-${i}`;
-                        const applied = appliedRetroEdits.has(key);
+                        const applied = actions.appliedRetroEdits.has(key);
                         return (
                           <div key={i} className="bg-surface-2 rounded-lg p-4 border border-border">
                             <div className="flex items-start justify-between gap-4">
@@ -294,7 +179,7 @@ export default function Coach() {
                                 </div>
                               </div>
                               <button
-                                onClick={() => handleApplyRetroEdit(retro.generation_id, i, edit)}
+                                onClick={() => actions.handleApplyRetroEdit(retro.generation_id, i, edit)}
                                 disabled={applied}
                                 className={`shrink-0 px-3 py-1.5 rounded-md text-[14px] font-medium transition-colors duration-150 ease-[var(--ease-snappy)] ${
                                   applied
@@ -316,35 +201,35 @@ export default function Coach() {
           )}
 
           <ActionsTab
-            active={activeRecs}
-            resolved={resolvedRecs}
-            promptSuggestions={promptSuggestions}
-            onResolve={handleResolve}
-            onFeedback={handleFeedback}
-            onAcceptSuggestion={handleAcceptSuggestion}
-            progress={progress}
-            sparklinePoints={sparklinePoints}
-            insights={insights}
+            active={actions.activeRecs}
+            resolved={actions.resolvedRecs}
+            promptSuggestions={actions.promptSuggestions}
+            onResolve={actions.handleResolve}
+            onFeedback={actions.handleFeedback}
+            onAcceptSuggestion={actions.handleAcceptSuggestion}
+            progress={deepDive.progress}
+            sparklinePoints={deepDive.sparklinePoints}
+            insights={insights.insights}
           />
         </>
       )}
       {tab === "insights" && (
         <InsightsTab
-          insights={insights}
-          changelog={changelog}
-          gaps={gaps}
-          timingSlots={timingSlots}
+          insights={insights.insights}
+          changelog={insights.changelog}
+          gaps={insights.gaps}
+          timingSlots={insights.timingSlots}
         />
       )}
       {tab === "deep-dive" && (
         <DeepDiveTab
-          categories={categories}
-          engagement={engagement}
-          sparklinePoints={sparklinePoints}
-          topics={topics}
-          hooks={hooks}
-          imageSubtypes={imageSubtypes}
-          timingSlots={timingSlots}
+          categories={deepDive.categories}
+          engagement={deepDive.engagement}
+          sparklinePoints={deepDive.sparklinePoints}
+          topics={deepDive.topics}
+          hooks={deepDive.hooks}
+          imageSubtypes={deepDive.imageSubtypes}
+          timingSlots={insights.timingSlots}
         />
       )}
       <CoachChatPanel open={coachChatOpen} onClose={() => setCoachChatOpen(false)} />
