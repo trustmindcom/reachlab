@@ -486,6 +486,12 @@ function getAnalysisHealth(db: Database.Database, personaId: number) {
   };
 }
 
+/** Retry window: posts older than this are assumed to have frozen engagement
+ * AND to be at risk of LinkedIn removing their per-post analytics page, so
+ * we stop spinning the retry loop on them. Six months is long enough to
+ * backfill any post a creator is actively tracking. */
+const METRICS_RETRY_WINDOW_DAYS = 180;
+
 export function getPostIdsNeedingMetrics(db: Database.Database, personaId: number): string[] {
   // A post "needs metrics" if it has no post_metrics row at all, OR if its most
   // recent scrape produced no core engagement data (impressions is the primary
@@ -496,7 +502,7 @@ export function getPostIdsNeedingMetrics(db: Database.Database, personaId: numbe
      LEFT JOIN post_metrics latest ON latest.id = (
        SELECT id FROM post_metrics WHERE post_id = p.id ORDER BY id DESC LIMIT 1
      )
-     WHERE p.published_at > datetime('now', '-14 days')
+     WHERE p.published_at > datetime('now', '-${METRICS_RETRY_WINDOW_DAYS} days')
        AND p.persona_id = ?
        AND (latest.id IS NULL OR latest.impressions IS NULL)
      ORDER BY p.published_at DESC`
