@@ -3,6 +3,13 @@ import { api, type GenStory, type DiscoveryTopic } from "../../api/client";
 import type { SetGen } from "../Generate";
 import StoryCard from "./components/StoryCard";
 import ScannerLoader from "./components/ScannerLoader";
+import {
+  getLockedTopics,
+  saveLockedTopics,
+  mergeLocked,
+  toggleLockedTopic,
+  isTopicLocked,
+} from "./lockedTopics";
 
 interface DiscoveryViewProps {
   gen: {
@@ -188,6 +195,20 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [guidanceText, setGuidanceText] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
+  const [lockedTopics, setLockedTopics] = useState<DiscoveryTopic[]>(() => getLockedTopics());
+
+  const isLocked = useCallback(
+    (topic: DiscoveryTopic) => isTopicLocked(lockedTopics, topic),
+    [lockedTopics]
+  );
+
+  const toggleLock = useCallback((topic: DiscoveryTopic) => {
+    setLockedTopics((prev) => {
+      const next = toggleLockedTopic(prev, topic);
+      saveLockedTopics(next);
+      return next;
+    });
+  }, []);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const discoverStartedRef = useRef(false);
@@ -201,7 +222,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
       if (cached) {
         setGen((prev) => ({
           ...prev,
-          discoveryTopics: cached,
+          discoveryTopics: mergeLocked(lockedTopics, cached),
           stories: [],
           researchId: null,
           selectedStoryIndex: null,
@@ -242,10 +263,11 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
     try {
       const res = await api.generateDiscover();
-      setCachedTopics(res.topics);
+      const merged = mergeLocked(lockedTopics, res.topics);
+      setCachedTopics(merged);
       setGen((prev) => ({
         ...prev,
-        discoveryTopics: res.topics,
+        discoveryTopics: merged,
         stories: [],
         researchId: null,
         selectedStoryIndex: null,
@@ -452,6 +474,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                   const isExpanded = expandedIndex === i;
                   const tagColor = getTagColor(topic.category_tag);
                   const domain = extractDomain(topic.source_url);
+                  const locked = isLocked(topic);
 
                   return (
                     <div
@@ -460,10 +483,14 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                       data-index={i}
                       onClick={() => { if (!isExpanded) expandCard(i); }}
                       style={isExpanded ? { gridColumn: "1 / -1" } : undefined}
-                      className={`relative rounded-xl transition-[border-color,box-shadow] duration-300 ease-out ${
+                      className={`group relative rounded-xl transition-[border-color,box-shadow] duration-300 ease-out ${
                         isExpanded
                           ? "border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] cursor-default p-0 z-10"
-                          : "bg-gen-bg-1 border border-gen-border-1 p-[18px_20px_16px] cursor-pointer hover:border-gen-border-2 flex flex-col"
+                          : `bg-gen-bg-1 border p-[18px_20px_16px] cursor-pointer flex flex-col ${
+                              locked
+                                ? "border-gen-accent/40 hover:border-gen-accent/60"
+                                : "border-gen-border-1 hover:border-gen-border-2"
+                            }`
                       }`}
                     >
                       {isExpanded && (
@@ -472,7 +499,34 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
                       {!isExpanded && (
                         <>
-                          <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleLock(topic); }}
+                            aria-label={locked ? "Unlock topic" : "Lock topic to keep through refresh"}
+                            className={`peer absolute top-2 left-2 w-6 h-6 flex items-center justify-center rounded-md transition-all duration-150 z-10 ${
+                              locked
+                                ? "text-gen-accent opacity-100"
+                                : "text-gen-text-4 opacity-0 group-hover:opacity-100 hover:text-gen-text-1 hover:bg-gen-bg-2"
+                            }`}
+                          >
+                            {locked ? (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round">
+                                <rect x="3" y="6.5" width="8" height="5.5" rx="1" />
+                                <path d="M4.5 6.5V4.5a2.5 2.5 0 0 1 5 0V6.5" fill="none" strokeLinecap="round" />
+                              </svg>
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="6.5" width="8" height="5.5" rx="1" />
+                                <path d="M4.5 6.5V4.5a2.5 2.5 0 0 1 5 0V6.5" />
+                              </svg>
+                            )}
+                          </button>
+                          <span
+                            role="tooltip"
+                            className="pointer-events-none absolute top-[34px] left-2 z-20 whitespace-nowrap rounded-md bg-gen-bg-3 border border-gen-border-1 px-2 py-1 text-[11px] font-medium text-gen-text-1 opacity-0 translate-y-[-2px] peer-hover:opacity-100 peer-hover:translate-y-0 peer-focus-visible:opacity-100 peer-focus-visible:translate-y-0 transition-all duration-150 ease-out shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+                          >
+                            {locked ? "Click to unlock" : "Lock to keep through refresh"}
+                          </span>
+                          <div className={`font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px] ${locked ? "pl-7" : ""}`}>
                             {topic.label}
                           </div>
                           <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-3 mb-3">
