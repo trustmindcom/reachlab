@@ -277,6 +277,28 @@ describe("POST /api/ingest", () => {
     expect(body.posts_upserted).toBe(1);
   });
 
+  it("accepts null hook_text/full_text (e.g. image-only posts)", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ingest",
+      headers: P1,
+      payload: {
+        posts: [
+          {
+            id: "null-text-post",
+            content_type: "image",
+            published_at: "2025-01-15T10:00:00+00:00",
+            hook_text: null,
+            full_text: null,
+            image_urls: ["https://media.licdn.com/dms/image/null-text.jpg"],
+          },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().posts_upserted).toBe(1);
+  });
+
   it("accepts partial post without content_type and published_at", async () => {
     // First create the post with required fields
     await app.inject({
