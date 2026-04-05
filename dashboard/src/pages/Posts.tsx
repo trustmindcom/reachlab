@@ -155,7 +155,7 @@ export default function Posts() {
       )}
 
       {/* Table */}
-      <div className="border border-border rounded-lg overflow-x-auto animate-fade-up">
+      <div className="border border-border rounded-lg overflow-x-auto md:overflow-x-visible animate-fade-up">
         <table className="w-full text-sm bg-surface-1">
           <thead>
             <tr className="text-text-muted text-xs uppercase tracking-wider border-b border-border">
