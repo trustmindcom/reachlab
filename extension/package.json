@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "dev": "vite build && chokidar \"src/**/*\" \"manifest.json\" -c \"vite build\" --initial=false",
     "test": "vitest run"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
+    "chokidar-cli": "^3.0.0",
     "happy-dom": "^20.8.4",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
