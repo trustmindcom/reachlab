@@ -161,6 +161,88 @@ describe("scrapePostDetail", () => {
     expect(metrics.avg_watch_time_seconds).toBe(19);
     expect(metrics.reactions).toBe(20);
   });
+
+  it("extracts metrics from Free-tier markup (Discovery = summary list, Social = cta title/text)", () => {
+    // Free-tier LinkedIn renders Discovery cards with the same summary-list
+    // markup that Video performance uses, and its Social engagement cards use
+    // .member-analytics-addon__cta-list-item-{title,text} instead of
+    // <strong>-wrapped values. Captured from a live page 2026-04-05.
+    const doc = createDoc(`
+      <div>
+        <section class="member-analytics-addon-card__base-card">
+          <h2 class="member-analytics-addon-header__title">Discovery</h2>
+          <ul class="member-analytics-addon-summary">
+            <li class="member-analytics-addon-summary__list-item">
+              <div class="display-flex align-items-center">
+                <p class="text-body-medium-bold pr1 text-heading-large">496</p>
+              </div>
+              <p class="member-analytics-addon-list-item__description t-14 pr3">Impressions</p>
+            </li>
+            <li class="member-analytics-addon-summary__list-item">
+              <div class="display-flex align-items-center">
+                <p class="text-body-medium-bold pr1 text-heading-large">309</p>
+              </div>
+              <p class="member-analytics-addon-list-item__description t-14 pr3">Members reached</p>
+            </li>
+          </ul>
+        </section>
+        <section class="member-analytics-addon-card__base-card">
+          <h2 class="member-analytics-addon-header__title">Social engagement</h2>
+          <ul>
+            <li class="member-analytics-addon__cta-list-item">
+              <a class="member-analytics-addon__cta-list-item-content" href="#">
+                <span class="member-analytics-addon__cta-list-item-title">Reactions</span>
+                <div class="member-analytics-addon__cta-list-item-count-container">
+                  <span class="member-analytics-addon__cta-list-item-text">13</span>
+                </div>
+              </a>
+            </li>
+            <li class="member-analytics-addon__cta-list-item">
+              <a class="member-analytics-addon__cta-list-item-content" href="#">
+                <span class="member-analytics-addon__cta-list-item-title">Comments</span>
+                <div class="member-analytics-addon__cta-list-item-count-container">
+                  <span class="member-analytics-addon__cta-list-item-text">2</span>
+                </div>
+              </a>
+            </li>
+            <li class="member-analytics-addon__cta-list-item">
+              <div class="member-analytics-addon__cta-list-item-content">
+                <span class="member-analytics-addon__cta-list-item-title">Reposts</span>
+                <div class="member-analytics-addon__cta-list-item-count-container">
+                  <span class="member-analytics-addon__cta-list-item-text">0</span>
+                </div>
+              </div>
+            </li>
+            <li class="member-analytics-addon__cta-list-item">
+              <div class="member-analytics-addon__cta-list-item-content">
+                <span class="member-analytics-addon__cta-list-item-title">Saves</span>
+                <div class="member-analytics-addon__cta-list-item-count-container">
+                  <span class="member-analytics-addon__cta-list-item-text">0</span>
+                </div>
+              </div>
+            </li>
+            <li class="member-analytics-addon__cta-list-item">
+              <div class="member-analytics-addon__cta-list-item-content">
+                <span class="member-analytics-addon__cta-list-item-title">Sends on LinkedIn</span>
+                <div class="member-analytics-addon__cta-list-item-count-container">
+                  <span class="member-analytics-addon__cta-list-item-text">0</span>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </div>
+    `);
+
+    const metrics = scrapePostDetail(doc);
+    expect(metrics.impressions).toBe(496);
+    expect(metrics.members_reached).toBe(309);
+    expect(metrics.reactions).toBe(13);
+    expect(metrics.comments).toBe(2);
+    expect(metrics.reposts).toBe(0);
+    expect(metrics.saves).toBe(0);
+    expect(metrics.sends).toBe(0);
+  });
 });
 
 describe("scrapeAudience", () => {
