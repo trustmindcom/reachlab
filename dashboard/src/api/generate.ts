@@ -280,6 +280,7 @@ export const generateApi = {
     fetch(withPersonaId(`/api/sources/backfill`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: "{}",
     }).then(async (r) => {
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       return r.json() as Promise<{ sources: Array<{ name: string; url: string; feed_url: string | null; description: string }>; removed: number; added: number; message?: string }>;
