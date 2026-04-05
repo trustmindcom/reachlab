@@ -86,7 +86,7 @@ export type ScrapedCompanyPost = z.infer<typeof scrapedCompanyPostSchema>;
 
 export type ContentMessage =
   | { type: "top-posts"; data: ScrapedPost[] }
-  | { type: "post-detail"; postId: string; data: ScrapedPostMetrics }
+  | { type: "post-detail"; postId: string; data: ScrapedPostMetrics; diag?: string }
   | { type: "audience"; data: ScrapedAudience }
   | { type: "profile-views"; data: ScrapedProfileViews }
   | { type: "search-appearances"; data: ScrapedSearchAppearances }

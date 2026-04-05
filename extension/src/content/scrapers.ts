@@ -115,7 +115,7 @@ export function scrapeTopPosts(doc: Document): ScrapedPost[] {
 /**
  * Scrape a post detail page for all metrics.
  */
-export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
+export function scrapePostDetail(doc: Document): ScrapedPostMetrics & { __diag?: string } {
   const result: ScrapedPostMetrics = {
     impressions: null,
     members_reached: null,
@@ -173,10 +173,17 @@ export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
     return result;
   }
 
+  // Diagnostic: record what we found on this page so that when impressions/
+  // reactions remain null we can tell which step broke (card title renamed,
+  // nested selector missing, label text changed, value selector missing).
+  const seenTitles: string[] = [];
+  const diag: string[] = [];
+
   for (const card of cards) {
     const title = card
       .querySelector(".member-analytics-addon-header__title")
       ?.textContent?.trim();
+    if (title) seenTitles.push(title);
 
     if (title === "Discovery" || title === "Social engagement") {
       // CTA list item pattern
@@ -241,7 +248,35 @@ export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
           result.avg_watch_time_seconds = parseWatchTime(valueText);
         }
       }
+    } else if (title) {
+      // Unknown card title — capture a bit of its content so we can see what
+      // LinkedIn renamed it to.
+      const ctaCount = card.querySelectorAll(".member-analytics-addon__cta-list-item").length;
+      const metricRowCount = card.querySelectorAll(".member-analytics-addon-metric-row-list-item").length;
+      const summaryCount = card.querySelectorAll(".member-analytics-addon-summary__list-item").length;
+      const strongSamples = Array.from(card.querySelectorAll("strong"))
+        .slice(0, 3)
+        .map((e) => e.textContent?.trim())
+        .filter(Boolean);
+      diag.push(
+        `card="${title}" cta=${ctaCount} metricRows=${metricRowCount} summary=${summaryCount} strongs=[${strongSamples.join(" | ")}]`
+      );
+    } else {
+      // Card exists but no header title found — selector for title probably renamed.
+      const headingCandidates = Array.from(card.querySelectorAll("h2, h3, [class*='title']"))
+        .slice(0, 3)
+        .map((e) => `${e.tagName.toLowerCase()}.${(e as HTMLElement).className.split(/\s+/)[0] || ""}="${e.textContent?.trim().slice(0, 40)}"`);
+      diag.push(`card(no-title) headingCandidates=[${headingCandidates.join(" | ")}]`);
     }
+  }
+
+  if (result.impressions == null && result.reactions == null) {
+    const diagStr =
+      `cards=${cards.length} ctaItems=${ctaItems.length} ` +
+      `titlesSeen=[${seenTitles.join(" | ")}] ` +
+      `diag=[${diag.join(" ;; ")}]`;
+    console.error(`[scrapePostDetail] ${diagStr}`);
+    (result as ScrapedPostMetrics & { __diag?: string }).__diag = diagStr;
   }
 
   return result;

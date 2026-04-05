@@ -138,8 +138,9 @@ async function scrapeCurrent(): Promise<ContentMessage> {
     const postIdMatch = url.match(/activity[:-](\d+)/);
     const postId = postIdMatch?.[1] ?? "unknown";
     const raw = scrapePostDetail(document);
-    const data = validate(scrapedPostMetricsSchema, raw, "post-detail");
-    return { type: "post-detail", postId, data };
+    const { __diag, ...metrics } = raw;
+    const data = validate(scrapedPostMetricsSchema, metrics, "post-detail");
+    return { type: "post-detail", postId, data, ...(__diag ? { diag: __diag } : {}) };
   }
 
   if (url.includes("/analytics/creator/audience")) {

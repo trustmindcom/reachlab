@@ -619,18 +619,35 @@ async function processBatch(
 
       if (result.type === "post-detail") {
         const metrics = result.data;
-        const allNull = Object.values(metrics).every((v) => v === null);
-        if (allNull) {
+        if (result.diag) {
+          console.error(`[ReachLab] post-detail diag for ${postId}: ${result.diag}`);
+        }
+        // LinkedIn's post-analytics page has several independent cards
+        // (Discovery, Social engagement, Profile activity, Video performance).
+        // When LinkedIn renames the *engagement* card classes but leaves
+        // Profile activity intact, we end up with new_followers=0 alongside
+        // every other field null — which is still a broken scrape from the
+        // user's perspective. Only accept the row if core engagement metrics
+        // (impressions or reactions) were captured.
+        const hasEngagement = metrics.impressions != null || metrics.reactions != null;
+        if (!hasEngagement) {
           console.error(
-            `[ReachLab] post-detail scrape returned all-null metrics for post ${postId} — LinkedIn DOM likely changed`
+            `[ReachLab] post-detail scrape missing engagement metrics for post ${postId} — LinkedIn DOM likely changed`,
+            metrics
           );
           await reportScrapeError({
             error_type: "dom_change",
             page_type: "post_detail",
             selector: ".member-analytics-addon-card__base-card",
-            message: `All metrics null for post ${postId}; nested selectors did not match.`,
+            message:
+              `Post ${postId}: impressions and reactions both null; captured: ${
+                Object.entries(metrics)
+                  .filter(([, v]) => v != null)
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(", ") || "(none)"
+              }` + (result.diag ? ` | diag: ${result.diag}` : ""),
           });
-          // Skip pushing an all-null row to the server
+          // Skip pushing the row — the dashboard needs engagement data, not just new_followers
           continue;
         }
         metricsToSend.push({
@@ -1305,6 +1322,17 @@ async function postToServerDirect(payload: Record<string, unknown>, personaId?: 
 
   if (!response.ok) {
     const text = await response.text();
+    // Log the payload keys and counts so we can tell which part of the payload
+    // the server choked on without dumping (potentially large) post text.
+    const payloadSummary = Object.fromEntries(
+      Object.entries(payload).map(([k, v]) => [
+        k,
+        Array.isArray(v) ? `array(${v.length})` : typeof v,
+      ])
+    );
+    console.error(
+      `[ReachLab] Server ingest failed (${response.status}) body: ${text || "(empty)"} | payload: ${JSON.stringify(payloadSummary)}`
+    );
     throw new Error(`Server ingest failed (${response.status}): ${text}`);
   }
 
