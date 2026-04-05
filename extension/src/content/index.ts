@@ -1,4 +1,4 @@
-import { waitForSelector } from "../shared/utils.js";
+import { waitForSelector, waitFor } from "../shared/utils.js";
 import {
   scrapeTopPosts,
   scrapePostDetail,
@@ -131,10 +131,31 @@ async function scrapeCurrent(): Promise<ContentMessage> {
   }
 
   if (url.includes("/analytics/post-summary/")) {
-    await requireSelector(
-      ".member-analytics-addon-card__base-card",
-      "post-detail"
-    );
+    // LinkedIn renders analytics cards progressively. "Profile activity"
+    // often appears first while the engagement cards ("Discovery",
+    // "Social engagement") are still loading, so waiting for the first
+    // base-card would fire the scraper too early and produce an
+    // impressions-null row. Wait until we see an engagement card.
+    const ready = await waitFor(() => {
+      const cards = document.querySelectorAll(
+        ".member-analytics-addon-card__base-card"
+      );
+      for (const card of cards) {
+        const title = card
+          .querySelector(".member-analytics-addon-header__title")
+          ?.textContent?.trim();
+        if (title === "Discovery" || title === "Social engagement") return true;
+      }
+      return false;
+    }, 12000);
+    if (!ready) {
+      // Fall back to the single-card check so we still produce a legible
+      // diagnostic (with the found selectors) instead of a silent timeout.
+      await requireSelector(
+        ".member-analytics-addon-card__base-card",
+        "post-detail"
+      );
+    }
     const postIdMatch = url.match(/activity[:-](\d+)/);
     const postId = postIdMatch?.[1] ?? "unknown";
     const raw = scrapePostDetail(document);

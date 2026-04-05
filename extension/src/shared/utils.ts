@@ -87,3 +87,36 @@ export function waitForSelector(
     }, timeoutMs);
   });
 }
+
+/**
+ * Wait until a predicate returns true (or a non-null value), with a timeout.
+ * Re-evaluates on every DOM mutation. Returns the predicate's last result
+ * (true/value) or null on timeout.
+ */
+export function waitFor<T>(
+  predicate: () => T | null | false,
+  timeoutMs: number = 10000
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    const initial = predicate();
+    if (initial) {
+      resolve(initial as T);
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      const result = predicate();
+      if (result) {
+        observer.disconnect();
+        resolve(result as T);
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      resolve(null);
+    }, timeoutMs);
+  });
+}

@@ -487,12 +487,18 @@ function getAnalysisHealth(db: Database.Database, personaId: number) {
 }
 
 export function getPostIdsNeedingMetrics(db: Database.Database, personaId: number): string[] {
+  // A post "needs metrics" if it has no post_metrics row at all, OR if its most
+  // recent scrape produced no core engagement data (impressions is the primary
+  // signal — a null row means the scraper hit a broken selector and we should
+  // try again).
   return (db.prepare(
     `SELECT p.id FROM posts p
-     LEFT JOIN post_metrics m ON m.post_id = p.id
-     WHERE m.id IS NULL
-       AND p.published_at > datetime('now', '-14 days')
+     LEFT JOIN post_metrics latest ON latest.id = (
+       SELECT id FROM post_metrics WHERE post_id = p.id ORDER BY id DESC LIMIT 1
+     )
+     WHERE p.published_at > datetime('now', '-14 days')
        AND p.persona_id = ?
+       AND (latest.id IS NULL OR latest.impressions IS NULL)
      ORDER BY p.published_at DESC`
   ).all(personaId) as { id: string }[]).map(r => r.id);
 }
@@ -523,10 +529,14 @@ export function getPostsNeedingVideoUrl(db: Database.Database, personaId: number
 }
 
 export function getPostsWithRecentMetrics(db: Database.Database, personaId: number): string[] {
+  // Only count a post as "recently scraped" if the recent row actually captured
+  // engagement data. An all-null row means the scraper broke — we still want
+  // the extension to retry it.
   return (db.prepare(
     `SELECT DISTINCT pm.post_id FROM post_metrics pm
      JOIN posts p ON p.id = pm.post_id
      WHERE pm.scraped_at > datetime('now', '-12 hours')
+       AND pm.impressions IS NOT NULL
        AND p.persona_id = ?`
   ).all(personaId) as { post_id: string }[]).map(r => r.post_id);
 }

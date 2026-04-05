@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import path from "path";
@@ -39,6 +39,26 @@ import { scrapeErrorBody, syncStateBody } from "./schemas/app.js";
 export function buildApp(dbPath: string) {
   const app = Fastify({ logger: { level: process.env.NODE_ENV === "development" ? "info" : "warn" } });
   const db = initDatabase(dbPath);
+
+  // Log 5xx details (request URL + error) to a file alongside the DB so they
+  // can be inspected after the fact. Fastify's default logger already prints
+  // these to stderr, but the foreground dev process's output can be hard to
+  // capture retroactively.
+  const errorLogPath = path.join(path.dirname(dbPath), "server-errors.log");
+  app.setErrorHandler((err: FastifyError, request, reply) => {
+    const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
+    if (status >= 500) {
+      const entry =
+        `[${new Date().toISOString()}] ${request.method} ${request.url} → ${status}\n` +
+        `  ${err.name}: ${err.message}\n` +
+        (err.stack ? `  ${err.stack.split("\n").slice(1, 6).join("\n  ")}\n` : "");
+      try {
+        fs.appendFileSync(errorLogPath, entry);
+      } catch {}
+    }
+    // Delegate to Fastify's default formatting.
+    reply.send(err);
+  });
 
   // Auto-create default user with API token on first run
   const defaultUser = ensureDefaultUser(db);
