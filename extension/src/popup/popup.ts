@@ -52,7 +52,7 @@ async function loadStatus() {
 
   // Get health from server
   try {
-    const res = await fetch(`${SERVER_URL}/api/health`);
+    const res = await fetch(`${SERVER_URL}/api/personas/1/health`);
     if (!res.ok) throw new Error("Server error");
     const health = await res.json();
 
