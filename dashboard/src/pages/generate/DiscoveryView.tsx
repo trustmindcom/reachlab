@@ -190,7 +190,6 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const [isAnimating, setIsAnimating] = useState(false);
 
   const gridRef = useRef<HTMLDivElement>(null);
-  const expandPanelRef = useRef<HTMLDivElement>(null);
   const discoverStartedRef = useRef(false);
 
   // Auto-discover on mount: use daily cache if available (StrictMode-safe)
@@ -214,13 +213,14 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     }
   }, []);
 
-  // Scroll expanded panel into view when it appears
+  // Scroll expanded card into view when it appears
   useEffect(() => {
-    if (expandedIndex !== null && expandPanelRef.current) {
-      setTimeout(() => {
-        expandPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 100);
-    }
+    if (expandedIndex === null || !gridRef.current) return;
+    const el = gridRef.current.querySelector<HTMLElement>(`[data-card][data-index="${expandedIndex}"]`);
+    if (!el) return;
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
   }, [expandedIndex]);
 
   // Escape key to collapse
@@ -350,8 +350,8 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!gridRef.current) return;
-        // Expanded card is rendered outside grid, so no hero — just animate siblings
-        const anims = flipAnimate(gridRef.current, oldRects, null, expandedIndex !== null ? 480 : 450);
+        const heroEl = gridRef.current.querySelector<HTMLElement>(`[data-card][data-index="${index}"]`);
+        const anims = flipAnimate(gridRef.current, oldRects, heroEl, expandedIndex !== null ? 480 : 450);
 
         if (anims.length === 0) {
           setIsAnimating(false);
@@ -371,6 +371,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     setIsAnimating(true);
     const grid = gridRef.current;
     const oldRects = getCardRects(grid);
+    const collapsingIndex = expandedIndex;
 
     setExpandedIndex(null);
     setGuidanceText("");
@@ -378,7 +379,8 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!gridRef.current) return;
-        const anims = flipAnimate(gridRef.current, oldRects, null, 420);
+        const heroEl = gridRef.current.querySelector<HTMLElement>(`[data-card][data-index="${collapsingIndex}"]`);
+        const anims = flipAnimate(gridRef.current, oldRects, heroEl, 420);
 
         if (anims.length === 0) {
           setIsAnimating(false);
@@ -444,10 +446,10 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               <div
                 ref={gridRef}
                 className="grid gap-3"
-                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
+                style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gridAutoFlow: "dense" }}
               >
                 {gen.discoveryTopics!.map((topic, i) => {
-                  const isSelected = expandedIndex === i;
+                  const isExpanded = expandedIndex === i;
                   const tagColor = getTagColor(topic.category_tag);
                   const domain = extractDomain(topic.source_url);
 
@@ -456,105 +458,106 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                       key={topic.label}
                       data-card
                       data-index={i}
-                      onClick={() => expandCard(i)}
-                      className={`relative rounded-xl p-[18px_20px_16px] cursor-pointer transition-[border-color,box-shadow] duration-300 ease-out flex flex-col ${
-                        isSelected
-                          ? "border border-gen-accent/25 bg-gen-bg-2 shadow-[inset_3px_0_0_0_var(--color-gen-accent)]"
-                          : "bg-gen-bg-1 border border-gen-border-1 hover:border-gen-border-2"
+                      onClick={() => { if (!isExpanded) expandCard(i); }}
+                      style={isExpanded ? { gridColumn: "1 / -1" } : undefined}
+                      className={`relative rounded-xl transition-[border-color,box-shadow] duration-300 ease-out ${
+                        isExpanded
+                          ? "border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] cursor-default p-0 z-10"
+                          : "bg-gen-bg-1 border border-gen-border-1 p-[18px_20px_16px] cursor-pointer hover:border-gen-border-2 flex flex-col"
                       }`}
                     >
-                      <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
-                        {topic.label}
-                      </div>
-                      <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-3 mb-3">
-                        {topic.summary}
-                      </div>
-                      <div className="flex items-center justify-between text-[13px] mt-auto">
-                        <span className="text-gen-text-3">{domain}</span>
-                        <span
-                          className="text-[11px] font-medium px-1.5 py-0.5 rounded-md"
-                          style={{ background: tagColor.bg, color: tagColor.text }}
-                        >
-                          {topic.category_tag}
-                        </span>
-                      </div>
+                      {isExpanded && (
+                        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gen-accent rounded-l-xl" />
+                      )}
+
+                      {!isExpanded && (
+                        <>
+                          <div className="font-serif-gen font-medium text-[17px] leading-[1.35] text-gen-text-0 mb-1.5 tracking-[-0.2px]">
+                            {topic.label}
+                          </div>
+                          <div className="text-[14px] leading-[1.6] text-gen-text-2 line-clamp-3 mb-3">
+                            {topic.summary}
+                          </div>
+                          <div className="flex items-center justify-between text-[13px] mt-auto">
+                            <span className="text-gen-text-3">{domain}</span>
+                            <span
+                              className="text-[11px] font-medium px-1.5 py-0.5 rounded-md"
+                              style={{ background: tagColor.bg, color: tagColor.text }}
+                            >
+                              {topic.category_tag}
+                            </span>
+                          </div>
+                        </>
+                      )}
+
+                      {isExpanded && (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); collapseCard(); }}
+                            className="absolute top-4 right-4 z-20 w-8 h-8 bg-gen-bg-3 border border-gen-border-1 rounded-lg flex items-center justify-center text-gen-text-3 hover:text-gen-text-0 hover:bg-gen-bg-4 transition-colors duration-150"
+                            aria-label="Close"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                              <path d="M2 2l10 10M12 2L2 12" />
+                            </svg>
+                          </button>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 min-h-[300px]">
+                            <div className="p-7 pr-8 border-b md:border-b-0 md:border-r border-gen-border-1 flex flex-col">
+                              <span
+                                className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-3.5 self-start"
+                                style={{ background: tagColor.bg, color: tagColor.text }}
+                              >
+                                {topic.category_tag}
+                              </span>
+                              <div className="font-serif-gen font-medium text-[24px] leading-[1.3] text-gen-text-0 mb-3 tracking-[-0.3px]">
+                                {topic.label}
+                              </div>
+                              <div className="text-[15px] leading-[1.7] text-gen-text-2 mb-5">
+                                {topic.summary}
+                              </div>
+                              <div className="mt-auto pt-4 border-t border-gen-border-1">
+                                <a
+                                  href={topic.source_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[13px] text-gen-text-3 hover:text-gen-accent transition-colors"
+                                >
+                                  {domain}
+                                </a>
+                              </div>
+                            </div>
+
+                            <div className="p-7 flex flex-col">
+                              <div className="text-[15px] font-medium text-gen-text-0 mb-1">Your angle</div>
+                              <div className="text-[13px] text-gen-text-4 mb-4">
+                                What perspective do you want to bring? Leave blank to explore freely.
+                              </div>
+                              <textarea
+                                value={guidanceText}
+                                onChange={(e) => setGuidanceText(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                rows={5}
+                                placeholder="e.g. 'focus on what this means for engineering leaders'"
+                                className="flex-1 w-full min-h-[120px] bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3.5 text-[15px] text-gen-text-0 placeholder:text-gen-text-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/30 focus-visible:border-gen-accent resize-none leading-[1.6] mb-4"
+                              />
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleTopicClick(topic.label, guidanceText.trim() || undefined, { summary: topic.summary, source_headline: topic.source_headline, source_url: topic.source_url }); }}
+                                  className="px-7 py-3 bg-gen-accent text-white text-[15px] font-medium rounded-[10px] hover:opacity-90 transition-opacity duration-150"
+                                >
+                                  Write about this
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
               </div>
-
-              {/* Expanded panel — rendered outside grid, scrolls into view */}
-              {expandedIndex !== null && gen.discoveryTopics![expandedIndex] && (() => {
-                const topic = gen.discoveryTopics![expandedIndex];
-                const tagColor = getTagColor(topic.category_tag);
-                const domain = extractDomain(topic.source_url);
-                return (
-                  <div
-                    ref={expandPanelRef}
-                    className="relative rounded-xl border border-gen-accent/25 bg-gen-bg-2 shadow-[0_0_0_1px_rgba(107,161,245,0.06),0_12px_48px_rgba(0,0,0,0.35)] mt-3 z-10"
-                  >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gen-accent rounded-l-xl" />
-                    <button
-                      onClick={collapseCard}
-                      className="absolute top-4 right-4 z-20 w-8 h-8 bg-gen-bg-3 border border-gen-border-1 rounded-lg flex items-center justify-center text-gen-text-3 hover:text-gen-text-0 hover:bg-gen-bg-4 transition-colors duration-150"
-                      aria-label="Close"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <path d="M2 2l10 10M12 2L2 12" />
-                      </svg>
-                    </button>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 min-h-[300px]">
-                      <div className="p-7 pr-8 border-b md:border-b-0 md:border-r border-gen-border-1 flex flex-col">
-                        <span
-                          className="inline-block text-[12px] font-medium px-2 py-0.5 rounded-md mb-3.5 self-start"
-                          style={{ background: tagColor.bg, color: tagColor.text }}
-                        >
-                          {topic.category_tag}
-                        </span>
-                        <div className="font-serif-gen font-medium text-[24px] leading-[1.3] text-gen-text-0 mb-3 tracking-[-0.3px]">
-                          {topic.label}
-                        </div>
-                        <div className="text-[15px] leading-[1.7] text-gen-text-2 mb-5">
-                          {topic.summary}
-                        </div>
-                        <div className="mt-auto pt-4 border-t border-gen-border-1">
-                          <a
-                            href={topic.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[13px] text-gen-text-3 hover:text-gen-accent transition-colors"
-                          >
-                            {domain}
-                          </a>
-                        </div>
-                      </div>
-
-                      <div className="p-7 flex flex-col">
-                        <div className="text-[15px] font-medium text-gen-text-0 mb-1">Your angle</div>
-                        <div className="text-[13px] text-gen-text-4 mb-4">
-                          What perspective do you want to bring? Leave blank to explore freely.
-                        </div>
-                        <textarea
-                          value={guidanceText}
-                          onChange={(e) => setGuidanceText(e.target.value)}
-                          rows={5}
-                          placeholder="e.g. 'focus on what this means for engineering leaders'"
-                          className="flex-1 w-full min-h-[120px] bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3.5 text-[15px] text-gen-text-0 placeholder:text-gen-text-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/30 focus-visible:border-gen-accent resize-none leading-[1.6] mb-4"
-                        />
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={() => handleTopicClick(topic.label, guidanceText.trim() || undefined, { summary: topic.summary, source_headline: topic.source_headline, source_url: topic.source_url })}
-                            className="px-7 py-3 bg-gen-accent text-white text-[15px] font-medium rounded-[10px] hover:opacity-90 transition-opacity duration-150"
-                          >
-                            Write about this
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Footer */}
               <div
