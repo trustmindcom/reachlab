@@ -6,7 +6,7 @@ import { createRun, completeRun, failRun, getRunCost, getPersonaSetting, upsertP
 import { createClient } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { discoverTopics } from "../ai/discovery.js";
-import { discoverFeeds, discoverFeedsByGuessing } from "../ai/feed-discoverer.js";
+import { discoverFeeds, discoverFeedsByGuessing, validateFeedUrl } from "../ai/feed-discoverer.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
 import { sourceUrlBody, sourceUpdateBody, sourceDiscoverBody } from "../schemas/generate.js";
@@ -54,16 +54,27 @@ export function registerSourceRoutes(app: FastifyInstance, db: Database.Database
     const personaId = getPersonaId(request);
     const { url } = validateBody(sourceUrlBody, request.body);
 
-    // Auto-discover feeds from the URL
-    let feeds = await discoverFeeds(url.trim());
+    const trimmedUrl = url.trim();
+
+    // If the user pasted a direct feed URL, validate it straight away so we
+    // return a clear error instead of falling through to site discovery.
+    if (/\/(feed|rss|atom)(\.xml)?\/?$|\.xml$/i.test(trimmedUrl)) {
+      const direct = await validateFeedUrl(trimmedUrl);
+      if (!direct.valid) {
+        return reply.status(400).send({ error: `feed validation failed: ${direct.reason}` });
+      }
+    }
+
+    // Auto-discover feeds from the URL (discoverers validate candidates internally)
+    let feeds = await discoverFeeds(trimmedUrl);
     if (feeds.length === 0) {
-      feeds = await discoverFeedsByGuessing(url.trim());
+      feeds = await discoverFeedsByGuessing(trimmedUrl);
     }
     if (feeds.length === 0) {
       return reply.status(404).send({ error: "No feed found at that URL. Try a blog, newsletter, or news site." });
     }
 
-    // Use the first discovered feed
+    // Use the first discovered (and already-validated) feed
     const feed = feeds[0];
 
     // Check for duplicate within this persona

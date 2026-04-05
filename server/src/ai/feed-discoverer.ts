@@ -3,11 +3,57 @@
  * User pastes "krebsonsecurity.com" → we find the feed.
  */
 
+import Parser from "rss-parser";
+
 const DISCOVER_TIMEOUT_MS = 8000;
+const VALIDATE_TIMEOUT_MS = 8000;
 
 export interface DiscoveredFeed {
   feed_url: string;
   title: string;
+}
+
+export type FeedValidationResult =
+  | { valid: true; itemCount: number }
+  | { valid: false; reason: string };
+
+/**
+ * Fetches a candidate feed URL and verifies it parses as RSS/Atom with ≥1 item.
+ * Returns a structured result rather than throwing so callers can skip silently.
+ */
+export async function validateFeedUrl(url: string): Promise<FeedValidationResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), VALIDATE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "ReachLab/1.0 Feed Validator" },
+      redirect: "follow",
+    });
+    if (!response.ok) {
+      return { valid: false, reason: `HTTP ${response.status}` };
+    }
+    const xml = await response.text();
+    let feed;
+    try {
+      const parser = new Parser();
+      feed = await parser.parseString(xml);
+    } catch {
+      return { valid: false, reason: "Invalid XML" };
+    }
+    const itemCount = feed.items?.length ?? 0;
+    if (itemCount < 1) {
+      return { valid: false, reason: "No items in feed" };
+    }
+    return { valid: true, itemCount };
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return { valid: false, reason: "Request timed out" };
+    }
+    return { valid: false, reason: "Fetch failed" };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Try to find RSS/Atom feeds from a website URL */
@@ -26,21 +72,34 @@ export async function discoverFeeds(siteUrl: string): Promise<DiscoveredFeed[]> 
 
     const contentType = response.headers.get("content-type") ?? "";
 
-    // If the URL itself is a feed, return it directly
+    // If the URL itself is a feed, return it directly (after validating)
     if (contentType.includes("xml") || contentType.includes("rss") || contentType.includes("atom")) {
       const text = await response.text();
       const title = extractFeedTitle(text);
-      return [{ feed_url: normalized, title: title || hostnameLabel(normalized) }];
+      const candidate = { feed_url: normalized, title: title || hostnameLabel(normalized) };
+      return await filterValidFeeds([candidate]);
     }
 
     // Otherwise parse HTML for <link> tags pointing to feeds
     const html = await response.text();
-    return extractFeedLinks(html, normalized);
+    const candidates = extractFeedLinks(html, normalized);
+    return await filterValidFeeds(candidates);
   } catch {
     return [];
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Validate each candidate and drop any that fail. Silently skips failures. */
+async function filterValidFeeds(candidates: DiscoveredFeed[]): Promise<DiscoveredFeed[]> {
+  const results = await Promise.all(
+    candidates.map(async (c) => {
+      const v = await validateFeedUrl(c.feed_url);
+      return v.valid ? c : null;
+    })
+  );
+  return results.filter((c): c is DiscoveredFeed => c !== null);
 }
 
 /** Try common feed paths as fallback */
@@ -70,6 +129,8 @@ export async function discoverFeedsByGuessing(siteUrl: string): Promise<Discover
       const ct = res.headers.get("content-type") ?? "";
       const text = await res.text();
       if (ct.includes("xml") || ct.includes("rss") || ct.includes("atom") || text.trimStart().startsWith("<?xml") || text.trimStart().startsWith("<rss") || text.trimStart().startsWith("<feed")) {
+        const validation = await validateFeedUrl(url);
+        if (!validation.valid) continue;
         const title = extractFeedTitle(text);
         return [{ feed_url: url, title: title || hostnameLabel(url) }];
       }
