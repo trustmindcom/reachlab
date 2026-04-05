@@ -420,11 +420,13 @@ async function syncCompanyPersona(persona: SyncPersona) {
 async function syncPersonalPersona(persona: SyncPersona) {
   // Determine sync type: backfill (first ever), light (evening), or full (morning)
   let isBackfill = true;
+  let lastSyncAt: number | null = null;
   try {
     const res = await fetch(`${SERVER_URL}/api/personas/${persona.id}/sync-state`);
     if (res.ok) {
       const data = await res.json();
-      isBackfill = !data.last_sync_at;
+      lastSyncAt = data.last_sync_at ?? null;
+      isBackfill = !lastSyncAt;
     }
   } catch {}
 
@@ -438,6 +440,16 @@ async function syncPersonalPersona(persona: SyncPersona) {
     isBackfill,
     isLightSync,
   });
+
+  // Non-backfill syncs can miss brand-new posts because top-posts is sorted
+  // by impressions. Probe the chronological activity feed to catch anything
+  // published since the last sync (with a 2h lookback buffer for clock skew).
+  let recentActivityIds: string[] = [];
+  if (!isBackfill && lastSyncAt) {
+    const cutoffMs = lastSyncAt - 2 * 60 * 60 * 1000;
+    recentActivityIds = await discoverRecentActivityIds(cutoffMs);
+    await randomDelay(PACING_MIN_MS, PACING_MAX_MS);
+  }
 
   try {
     // Create background tab
@@ -464,23 +476,44 @@ async function syncPersonalPersona(persona: SyncPersona) {
     if (topPostsResult.type === "top-posts") {
       const posts = topPostsResult.data as ScrapedPost[];
 
+      // Union recent-activity IDs that didn't show up in top-posts (e.g. new
+      // low-impression posts). Send them as minimal entries — content_type
+      // intentionally omitted so it can be inferred later without clobbering.
+      const topPostsIds = new Set(posts.map((p) => p.id));
+      const syntheticIds = recentActivityIds.filter((id) => !topPostsIds.has(id));
+      if (syntheticIds.length > 0) {
+        console.log(
+          `[ReachLab] Adding ${syntheticIds.length} post(s) from activity feed not seen in top-posts`
+        );
+      }
+
       // POST posts to server (with offline queue fallback)
       const ingestResult = await postToServer({
-        posts: posts.map((p) => ({
-          id: p.id,
-          content_preview: p.content_preview ?? undefined,
-          content_type: p.content_type,
-          published_at: p.published_at,
-          url: p.url,
-          image_urls: p.thumbnail_url ? [p.thumbnail_url] : undefined,
-        })),
+        posts: [
+          ...posts.map((p) => ({
+            id: p.id,
+            content_preview: p.content_preview ?? undefined,
+            content_type: p.content_type,
+            published_at: p.published_at,
+            url: p.url,
+            image_urls: p.thumbnail_url ? [p.thumbnail_url] : undefined,
+          })),
+          ...syntheticIds.map((id) => ({
+            id,
+            published_at: activityIdToDate(id).toISOString(),
+            url: `https://www.linkedin.com/feed/update/urn:li:activity:${id}/`,
+          })),
+        ],
       });
 
       // Scrape post pages for content + images (merged, using ingest response)
       try {
         const needsContentIds: string[] = ingestResult?.needs_content ?? [];
         const needsImageIds: string[] = ingestResult?.needs_images ?? [];
-        const currentPostIds = new Set(posts.map((p: ScrapedPost) => p.id));
+        const currentPostIds = new Set<string>([
+          ...posts.map((p: ScrapedPost) => p.id),
+          ...syntheticIds,
+        ]);
         const toScrape = [...new Set([...needsContentIds, ...needsImageIds])].filter(
           (id: string) => currentPostIds.has(id)
         );
@@ -822,6 +855,70 @@ async function scrapeLatestPost(): Promise<void> {
     console.log(`[Publish] Scraped and sent post ${postId}`);
   } catch (err: any) {
     console.error("[Publish] Scrape failed:", err);
+  } finally {
+    if (tabId) {
+      try { await chrome.tabs.remove(tabId); } catch {}
+    }
+  }
+}
+
+/**
+ * Open the user's recent-activity feed and collect activity IDs for posts
+ * published after the cutoff. Closes the tab before returning.
+ *
+ * LinkedIn's top-posts analytics page sorts by impressions, so brand-new
+ * low-impression posts get clipped from the visible list. Walking the
+ * reverse-chronological activity feed catches them regardless. Activity IDs
+ * encode publish time, so `activityIdToDate` is enough — no timestamp scrape.
+ */
+async function discoverRecentActivityIds(cutoffMs: number): Promise<string[]> {
+  let tabId: number | undefined;
+  try {
+    const tab = await chrome.tabs.create({
+      active: false,
+      url: "https://www.linkedin.com/in/me/recent-activity/posts/",
+    });
+    if (!tab.id) return [];
+    tabId = tab.id;
+
+    await waitForTabLoad(tabId);
+    // Give the feed a moment to render activity items
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const ids = new Set<string>();
+        for (const el of document.querySelectorAll("[data-urn]")) {
+          const urn = el.getAttribute("data-urn") ?? "";
+          const match = urn.match(/activity:(\d+)/);
+          if (match) ids.add(match[1]);
+        }
+        // Fallback: activity links in case data-urn shifts
+        for (const link of document.querySelectorAll('a[href*="activity-"]')) {
+          const href = (link as HTMLAnchorElement).href;
+          const match = href.match(/activity[:-](\d+)/);
+          if (match) ids.add(match[1]);
+        }
+        return Array.from(ids);
+      },
+    });
+
+    const allIds: string[] = result?.result ?? [];
+    const recent = allIds.filter((id) => {
+      try {
+        return activityIdToDate(id).getTime() > cutoffMs;
+      } catch {
+        return false;
+      }
+    });
+    console.log(
+      `[ReachLab] Activity feed: ${allIds.length} IDs seen, ${recent.length} newer than cutoff`
+    );
+    return recent;
+  } catch (err: any) {
+    console.warn("[ReachLab] discoverRecentActivityIds failed:", err?.message);
+    return [];
   } finally {
     if (tabId) {
       try { await chrome.tabs.remove(tabId); } catch {}
