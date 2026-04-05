@@ -133,6 +133,45 @@ export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
   const cards = doc.querySelectorAll(
     ".member-analytics-addon-card__base-card"
   );
+  const ctaItems = doc.querySelectorAll(
+    ".member-analytics-addon__cta-list-item"
+  );
+
+  if (cards.length === 0 && ctaItems.length === 0) {
+    // Diagnostic: no analytics cards found. Log what IS on the page so we can
+    // update selectors. Check a short list of candidate selectors and probe
+    // for any class that contains "analytics-addon".
+    const candidateSelectors = [
+      ".member-analytics-addon-card__base-card",
+      ".member-analytics-addon__cta-list-item",
+      ".member-analytics-addon-summary__list-item",
+      ".member-analytics-addon-header__title",
+      ".artdeco-card",
+      ".analytics-card",
+      "[data-test-id]",
+    ];
+    const presence = candidateSelectors
+      .map((sel) => `${sel}=${doc.querySelector(sel) ? "present" : "absent"}`)
+      .join(", ");
+
+    // Collect classes on the page that mention "analytics-addon" so we can
+    // spot the renamed LinkedIn classes.
+    const addonClasses = new Set<string>();
+    const all = doc.querySelectorAll<HTMLElement>("[class*='analytics-addon']");
+    for (let i = 0; i < Math.min(all.length, 50); i++) {
+      for (const cls of all[i].classList) {
+        if (cls.includes("analytics-addon")) addonClasses.add(cls);
+      }
+    }
+
+    console.error(
+      `[scrapePostDetail] no metrics extracted; candidates: ${presence}; ` +
+        `classes containing "analytics-addon" on page: ${
+          addonClasses.size > 0 ? Array.from(addonClasses).join(", ") : "(none)"
+        }`
+    );
+    return result;
+  }
 
   for (const card of cards) {
     const title = card

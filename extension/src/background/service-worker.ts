@@ -618,9 +618,43 @@ async function processBatch(
       const result = await sendScrapeCommand(tabId);
 
       if (result.type === "post-detail") {
+        const metrics = result.data;
+        const allNull = Object.values(metrics).every((v) => v === null);
+        if (allNull) {
+          console.error(
+            `[ReachLab] post-detail scrape returned all-null metrics for post ${postId} — LinkedIn DOM likely changed`
+          );
+          await reportScrapeError({
+            error_type: "dom_change",
+            page_type: "post_detail",
+            selector: ".member-analytics-addon-card__base-card",
+            message: `All metrics null for post ${postId}; nested selectors did not match.`,
+          });
+          // Skip pushing an all-null row to the server
+          continue;
+        }
         metricsToSend.push({
           post_id: postId,
-          ...result.data,
+          ...metrics,
+        });
+      } else if (result.type === "scrape-error") {
+        console.error(
+          `[ReachLab] post-detail scrape failed for post ${postId} (page=${result.page}): ${result.error}`
+        );
+        await reportScrapeError({
+          error_type: "dom_change",
+          page_type: "post_detail",
+          selector: ".member-analytics-addon-card__base-card",
+          message: `Post ${postId}: ${result.error}`,
+        });
+      } else {
+        console.error(
+          `[ReachLab] post-detail scrape returned unexpected type "${result.type}" for post ${postId}`
+        );
+        await reportScrapeError({
+          error_type: "unexpected_response",
+          page_type: "post_detail",
+          message: `Post ${postId}: content script returned type=${result.type}`,
         });
       }
     }
@@ -697,10 +731,16 @@ async function scrapePostContent(
     authorReplies = hookResult.data.author_replies ?? null;
     hasThreads = hookResult.data.has_threads ?? null;
   } else {
-    console.warn(
-      `[ReachLab] Post content scrape returned ${hookResult.type} for ${postId}:`,
-      "error" in hookResult ? hookResult.error : "unknown"
+    const errMsg =
+      "error" in hookResult ? hookResult.error : `unexpected type ${hookResult.type}`;
+    console.error(
+      `[ReachLab] Post content scrape returned ${hookResult.type} for ${postId}: ${errMsg}`
     );
+    await reportScrapeError({
+      error_type: hookResult.type === "scrape-error" ? "dom_change" : "unexpected_response",
+      page_type: "post_content",
+      message: `Post ${postId}: ${errMsg}`,
+    });
   }
 
   // Phase 2: Click "see more" if present, then re-scrape for full_text
@@ -1278,5 +1318,33 @@ async function postToServer(payload: Record<string, unknown>) {
   } catch (err) {
     await queueForRetry(payload);
     throw err;
+  }
+}
+
+/**
+ * Fire-and-forget: report a scrape failure to the server's scrape-health
+ * endpoint so it surfaces in the dashboard. Logs to console as well.
+ */
+async function reportScrapeError(input: {
+  error_type: string;
+  page_type: string;
+  selector?: string;
+  message: string;
+}): Promise<void> {
+  console.error(
+    `[ReachLab] scrape-error [${input.page_type}] ${input.error_type}: ${input.message}` +
+      (input.selector ? ` (selector: ${input.selector})` : "")
+  );
+  try {
+    const pid =
+      (await chrome.storage.session.get("syncActivePersonaId"))
+        .syncActivePersonaId ?? 1;
+    await fetch(`${SERVER_URL}/api/personas/${pid}/scrape-error`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    // swallow — reporting failures must not break sync
   }
 }
