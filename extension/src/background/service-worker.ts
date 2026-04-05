@@ -240,7 +240,7 @@ async function trySync(manual = false) {
 
   // Check server health
   try {
-    const res = await fetch(`${SERVER_URL}/api/health`);
+    const res = await fetch(`${SERVER_URL}/api/personas/1/health`);
     if (!res.ok) return;
   } catch {
     return; // Server not running
