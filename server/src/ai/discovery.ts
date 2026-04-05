@@ -17,6 +17,84 @@ export interface DiscoveryResult {
   topics: DiscoveryTopic[];
 }
 
+function extractDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+const TARGET_TOPICS = 12;
+
+/**
+ * Caps items per source domain to `maxPerDomain`, preferring the freshest
+ * items within each domain. Ensures the LLM literally cannot over-concentrate
+ * picks on a single dominant feed, since instruction-level diversity rules
+ * are unreliably followed.
+ */
+export function balancePoolByDomain(items: RssItem[], maxPerDomain: number): RssItem[] {
+  const byDomain = new Map<string, RssItem[]>();
+  for (const item of items) {
+    const d = extractDomain(item.link);
+    let bucket = byDomain.get(d);
+    if (!bucket) {
+      bucket = [];
+      byDomain.set(d, bucket);
+    }
+    bucket.push(item);
+  }
+  const out: RssItem[] = [];
+  for (const bucket of byDomain.values()) {
+    bucket.sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime());
+    out.push(...bucket.slice(0, maxPerDomain));
+  }
+  return out;
+}
+
+/**
+ * Post-hoc safety net. If the LLM ignored the per-domain cap (it sometimes
+ * does), trim any domain that exceeded maxPerDomain while preserving order.
+ */
+export function enforceDiversity(
+  topics: DiscoveryTopic[],
+  maxPerDomain: number
+): DiscoveryTopic[] {
+  const perDomain = new Map<string, number>();
+  const out: DiscoveryTopic[] = [];
+  for (const t of topics) {
+    const d = extractDomain(t.source_url);
+    const c = perDomain.get(d) ?? 0;
+    if (c >= maxPerDomain) continue;
+    perDomain.set(d, c + 1);
+    out.push(t);
+  }
+  return out;
+}
+
+export interface PoolShape {
+  distinctDomains: number;
+  maxPerDomain: number;
+  targetTopics: number;
+  minDomains: number;
+}
+
+export function computePoolShape(items: RssItem[]): PoolShape {
+  const domains = new Set(items.map((i) => extractDomain(i.link)));
+  const distinctDomains = Math.max(1, domains.size);
+  // Loosen per-domain cap when the domain pool is narrow, so the target
+  // is actually reachable: ceil(12 / domains), never below 2.
+  const maxPerDomain = Math.max(2, Math.ceil(TARGET_TOPICS / distinctDomains));
+  // Cap target by what the pool can actually supply.
+  const targetTopics = Math.min(
+    TARGET_TOPICS,
+    maxPerDomain * distinctDomains,
+    items.length
+  );
+  const minDomains = Math.min(3, distinctDomains);
+  return { distinctDomains, maxPerDomain, targetTopics, minDomains };
+}
+
 export function buildClusteringPrompt(items: RssItem[], authorContext?: string, previousLabels?: string[]): string {
   const itemList = items
     .map((item, i) => `${i + 1}. ${item.title} — ${item.summary?.substring(0, 200) || ""} [${item.link}]`)
@@ -30,6 +108,8 @@ export function buildClusteringPrompt(items: RssItem[], authorContext?: string, 
     ? `\nAVOID THESE TOPICS — they were already suggested. Find DIFFERENT angles and topics:\n${previousLabels.map(l => `- ${l}`).join("\n")}\n`
     : "";
 
+  const { maxPerDomain, targetTopics, minDomains } = computePoolShape(items);
+
   return `You are a content researcher selecting trending topics for a LinkedIn content creator.
 ${contextBlock}${avoidBlock}
 RSS items from the past week:
@@ -39,7 +119,7 @@ Filter to only items relevant to the author's expertise and interests described 
 
 IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST each be represented. For example, if the author writes about security AND AI, include topics covering BOTH — don't let one area dominate.
 
-Select exactly 12 distinct topics. For each topic:
+Select exactly ${targetTopics} distinct topics. For each topic:
 - "label": a 3-5 word provocative title capturing an angle or debate
 - "summary": 3-4 sentences explaining what happened, the key details, and why it matters. Give enough context that someone could write a LinkedIn post about it without reading the original article.
 - "source_headline": the original article headline
@@ -47,7 +127,7 @@ Select exactly 12 distinct topics. For each topic:
 - "category_tag": a short category label for color coding (e.g., "Security", "AI", "Dev Tools", "Trust & Safety", "Infrastructure", "Strategy")
 
 DIVERSITY RULES:
-- Max 2 topics from the same source domain. At least 3 distinct source domains.
+- Max ${maxPerDomain} topic${maxPerDomain === 1 ? "" : "s"} from the same source domain. At least ${minDomains} distinct source domain${minDomains === 1 ? "" : "s"}.
 - No two topics should cover the same story from different angles — each topic must be a distinct news item.
 - No overlap: if two RSS items are about the same event, pick the better one.
 
@@ -83,7 +163,12 @@ export async function discoverTopics(
   logger: AiLogger,
   previousLabels?: string[]
 ): Promise<DiscoveryResult> {
-  const rssItems = await fetchAllFeeds(db, personaId);
+  const rawItems = await fetchAllFeeds(db, personaId);
+  // Balance the pool per-domain *before* the LLM sees it. The per-domain cap
+  // is derived from the raw domain count so the cap scales with how narrow
+  // the pool is (ceil(12/domains), min 2).
+  const rawShape = computePoolShape(rawItems);
+  const rssItems = balancePoolByDomain(rawItems, rawShape.maxPerDomain);
 
   // Build author context from taxonomy (what they've written about) + writing prompt
   const topics = db
@@ -129,8 +214,10 @@ export async function discoverTopics(
   });
 
   const result = parseClusteringResponse(text);
-  if (result.topics.length === 0) {
+  // Safety net: trim any domain that slipped past the cap.
+  const diversified = enforceDiversity(result.topics, rawShape.maxPerDomain);
+  if (diversified.length === 0) {
     throw new Error("Topic discovery returned no topics");
   }
-  return result;
+  return { topics: diversified };
 }

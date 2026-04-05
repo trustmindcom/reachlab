@@ -7,18 +7,29 @@ import Parser from "rss-parser";
 
 const DISCOVER_TIMEOUT_MS = 8000;
 const VALIDATE_TIMEOUT_MS = 8000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+/** Minimum posts in past 30 days for a feed to be considered viable. */
+export const MIN_POSTS_PER_30_DAYS = 2;
 
 export interface DiscoveredFeed {
   feed_url: string;
   title: string;
+  postsPer30Days?: number;
 }
 
 export type FeedValidationResult =
-  | { valid: true; itemCount: number }
+  | {
+      valid: true;
+      itemCount: number;
+      postsPer30Days: number;
+      latestItemDate: Date | null;
+    }
   | { valid: false; reason: string };
 
 /**
- * Fetches a candidate feed URL and verifies it parses as RSS/Atom with ≥1 item.
+ * Fetches a candidate feed URL and verifies it parses as RSS/Atom, has ≥1 item,
+ * and publishes at least MIN_POSTS_PER_30_DAYS items in the past 30 days
+ * (when items carry pubDates — feeds that omit pubDate on every item pass through).
  * Returns a structured result rather than throwing so callers can skip silently.
  */
 export async function validateFeedUrl(url: string): Promise<FeedValidationResult> {
@@ -41,11 +52,42 @@ export async function validateFeedUrl(url: string): Promise<FeedValidationResult
     } catch {
       return { valid: false, reason: "Invalid XML" };
     }
-    const itemCount = feed.items?.length ?? 0;
+    const items = feed.items ?? [];
+    const itemCount = items.length;
     if (itemCount < 1) {
       return { valid: false, reason: "No items in feed" };
     }
-    return { valid: true, itemCount };
+
+    // Frequency check: measure posts in the past 30 days and reject feeds
+    // below the threshold. Only enforce when at least one item has a parseable
+    // pubDate; feeds that omit pubDate on every item are left alone (lenient
+    // fallback, they pass with postsPer30Days=0).
+    const now = Date.now();
+    let latestItemDate: Date | null = null;
+    let postsPer30Days = 0;
+    let datedItemCount = 0;
+    for (const item of items) {
+      if (!item.pubDate) continue;
+      const d = new Date(item.pubDate);
+      if (Number.isNaN(d.getTime())) continue;
+      datedItemCount++;
+      if (!latestItemDate || d > latestItemDate) latestItemDate = d;
+      if (now - d.getTime() <= THIRTY_DAYS_MS) postsPer30Days++;
+    }
+    if (datedItemCount > 0 && postsPer30Days < MIN_POSTS_PER_30_DAYS) {
+      const ageDays = latestItemDate
+        ? Math.floor((now - latestItemDate.getTime()) / (24 * 60 * 60 * 1000))
+        : null;
+      const reason =
+        postsPer30Days === 0
+          ? ageDays !== null
+            ? `Feed is stale (latest post ${ageDays} days ago)`
+            : "Feed is stale"
+          : `Feed publishes too rarely (${postsPer30Days} post${postsPer30Days === 1 ? "" : "s"} in past 30 days)`;
+      return { valid: false, reason };
+    }
+
+    return { valid: true, itemCount, postsPer30Days, latestItemDate };
   } catch (err: any) {
     if (err?.name === "AbortError") {
       return { valid: false, reason: "Request timed out" };
@@ -94,9 +136,9 @@ export async function discoverFeeds(siteUrl: string): Promise<DiscoveredFeed[]> 
 /** Validate each candidate and drop any that fail. Silently skips failures. */
 async function filterValidFeeds(candidates: DiscoveredFeed[]): Promise<DiscoveredFeed[]> {
   const results = await Promise.all(
-    candidates.map(async (c) => {
+    candidates.map(async (c): Promise<DiscoveredFeed | null> => {
       const v = await validateFeedUrl(c.feed_url);
-      return v.valid ? c : null;
+      return v.valid ? { ...c, postsPer30Days: v.postsPer30Days } : null;
     })
   );
   return results.filter((c): c is DiscoveredFeed => c !== null);
