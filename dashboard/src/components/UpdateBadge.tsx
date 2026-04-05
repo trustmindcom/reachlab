@@ -32,17 +32,17 @@ export default function UpdateBadge() {
   if (!status?.available || !status.message || dismissed) return null;
 
   return (
-    <div className="fixed top-3 right-3 z-[100] flex items-center gap-2 bg-warning/10 text-warning border border-warning/20 rounded-full px-3 py-1.5 text-xs font-medium shadow-sm">
+    <div className="flex items-center gap-1.5 bg-warning/10 text-warning border border-warning/20 rounded-full px-2.5 py-1 text-[11px] font-medium">
       <span>{status.message}</span>
       <button
         onClick={() => {
           setDismissed(true);
           sessionStorage.setItem(DISMISS_KEY, "true");
         }}
-        className="ml-1 hover:text-warning/80 transition-colors"
+        className="ml-0.5 hover:text-warning/80 transition-colors"
         aria-label="Dismiss"
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
           <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
         </svg>
       </button>

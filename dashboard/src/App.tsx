@@ -14,6 +14,7 @@ import ApiKeySetup from "./pages/onboarding/ApiKeySetup";
 import { ToastProvider } from "./components/Toast";
 import UpdateBadge from "./components/UpdateBadge";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { formatTimeAgo } from "./pages/coach/components";
 
 const tabs = ["Overview", "Posts", "Coach", "Generate", "Timing", "Followers", "Settings"] as const;
 type Tab = (typeof tabs)[number];
@@ -100,7 +101,6 @@ export default function App() {
   return (
     <ToastProvider>
     <PersonaProvider>
-    <UpdateBadge />
     <div className="min-h-screen">
       {/* Alert banners */}
       {hasErrors && health && (
@@ -154,11 +154,26 @@ export default function App() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
+          <UpdateBadge />
           <PersonaSwitcher />
-          {health?.last_sync_at && (
-            <span className="text-xs text-text-muted font-mono tabular-nums bg-surface-2/60 px-2 py-0.5 rounded">
-              Last sync: {new Date(health.last_sync_at).toLocaleString()}
-            </span>
+          {(health?.last_sync_at || health?.analysis?.last_success) && (
+            <div
+              className="flex items-center gap-3 text-[11px] text-text-muted font-mono tabular-nums bg-surface-2/60 px-2.5 py-1 rounded"
+              title={[
+                health?.last_sync_at && `Last sync: ${new Date(health.last_sync_at + (health.last_sync_at.endsWith("Z") ? "" : "Z")).toLocaleString()}`,
+                health?.analysis?.last_success && `AI analysis: ${new Date(health.analysis.last_success + (health.analysis.last_success.endsWith("Z") ? "" : "Z")).toLocaleString()}`,
+              ].filter(Boolean).join("\n")}
+            >
+              {health?.last_sync_at && (
+                <span><span className="text-text-muted/60">sync</span> {formatTimeAgo(health.last_sync_at)}</span>
+              )}
+              {health?.last_sync_at && health?.analysis?.last_success && (
+                <span className="text-text-muted/30">·</span>
+              )}
+              {health?.analysis?.last_success && (
+                <span><span className="text-text-muted/60">coach</span> {formatTimeAgo(health.analysis.last_success)}</span>
+              )}
+            </div>
           )}
         </div>
       </header>
