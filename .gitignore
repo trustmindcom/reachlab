@@ -20,3 +20,8 @@ reachlab.db
 spike/*.json
 spike/*.txt
 !spike/examples/
+
+# Local-only artifacts
+docs/superpowers/
+docs/design-audit-*
+logs/

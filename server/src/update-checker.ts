@@ -58,7 +58,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
       return currentStatus;
     }
 
-    const dirty = await git("status --porcelain");
+    const dirty = await git("status --porcelain -uno");
     const aheadCount = parseInt(await git("rev-list --count origin/main..HEAD") || "0", 10);
 
     if (dirty || aheadCount > 0) {
