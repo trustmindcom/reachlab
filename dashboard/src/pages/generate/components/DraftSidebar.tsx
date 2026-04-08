@@ -36,9 +36,12 @@ export default function DraftSidebar({
               {isActive && (
                 <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-gen-accent rounded-full" />
               )}
-              <button
+              <div
                 onClick={() => onActivate(i)}
-                className={`w-full text-left pl-4 pr-3 py-3 rounded-lg transition-colors duration-150 ease-[var(--ease-snappy)] ${
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onActivate(i); }}
+                className={`w-full text-left pl-4 pr-3 py-3 rounded-lg cursor-pointer transition-colors duration-150 ease-[var(--ease-snappy)] ${
                   isActive ? "bg-gen-bg-2" : "hover:bg-gen-bg-2/50"
                 }`}
               >
@@ -74,7 +77,7 @@ export default function DraftSidebar({
                     </button>
                   </label>
                 </div>
-              </button>
+              </div>
             </div>
           );
         })}
