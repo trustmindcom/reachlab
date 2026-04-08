@@ -428,7 +428,33 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
         </div>
       )}
 
-      {/* Loading state — scanner animation */}
+      {/* Topic input — always visible during discovery phase so user can start typing an idea while topics load */}
+      {!hasStories && (
+        <div className="flex gap-2 mb-6 items-end">
+          <textarea
+            value={topicInput}
+            onChange={(e) => {
+              setTopicInput(e.target.value);
+              // Auto-expand: reset height then set to scrollHeight
+              e.target.style.height = "auto";
+              e.target.style.height = e.target.scrollHeight + "px";
+            }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleGoTopic(); } }}
+            placeholder="I want to write about..."
+            rows={1}
+            className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3 text-[16px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none overflow-hidden"
+          />
+          <button
+            onClick={handleGoTopic}
+            disabled={!topicInput.trim() || loading}
+            className="px-6 py-3 bg-gen-accent text-white text-[16px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed self-end"
+          >
+            Go
+          </button>
+        </div>
+      )}
+
+      {/* Loading state — scanner animation (below the input so user can keep typing) */}
       {loading && (
         <ScannerLoader messages={activeMessages} />
       )}
@@ -436,25 +462,6 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
       {/* Discovery grid view */}
       {!loading && !hasStories && (
         <div>
-          {/* Topic input */}
-          <div className="flex gap-2 mb-8">
-            <input
-              type="text"
-              value={topicInput}
-              onChange={(e) => setTopicInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleGoTopic(); }}
-              placeholder="I want to write about..."
-              className="flex-1 bg-gen-bg-1 border border-gen-border-1 rounded-[10px] px-4 py-3 text-[16px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent"
-            />
-            <button
-              onClick={handleGoTopic}
-              disabled={!topicInput.trim()}
-              className="px-6 py-3 bg-gen-accent text-white text-[16px] font-medium rounded-[10px] hover:bg-gen-accent/90 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Go
-            </button>
-          </div>
-
           {hasTopics && (
             <>
               {/* Divider */}
