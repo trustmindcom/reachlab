@@ -31,7 +31,7 @@ export function registerHistoryRoutes(app: FastifyInstance, db: Database.Databas
         ? g.final_draft.substring(0, 80) + (g.final_draft.length > 80 ? "..." : "")
         : drafts[0]?.hook?.substring(0, 80) ?? "";
 
-      // Get story headline from research record
+      // Get story headline from research record, or brainstorm angle
       let storyHeadline = "";
       if (g.research_id && g.selected_story_index !== null) {
         const research = getResearch(db, g.research_id);
@@ -39,6 +39,8 @@ export function registerHistoryRoutes(app: FastifyInstance, db: Database.Databas
           const stories: Story[] = JSON.parse(research.stories_json);
           storyHeadline = stories[g.selected_story_index]?.headline ?? "";
         }
+      } else if ((g as any).brainstorm_angle) {
+        storyHeadline = (g as any).brainstorm_angle.slice(0, 80);
       }
 
       return {

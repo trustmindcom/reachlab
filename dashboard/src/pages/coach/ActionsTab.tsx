@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Recommendation, PromptSuggestions, PromptSuggestion, ProgressData, SparklinePoint, Insight } from "../../api/client";
 import { getPriorityLabel, getConfidenceLabel, formatCategory, fmtNum, deltaClass, deltaLabel, Sparkline } from "./components";
+import InlineDiff from "../../components/InlineDiff";
 
 export function ActionsTab({
   active,
@@ -169,23 +170,8 @@ export function ActionsTab({
             {linkedSuggestion && suggIdx >= 0 && !acceptedSuggestions.has(suggIdx) && !rejectedSuggestions.has(suggIdx) && (
               <div className="bg-surface-2 border border-border rounded-lg p-4 space-y-3">
                 <span className="text-[10px] font-semibold text-text-muted uppercase tracking-widest">Suggested prompt update</span>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-text-muted uppercase tracking-wider mb-1">Current</span>
-                    <div className="flex-1 flex items-center">
-                      <p className="w-full text-sm bg-surface-0 rounded-md px-3 py-2.5 text-text-secondary leading-relaxed">
-                        {linkedSuggestion.current}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-accent uppercase tracking-wider mb-1 font-medium">Suggested</span>
-                    <div className="flex-1 flex items-center">
-                      <p className="w-full text-sm bg-accent/5 border border-accent/15 rounded-md px-3 py-2.5 text-text-primary leading-relaxed">
-                        {linkedSuggestion.suggested}
-                      </p>
-                    </div>
-                  </div>
+                <div className="border border-border rounded-md px-3 py-2.5">
+                  <InlineDiff oldText={linkedSuggestion.current} newText={linkedSuggestion.suggested} />
                 </div>
                 <div className="flex gap-2">
                   <button

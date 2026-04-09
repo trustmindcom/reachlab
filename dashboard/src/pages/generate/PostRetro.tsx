@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api, type RetroAnalysis, type RetroRuleSuggestion, type RetroPromptEdit } from "../../api/client";
 import ScannerLoader from "./components/ScannerLoader";
 import { useToast } from "../../components/Toast";
+import InlineDiff from "../../components/InlineDiff";
 
 interface PostRetroProps {
   generationId: number;
@@ -304,18 +305,16 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
                           <p className="text-[13px] text-text-muted">{edit.reason}</p>
-                          {edit.remove_text && (
-                            <div className="bg-negative/5 border border-negative/15 rounded-md p-3">
-                              <span className="text-[10px] uppercase tracking-wider text-negative/70 font-medium">Remove</span>
-                              <p className="text-[14px] text-negative/80 mt-1 line-through">{edit.remove_text}</p>
+                          {edit.remove_text ? (
+                            <div className="border border-border rounded-md p-3">
+                              <InlineDiff oldText={edit.remove_text} newText={edit.add_text} />
+                            </div>
+                          ) : (
+                            <div className="bg-positive/5 border border-positive/15 rounded-md p-3">
+                              <span className="text-[10px] uppercase tracking-wider text-positive/70 font-medium">Add</span>
+                              <p className="text-[14px] text-positive/80 mt-1">{edit.add_text}</p>
                             </div>
                           )}
-                          <div className="bg-positive/5 border border-positive/15 rounded-md p-3">
-                            <span className="text-[10px] uppercase tracking-wider text-positive/70 font-medium">
-                              {edit.type === "add" ? "Add" : "Replace with"}
-                            </span>
-                            <p className="text-[14px] text-positive/80 mt-1">{edit.add_text}</p>
-                          </div>
                         </div>
                         <button
                           onClick={() => handleApplyPromptEdit(edit, i)}
