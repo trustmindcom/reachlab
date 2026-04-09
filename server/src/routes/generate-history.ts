@@ -86,10 +86,15 @@ export function registerHistoryRoutes(app: FastifyInstance, db: Database.Databas
 
   app.delete("/api/generate/history/:id", { preHandler: personaGuard }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const gen = getGeneration(db, Number(id));
+    const numId = Number(id);
+    const gen = getGeneration(db, numId);
     if (!gen) return reply.status(404).send({ error: "Generation not found" });
-    db.prepare("DELETE FROM generation_messages WHERE generation_id = ?").run(Number(id));
-    db.prepare("DELETE FROM generations WHERE id = ?").run(Number(id));
+    db.transaction(() => {
+      db.prepare("DELETE FROM generation_messages WHERE generation_id = ?").run(numId);
+      db.prepare("DELETE FROM generation_revisions WHERE generation_id = ?").run(numId);
+      db.prepare("DELETE FROM generation_topic_log WHERE generation_id = ?").run(numId);
+      db.prepare("DELETE FROM generations WHERE id = ?").run(numId);
+    })();
     return { ok: true };
   });
 }
