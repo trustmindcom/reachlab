@@ -39,6 +39,10 @@ export interface GenerationState {
   finalDraft: string;
   qualityGate: GenCoachCheckQuality | null;
   appliedInsights: GenCoachingInsight[];
+  // Brainstorm (thought-leadership path)
+  brainstormAngles: string[];
+  brainstormTopic: string | null;
+  selectedAngle: string | null;
   // Chat
   chatMessages: Array<{ role: "user" | "assistant"; content: string }>;
   // Status
@@ -65,6 +69,9 @@ const initialState: GenerationState = {
   finalDraft: "",
   qualityGate: null,
   appliedInsights: [],
+  brainstormAngles: [],
+  brainstormTopic: null,
+  selectedAngle: null,
   chatMessages: [],
 };
 
@@ -114,6 +121,8 @@ async function restoreGeneration(data: GenHistoryDetail): Promise<RestoreResult 
     qualityGate,
     personalConnection: data.personal_connection ?? "",
     draftLength: data.draft_length && ["short", "medium", "long"].includes(data.draft_length) ? data.draft_length as "short" | "medium" | "long" : "medium",
+    brainstormTopic: data.brainstorm_topic ?? null,
+    selectedAngle: data.brainstorm_angle ?? null,
     chatMessages,
     status: data.status,
   };

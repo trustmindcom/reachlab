@@ -26,7 +26,7 @@ import { streamWithIdleTimeout } from "../ai/stream-with-idle.js";
 import { getClient, MODELS } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
-import { generateDrafts, reviseDrafts } from "../ai/drafter.js";
+import { generateDrafts, reviseDrafts, brainstormAngles } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
 import { coachCheck } from "../ai/coach-check.js";
 import { registerCoachingRoutes } from "./generate-coaching.js";
@@ -35,7 +35,7 @@ import { registerRetroRoutes } from "./generate-retro.js";
 import { registerSourceRoutes } from "./generate-sources.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
-import { researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
+import { researchBody, draftsBody, brainstormBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
 import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt, expandMessageRow } from "../ai/ghostwriter.js";
 import { createPersonaGuard } from "../middleware/persona-guard.js";
 
@@ -84,23 +84,47 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     }
   });
 
+  // ── Brainstorm angles (thought-leadership path) ──────────
+
+  app.post("/api/generate/brainstorm", async (request, reply) => {
+    const personaId = getPersonaId(request);
+    const { topic } = validateBody(brainstormBody, request.body);
+
+    const client = getClient();
+    const runId = createRun(db, personaId, "brainstorm_angles", 0);
+    const logger = new AiLogger(db, runId);
+
+    try {
+      const result = await brainstormAngles(client, db, personaId, logger, topic);
+      completeRun(db, runId, getRunCost(db, runId));
+      return { angles: result.angles };
+    } catch (err: any) {
+      failRun(db, runId, err.message);
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
   // ── Drafts ───────────────────────────────────────────────
 
   app.post("/api/generate/drafts", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { research_id, story_index, personal_connection, length } = validateBody(draftsBody, request.body);
+    const body = validateBody(draftsBody, request.body);
 
-    const research = getResearch(db, research_id);
-    if (!research) {
-      return reply.status(404).send({ error: "Research not found" });
-    }
-    if ((research as any).persona_id !== personaId) {
-      return reply.status(403).send({ error: "Not authorized" });
-    }
-
-    const stories: Story[] = JSON.parse(research.stories_json);
-    if (story_index < 0 || story_index >= stories.length) {
-      return reply.status(400).send({ error: "Invalid story_index" });
+    // Validate inputs before creating the AI client/run (which requires API key)
+    let storyForDrafts: Story | undefined;
+    if (body.research_id != null && body.story_index != null) {
+      const research = getResearch(db, body.research_id);
+      if (!research) {
+        return reply.status(404).send({ error: "Research not found" });
+      }
+      if ((research as any).persona_id !== personaId) {
+        return reply.status(403).send({ error: "Not authorized" });
+      }
+      const stories: Story[] = JSON.parse(research.stories_json);
+      if (body.story_index < 0 || body.story_index >= stories.length) {
+        return reply.status(400).send({ error: "Invalid story_index" });
+      }
+      storyForDrafts = stories[body.story_index];
     }
 
     const client = getClient();
@@ -108,32 +132,51 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await generateDrafts(
-        client,
-        db,
-        personaId,
-        logger,
-        stories[story_index],
-        personal_connection,
-        length
-      );
+      let result;
+      let generationId: number;
 
-      const generationId = insertGeneration(db, personaId, {
-        research_id,
-        post_type: "general",
-        selected_story_index: story_index,
-        drafts_json: JSON.stringify(result.drafts),
-        prompt_snapshot: result.prompt_snapshot,
-        personal_connection,
-        draft_length: length,
-      });
+      if (storyForDrafts && body.research_id != null && body.story_index != null) {
+        // ── Story-based path ──────────────────────────────
+        result = await generateDrafts(client, db, personaId, logger, storyForDrafts, body.personal_connection, body.length);
 
-      // Log topic for anti-narrowing
-      insertTopicLog(db, {
-        generation_id: generationId,
-        topic_category: stories[story_index].tag,
-        was_stretch: stories[story_index].is_stretch,
-      });
+        generationId = insertGeneration(db, personaId, {
+          research_id: body.research_id,
+          post_type: "general",
+          selected_story_index: body.story_index,
+          drafts_json: JSON.stringify(result.drafts),
+          prompt_snapshot: result.prompt_snapshot,
+          personal_connection: body.personal_connection,
+          draft_length: body.length,
+        });
+
+        insertTopicLog(db, {
+          generation_id: generationId,
+          topic_category: storyForDrafts.tag,
+          was_stretch: storyForDrafts.is_stretch,
+        });
+      } else {
+        // ── Brainstorm/angle path (thought-leadership) ────
+        const topic = body.topic!;
+        const angle = body.angle!;
+
+        result = await generateDrafts(client, db, personaId, logger, { topic, angle }, body.personal_connection, body.length);
+
+        generationId = insertGeneration(db, personaId, {
+          post_type: "general",
+          drafts_json: JSON.stringify(result.drafts),
+          prompt_snapshot: result.prompt_snapshot,
+          personal_connection: body.personal_connection,
+          draft_length: body.length,
+          brainstorm_topic: topic,
+          brainstorm_angle: angle,
+        });
+
+        insertTopicLog(db, {
+          generation_id: generationId,
+          topic_category: topic.slice(0, 50),
+          was_stretch: false,
+        });
+      }
 
       completeRun(db, runId, getRunCost(db, runId));
 
@@ -493,7 +536,11 @@ Return JSON only:
       const research = gen.research_id ? getResearch(db, gen.research_id) : null;
       const stories: Story[] = research?.stories_json ? JSON.parse(research.stories_json) : [];
       const story = gen.selected_story_index != null ? stories[gen.selected_story_index] : null;
-      const storyContext = story ? `**${story.headline}**\n${story.summary}` : "";
+      const storyContext = story
+        ? `**${story.headline}**\n${story.summary}`
+        : gen.brainstorm_angle
+          ? `Topic: ${gen.brainstorm_topic}\nAngle: ${gen.brainstorm_angle}`
+          : "";
 
       const systemPrompt = isFirstTurn
         ? buildFirstTurnPrompt(
