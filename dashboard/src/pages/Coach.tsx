@@ -5,6 +5,7 @@ import {
   type AnalysisStatus,
 } from "../api/client";
 import { formatTimeAgo, formatTimeUntil } from "./coach/components";
+import InlineDiff from "../components/InlineDiff";
 import { ActionsTab } from "./coach/ActionsTab";
 import { InsightsTab } from "./coach/InsightsTab";
 import { DeepDiveTab } from "./coach/DeepDiveTab";
@@ -172,14 +173,15 @@ export default function Coach() {
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
                                 <p className="text-[14px] text-text-muted mb-2">{edit.reason}</p>
-                                {edit.remove_text && (
-                                  <div className="text-[14px] bg-negative/5 text-negative/80 rounded px-2 py-1 mb-1 font-mono">
-                                    − {edit.remove_text}
+                                {edit.remove_text ? (
+                                  <div className="rounded px-3 py-2 border border-border">
+                                    <InlineDiff oldText={edit.remove_text} newText={edit.add_text} />
+                                  </div>
+                                ) : (
+                                  <div className="text-[14px] bg-positive/5 text-positive/80 rounded px-3 py-2 font-mono">
+                                    + {edit.add_text}
                                   </div>
                                 )}
-                                <div className="text-[14px] bg-positive/5 text-positive/80 rounded px-2 py-1 font-mono">
-                                  + {edit.add_text}
-                                </div>
                               </div>
                               <button
                                 onClick={() => actions.handleApplyRetroEdit(retro.generation_id, i, edit)}

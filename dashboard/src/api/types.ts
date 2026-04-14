@@ -340,6 +340,8 @@ export interface GenHistoryDetail {
   prompt_snapshot: string | null;
   status: string;
   persona_id: number;
+  brainstorm_topic: string | null;
+  brainstorm_angle: string | null;
   created_at: string;
   stories: GenStory[];
   article_count: number;

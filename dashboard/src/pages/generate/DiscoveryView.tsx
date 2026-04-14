@@ -22,6 +22,9 @@ interface DiscoveryViewProps {
     selectedStoryIndex: number | null;
     personalConnection: string;
     draftLength: "short" | "medium" | "long";
+    brainstormAngles: string[];
+    brainstormTopic: string | null;
+    selectedAngle: string | null;
   };
   setGen: SetGen;
   loading: boolean;
@@ -47,6 +50,12 @@ const DRAFTS_MESSAGES = [
   "Applying your voice...",
   "Refining structure...",
   "Polishing language...",
+];
+
+const BRAINSTORM_MESSAGES = [
+  "Reading your voice...",
+  "Thinking about angles...",
+  "Finding hot takes...",
 ];
 
 const CACHE_KEY = "reachlab_discovery_cache";
@@ -331,20 +340,68 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   };
 
   const handleGenerateDrafts = async () => {
-    if (gen.selectedStoryIndex === null || gen.researchId === null) return;
+    // Story-based path
+    if (gen.selectedStoryIndex !== null && gen.researchId !== null) {
+      setLoading(true);
+      setActiveMessages(DRAFTS_MESSAGES);
+      try {
+        const res = await api.generateDrafts(gen.researchId, gen.selectedStoryIndex, gen.personalConnection || undefined, gen.draftLength);
+        setGen((prev) => ({
+          ...prev,
+          generationId: res.generation_id,
+          drafts: res.drafts,
+          selectedDraftIndices: [],
+        }));
+        onNext();
+      } catch (err: any) {
+        setError(err.message ?? "Draft generation failed. Try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Brainstorm/angle path
+    if (gen.selectedAngle && gen.brainstormTopic) {
+      setLoading(true);
+      setActiveMessages(DRAFTS_MESSAGES);
+      try {
+        const res = await api.generateDrafts(null, null, gen.personalConnection || undefined, gen.draftLength, gen.brainstormTopic, gen.selectedAngle);
+        setGen((prev) => ({
+          ...prev,
+          generationId: res.generation_id,
+          drafts: res.drafts,
+          selectedDraftIndices: [],
+        }));
+        onNext();
+      } catch (err: any) {
+        setError(err.message ?? "Draft generation failed. Try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleBrainstorm = async () => {
+    const topic = gen.selectedTopic || topicInput.trim();
+    if (!topic) return;
     setLoading(true);
-    setActiveMessages(DRAFTS_MESSAGES);
+    setActiveMessages(BRAINSTORM_MESSAGES);
+    setError(null);
     try {
-      const res = await api.generateDrafts(gen.researchId, gen.selectedStoryIndex, gen.personalConnection || undefined, gen.draftLength);
+      const res = await api.brainstormAngles(topic);
       setGen((prev) => ({
         ...prev,
-        generationId: res.generation_id,
-        drafts: res.drafts,
-        selectedDraftIndices: [],
+        brainstormAngles: res.angles,
+        brainstormTopic: topic,
+        selectedAngle: null,
+        // Clear story selection
+        stories: [],
+        researchId: null,
+        selectedStoryIndex: null,
       }));
-      onNext();
     } catch (err: any) {
-      setError(err.message ?? "Draft generation failed. Try again.");
+      setError(err.message ?? "Brainstorm failed. Try again.");
     } finally {
       setLoading(false);
     }
@@ -682,6 +739,17 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
             ))}
           </div>
 
+          {/* Brainstorm option — skip stories, find your own angle */}
+          <div className="mt-4 pt-4 border-t border-gen-border-1">
+            <button
+              onClick={handleBrainstorm}
+              className="w-full text-left px-5 py-4 rounded-xl border border-dashed border-gen-border-2 text-gen-text-2 hover:text-gen-text-0 hover:border-gen-accent/40 hover:bg-gen-bg-2/30 transition-colors duration-150 ease-[var(--ease-snappy)]"
+            >
+              <span className="text-[15px] font-medium">I don't need a story</span>
+              <span className="text-[14px] text-gen-text-3 ml-2">— help me find my angle on this topic</span>
+            </button>
+          </div>
+
           {/* Personal connection */}
           {gen.selectedStoryIndex !== null && (
             <div className="mt-4 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-xl space-y-2">
@@ -731,6 +799,124 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               <button
                 onClick={handleGenerateDrafts}
                 disabled={gen.selectedStoryIndex === null || loading}
+                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Generate drafts
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brainstorm angles — shown after clicking "I don't need a story" */}
+      {!loading && gen.brainstormAngles.length > 0 && !hasStories && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[15px] font-medium text-gen-text-0">
+              Pick an angle to write about
+            </h2>
+            <button
+              onClick={() => {
+                setGen((prev) => ({
+                  ...prev,
+                  brainstormAngles: [],
+                  brainstormTopic: null,
+                  selectedAngle: null,
+                }));
+              }}
+              className="text-[15px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
+            >
+              Back
+            </button>
+          </div>
+
+          <p className="text-[14px] text-gen-text-3 mb-4">
+            {gen.brainstormTopic}
+          </p>
+
+          <div className="space-y-2">
+            {gen.brainstormAngles.map((angle, i) => {
+              const isSelected = gen.selectedAngle === angle;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setGen((prev) => ({ ...prev, selectedAngle: isSelected ? null : angle }))}
+                  className={`w-full text-left rounded-xl px-5 py-4 transition-all border ${
+                    isSelected
+                      ? "border-gen-accent-border bg-gen-bg-2 shadow-[inset_3px_0_0_0_var(--color-gen-accent)]"
+                      : "border-gen-border-1 bg-gen-bg-1 hover:border-gen-border-2"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-1 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      isSelected ? "border-gen-accent bg-gen-accent" : "border-gen-text-4"
+                    }`}>
+                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <span className="text-[15px] text-gen-text-1 leading-snug">{angle}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Or write your own */}
+          <div className="mt-4">
+            <textarea
+              value={gen.selectedAngle && !gen.brainstormAngles.includes(gen.selectedAngle) ? gen.selectedAngle : ""}
+              onChange={(e) => setGen((prev) => ({ ...prev, selectedAngle: e.target.value || null }))}
+              rows={2}
+              placeholder="Or write your own angle..."
+              className="w-full bg-gen-bg-1 border border-gen-border-1 rounded-lg px-4 py-3 text-[15px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
+            />
+          </div>
+
+          {/* Personal connection */}
+          {gen.selectedAngle && (
+            <div className="mt-4 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-xl space-y-2">
+              <h3 className="text-[16px] font-medium text-gen-text-0">
+                What's your personal connection to this?
+              </h3>
+              <p className="text-[14px] text-gen-text-3">
+                Optional — helps the AI ground the draft in your real experience.
+              </p>
+              <textarea
+                value={gen.personalConnection}
+                onChange={(e) => setGen((prev) => ({ ...prev, personalConnection: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (gen.selectedAngle && !loading) handleGenerateDrafts();
+                  }
+                }}
+                rows={3}
+                placeholder='e.g. "I spent 6 months building a vendor assessment program from scratch..."'
+                className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[15px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
+              />
+            </div>
+          )}
+
+          {/* Bottom bar */}
+          <div className="flex items-center justify-end mt-6 pt-4 border-t border-gen-border-1">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-gen-bg-2 rounded-lg p-0.5">
+                {(["short", "medium", "long"] as const).map((len) => (
+                  <button
+                    key={len}
+                    onClick={() => setGen((prev) => ({ ...prev, draftLength: len }))}
+                    className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
+                      gen.draftLength === len
+                        ? "bg-gen-bg-0 text-gen-text-0 shadow-sm"
+                        : "text-gen-text-3 hover:text-gen-text-1"
+                    }`}
+                  >
+                    {len}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleGenerateDrafts}
+                disabled={!gen.selectedAngle || loading}
                 className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Generate drafts

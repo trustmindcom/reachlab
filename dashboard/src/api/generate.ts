@@ -44,13 +44,31 @@ export const generateApi = {
       return r.json() as Promise<GenResearchResponse>;
     }),
 
-  generateDrafts: (researchId: number, storyIndex: number, personalConnection?: string, length?: "short" | "medium" | "long") =>
+  brainstormAngles: (topic: string) =>
+    fetch(withPersonaId(`/api/generate/brainstorm`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic }),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`API error: ${r.status}`);
+      return r.json() as Promise<{ angles: string[] }>;
+    }),
+
+  generateDrafts: (
+    researchId: number | null,
+    storyIndex: number | null,
+    personalConnection?: string,
+    length?: "short" | "medium" | "long",
+    topic?: string,
+    angle?: string,
+  ) =>
     fetch(withPersonaId(`/api/generate/drafts`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        research_id: researchId,
-        story_index: storyIndex,
+        ...(researchId != null && storyIndex != null
+          ? { research_id: researchId, story_index: storyIndex }
+          : { topic, angle }),
         personal_connection: personalConnection,
         length,
       }),

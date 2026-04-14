@@ -14,6 +14,15 @@ export interface DraftResult {
   output_tokens: number;
 }
 
+export interface BrainstormResult {
+  angles: string[];
+  input_tokens: number;
+  output_tokens: number;
+}
+
+/** Context for draft generation: either a news story or a freeform topic+angle. */
+export type DraftContext = Story | { topic: string; angle: string };
+
 const VARIATION_INSTRUCTIONS: Record<string, string> = {
   contrarian:
     "Write a CONTRARIAN variation. Challenge the obvious take. Lead with what most people get wrong about this topic. Be specific about why the conventional wisdom fails.",
@@ -38,18 +47,89 @@ export const LENGTH_INSTRUCTIONS: Record<DraftLength, string> = {
 };
 
 /**
- * Generate 3 draft variations (contrarian, operator, future-facing) for a selected story.
+ * Brainstorm 5-7 bold angle bullets for a topic, using the full prompt context
+ * (rules, coaching insights, author profile, anti-AI tropes).
+ */
+export async function brainstormAngles(
+  client: Anthropic,
+  db: Database.Database,
+  personaId: number,
+  logger: AiLogger,
+  topic: string,
+): Promise<BrainstormResult> {
+  const assembled = assemblePrompt(db, personaId, "");
+  const start = Date.now();
+  const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
+    model: MODELS.SONNET,
+    max_tokens: 1500,
+    system: assembled.system,
+    messages: [
+      {
+        role: "user",
+        content: `I want to write a LinkedIn post about: "${topic}"
+
+I'm not reacting to a news story — I want to share my own perspective and expertise on this topic.
+
+Generate 5-7 distinct angle bullets I could write about. Each should be:
+- A bold, specific claim or insight (not a vague theme)
+- The kind of thing that runs counter to conventional wisdom, reveals a hidden truth, or reframes how people think about this topic
+- Something that would make a practitioner stop scrolling and think "that's a good point"
+- Written as a single sentence that could serve as the post's thesis
+
+Vary the types: include hot takes, contrarian views, practical frameworks, and "here's what nobody talks about" angles.
+
+Return JSON only (no markdown fences):
+{ "angles": ["angle 1", "angle 2", ...] }`,
+      },
+    ],
+  });
+
+  const duration = Date.now() - start;
+  logger.log({
+    step: "brainstorm_angles",
+    model: MODELS.SONNET,
+    input_messages: JSON.stringify([{ role: "user", content: `Brainstorm angles: ${topic}` }]),
+    output_text: text,
+    tool_calls: null,
+    input_tokens,
+    output_tokens,
+    thinking_tokens,
+    duration_ms: duration,
+  });
+
+  const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error("Brainstorm response did not contain valid JSON");
+  }
+  const parsed = JSON.parse(jsonrepair(jsonMatch[0]));
+  return {
+    angles: Array.isArray(parsed.angles) ? parsed.angles : [],
+    input_tokens,
+    output_tokens,
+  };
+}
+
+function isStory(ctx: DraftContext): ctx is Story {
+  return "headline" in ctx;
+}
+
+/**
+ * Generate 3 draft variations (contrarian, operator, future-facing).
+ * Accepts either a news Story or a freeform {topic, angle} for thought-leadership posts.
  */
 export async function generateDrafts(
   client: Anthropic,
   db: Database.Database,
   personaId: number,
   logger: AiLogger,
-  story: Story,
+  context: DraftContext,
   personalConnection?: string,
   length?: DraftLength
 ): Promise<DraftResult> {
-  const storyContext = `**${story.headline}**\n${story.summary}\nSource: ${story.source} | ${story.age}\nPossible angles: ${story.angles.join("; ")}`;
+  const storyContext = isStory(context)
+    ? `**${context.headline}**\n${context.summary}\nSource: ${context.source} | ${context.age}\nPossible angles: ${context.angles.join("; ")}`
+    : `Topic: ${context.topic}\n\nAngle: ${context.angle}\n\nThis is a thought-leadership post. No news story anchor — write from the author's own expertise, experience, and perspective.`;
   const connectionContext = personalConnection
     ? `\n\n## Personal Connection\n${personalConnection}`
     : "";
