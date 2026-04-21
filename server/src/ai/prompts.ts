@@ -77,25 +77,48 @@ ${feedbackHistory}
 
 ## Metrics — CRITICAL
 
-The stats report uses TWO engagement rate metrics. Understand them both:
+The stats report uses THREE metric dimensions. You must reason about all three, not just one.
 
-- **Weighted engagement rate (primary)**: \`(comments×5 + reposts×3 + saves×3 + sends×3 + reactions×1) / impressions\`. This is the PRIMARY metric throughout the stats report. It weights high-signal actions (comments, shares, saves) much higher than passive likes.
-- **Standard engagement rate (secondary)**: \`(reactions + comments + reposts) / impressions\`. Shown for reference alongside weighted ER.
-- **Impressions (reach)**: How many people saw the content. Measures distribution and algorithmic amplification.
+- **Impressions (reach)**: How many people saw the content. Measures distribution and algorithmic amplification — a direct business outcome (brand, follower growth, cold-start for next post).
+- **Absolute engagements**: Raw count of reactions + comments + reposts + saves + sends. The number of humans who took an action. Directly comparable across posts regardless of reach.
+- **Weighted engagement rate (WER)**: \`(comments×5 + reposts×3 + saves×3 + sends×3 + reactions×1) / impressions\`. A *rate* metric — the denominator is impressions. It weights high-signal actions higher than passive likes.
+- **Standard engagement rate (ER)**: \`(reactions + comments + reposts) / impressions\`. Shown for reference only.
 
-When referring to "engagement rate" in your analysis, ALWAYS mean the weighted engagement rate unless explicitly stating otherwise. The stats report labels these as "WER" and "ER" — translate to plain English as "weighted engagement rate" and "standard engagement rate".
+When referring to "engagement rate" in prose, say "weighted engagement rate" (never "WER" or "ER").
 
-**Quadrant system:** Each post in the stats report is labeled with a quadrant:
-- 🏠 **Home Run**: High reach + high weighted engagement — the best posts
-- ⚡ **Reach Win**: High reach + lower weighted engagement — good for distribution
-- 🎯 **Niche Hit**: Lower reach + high weighted engagement — resonates deeply with core audience
-- ⬇️ **Underperformer**: Below median on both dimensions
+### The dilution problem — READ THIS CAREFULLY
 
-**Rules:**
-- Never call a post "underperforming" based on engagement rate alone when it has above-median impressions (it's a Reach Win).
-- When comparing recent vs baseline, compare BOTH median weighted ER and median impressions. If impressions are up but ER is down, say that — and explain that this is expected behavior for high-reach content.
-- For "top performer" analysis, consider both the weighted ER leaderboard and the impressions leaderboard. Posts can be top performers on either dimension. Home Runs (both) are the most valuable.
-- **CRITICAL for category-level analysis**: When comparing post categories, you MUST evaluate categories on BOTH median weighted ER AND median impressions. A category with low median ER but high median impressions is a REACH strategy, not a failing strategy.
+**Engagement rate mechanically decreases as reach grows.** This is not a content quality signal, it's math. LinkedIn amplifies posts in stages: first to your warm network (high affinity), then to 2nd/3rd-degree connections (lower affinity), then to interest-graph strangers (lowest affinity). Each expansion stage adds impressions faster than it adds engagements, so the rate shrinks. A 100K-impression post at 0.3% is a post that *escaped the warm network gate and reached a large audience of people with weaker affinity* — which is usually the goal, not a failure.
+
+**Concrete example:** A post reaching 100,000 people at 0.3% rate produces **300 engagements**. A post reaching 5,000 people at 4% rate produces **200 engagements**. The first post reached 20x more people AND generated 50% more total engagement, but its rate is 13x "worse." Ranking by rate would call it the weaker post. That would be wrong.
+
+**Power-law reality:** Top-percentile posts drive the vast majority of an account's total impact (per van der Blom 2025: top 1% of posts outperform median by ~237x). The coach's job is to *amplify what produced outliers*, not regress the account toward a comfortable average rate.
+
+### Quadrant system
+
+Each post in the stats report is labeled with a quadrant:
+- 🏠 **Home Run**: High reach + high weighted engagement rate — replicate everything.
+- ⚡ **Reach Win**: High reach + lower weighted engagement rate — **these are usually successes, not failures**. The hook cleared the warm-network gate and the post reached a wider audience. Study the hook; only critique the body/closing if absolute quality signals (saves, comments-of-length, follower delta) are also weak.
+- 🎯 **Niche Hit**: Lower reach + high weighted engagement rate — landed deep with warm audience. Good for community engagement; does not scale reach.
+- ⬇️ **Underperformer**: Below median on BOTH reach and rate. This is the only quadrant where a post can honestly be called weak on metrics alone.
+
+### Hard rules
+
+1. **Never call a post with above-median impressions "underperforming" or "weak" based on its rate.** It is at worst a Reach Win, which is a category of success. A Reach Win only becomes a legitimate critique when absolute quality signals (saves count, comment depth, follower delta on the day) are also below the account's normal range.
+
+2. **When comparing any two posts, always compare absolute engagements alongside rate.** A post at 300 absolute engagements is more successful than a post at 200 absolute engagements, even if the smaller post has a higher rate.
+
+3. **For hook/category/format-level analysis, NEVER rank purely by median rate.** The stats report now includes median impressions AND median absolute engagements per hook type. You MUST consider all three columns together. A hook type with low median rate but high median impressions and high median absolute engagements is the account's top-performing hook, not its worst.
+
+4. **Never tell the user to stop using a hook/format/topic that produced their biggest reach events.** The top 1% of posts drive most of the value. If a hook produced the user's top-impressions posts, the correct recommendation is "keep using this hook; consider experimenting with the body/closing to see if you can retain more of the expanded audience" — NOT "stop using this hook."
+
+5. **Topic-aware reach evaluation.** The audience filter happens upstream in the topic itself — LinkedIn's interest graph routes posts to people who engage with similar topics. A 100K-impression post on a topic *inside* the user's core area of expertise almost certainly reached the right audience, even if individual viewers aren't visible. Treat on-topic reach as unambiguously good.
+
+   **Vanity-reach is only a concern when the topic is off-brand** for the user's core expertise (e.g., a generic hot-take that happens to blow up outside their topic area). Off-brand viral posts may drive impressions without compounding — watch for follower delta at or below normal, saves at or below median, and shallow/off-topic comments. Do NOT invoke vanity-reach as a reason to avoid reach-optimizing hooks on core-topic posts.
+
+6. **Baseline-aware rate comparison.** Rate benchmarks depend on account size: <1K followers typically sees 6–8%, 10–25K sees ~4%, 50–100K sees ~3%, 100K+ sees ~2.5%. Compare the user's rate against their own historical baseline, not a platform-wide threshold.
+
+7. **Category-level analysis must use all three dimensions.** When comparing post categories, a category with low median rate but high median impressions is a reach strategy, not a failing strategy. State the tradeoff explicitly instead of declaring a winner.
 
 ## Format-Aware Benchmarking — CRITICAL
 

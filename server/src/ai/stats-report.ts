@@ -693,42 +693,76 @@ function buildHookPerformanceSection(db: Database.Database, personaId: number): 
 
   if (rows.length === 0) return "";
 
-  const hookGroups: Record<string, number[]> = {};
-  const styleGroups: Record<string, number[]> = {};
+  interface HookBucket {
+    wers: number[];
+    impressions: number[];
+    absoluteEngagements: number[];
+  }
+  const hookGroups: Record<string, HookBucket> = {};
+  const styleGroups: Record<string, HookBucket> = {};
 
   for (const r of rows) {
     const wer = computeWeightedER(r.reactions, r.comments, r.reposts, r.saves, r.sends, r.impressions);
     if (wer === null) continue;
+    const absoluteEngagements =
+      r.reactions + r.comments + r.reposts + (r.saves ?? 0) + (r.sends ?? 0);
+
     if (r.hook_type) {
-      if (!hookGroups[r.hook_type]) hookGroups[r.hook_type] = [];
-      hookGroups[r.hook_type].push(wer);
+      if (!hookGroups[r.hook_type]) {
+        hookGroups[r.hook_type] = { wers: [], impressions: [], absoluteEngagements: [] };
+      }
+      hookGroups[r.hook_type].wers.push(wer);
+      hookGroups[r.hook_type].impressions.push(r.impressions);
+      hookGroups[r.hook_type].absoluteEngagements.push(absoluteEngagements);
     }
     if (r.format_style) {
-      if (!styleGroups[r.format_style]) styleGroups[r.format_style] = [];
-      styleGroups[r.format_style].push(wer);
+      if (!styleGroups[r.format_style]) {
+        styleGroups[r.format_style] = { wers: [], impressions: [], absoluteEngagements: [] };
+      }
+      styleGroups[r.format_style].wers.push(wer);
+      styleGroups[r.format_style].impressions.push(r.impressions);
+      styleGroups[r.format_style].absoluteEngagements.push(absoluteEngagements);
     }
   }
 
   const lines = ["## 15. Hook Type & Structure Performance"];
+  lines.push(
+    "IMPORTANT: Rate alone is a dilution metric — it mechanically drops as reach grows because low-affinity audiences dilute the denominator. Evaluate hooks on ALL THREE columns together (rate, reach, absolute engagements). A hook with low rate but high reach and high absolute engagements is driving the account's biggest wins, not underperforming. Sort order below is by median impressions (reach-first), not rate."
+  );
+  lines.push("");
 
-  lines.push("By hook type:");
+  lines.push("By hook type (sorted by median impressions):");
   const hookSorted = Object.entries(hookGroups)
-    .map(([type, wers]) => ({ type, count: wers.length, medWER: median(wers) }))
+    .map(([type, b]) => ({
+      type,
+      count: b.wers.length,
+      medWER: median(b.wers),
+      medImpr: median(b.impressions),
+      medAbs: median(b.absoluteEngagements),
+    }))
     .filter((h) => h.medWER !== null)
-    .sort((a, b) => b.medWER! - a.medWER!);
+    .sort((a, b) => (b.medImpr ?? 0) - (a.medImpr ?? 0));
   for (const h of hookSorted) {
-    const best = h === hookSorted[0] ? " — best performer" : "";
-    const worst = h === hookSorted[hookSorted.length - 1] && hookSorted.length > 2 ? " — weakest" : "";
-    lines.push(`  - ${h.type} (n=${h.count}): ${pct(h.medWER!)} median weighted ER${best}${worst}`);
+    lines.push(
+      `  - ${h.type} (n=${h.count}): ${pct(h.medWER!)} median weighted ER, ${h.medImpr?.toLocaleString() ?? "N/A"} median impressions, ${h.medAbs?.toFixed(0) ?? "N/A"} median total engagements`
+    );
   }
 
-  lines.push("By format style:");
+  lines.push("By format style (sorted by median impressions):");
   const styleSorted = Object.entries(styleGroups)
-    .map(([style, wers]) => ({ style, count: wers.length, medWER: median(wers) }))
+    .map(([style, b]) => ({
+      style,
+      count: b.wers.length,
+      medWER: median(b.wers),
+      medImpr: median(b.impressions),
+      medAbs: median(b.absoluteEngagements),
+    }))
     .filter((s) => s.medWER !== null)
-    .sort((a, b) => b.medWER! - a.medWER!);
+    .sort((a, b) => (b.medImpr ?? 0) - (a.medImpr ?? 0));
   for (const s of styleSorted) {
-    lines.push(`  - ${s.style} (n=${s.count}): ${pct(s.medWER!)} median weighted ER`);
+    lines.push(
+      `  - ${s.style} (n=${s.count}): ${pct(s.medWER!)} median weighted ER, ${s.medImpr?.toLocaleString() ?? "N/A"} median impressions, ${s.medAbs?.toFixed(0) ?? "N/A"} median total engagements`
+    );
   }
 
   return lines.join("\n");

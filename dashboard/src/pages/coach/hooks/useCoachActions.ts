@@ -83,6 +83,16 @@ export function useCoachActions(showError: (msg: string) => void) {
     } catch (err) { console.error("[Coach] Failed to apply retro edit:", err); }
   };
 
+  const handleDismissRetro = async (retroId: number) => {
+    try {
+      await api.markRetroApplied(retroId);
+      setPendingRetros((prev) => prev.filter((r) => r.generation_id !== retroId));
+    } catch (err) {
+      console.error("[Coach] Failed to dismiss retro:", err);
+      showError("Failed to dismiss retro");
+    }
+  };
+
   return {
     activeRecs,
     resolvedRecs,
@@ -94,5 +104,6 @@ export function useCoachActions(showError: (msg: string) => void) {
     handleFeedback,
     handleAcceptSuggestion,
     handleApplyRetroEdit,
+    handleDismissRetro,
   };
 }

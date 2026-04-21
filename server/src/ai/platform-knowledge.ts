@@ -85,13 +85,19 @@ Quality signals (saves, thoughtful comments) are 4-6x more important than likes 
 
 ## Engagement Rate Benchmarks (2026)
 
-- Below 2%: Underperforming
-- 2-3.5%: Solid / average
-- 3.5-5%: Good
-- Above 5%: Exceptional
-- Smaller accounts (1-5K followers) typically see 4-8%
-- Larger accounts (10K+) see 1-3%
-- Platform-wide average: ~5.2% (inflated by carousel-heavy pages)`,
+Engagement rate is a dilution metric — it mechanically drops as impressions grow because the algorithm expands from the warm network (high affinity) to strangers (low affinity). Use account-size baselines, not platform-wide thresholds:
+
+- <1K followers: 6-8% typical
+- 1-5K followers: 4-6% typical
+- 5-10K followers: 3.5-5% typical
+- 10-25K followers: 3-4.5% typical
+- 25-50K followers: 2.5-4% typical
+- 50-100K followers: 2-3.5% typical
+- 100K+ followers: 1.5-3% typical
+
+**Critical**: compare a post's rate against the user's own historical baseline for their account size, not a flat threshold. A 0.3% rate on a 100K-impression post is not "failing" — it is the mathematical consequence of reaching 10-20x the user's median reach. Check absolute engagement count and follower delta to judge whether a high-reach post was actually successful.
+
+Power-law reality: top 1% of posts outperform the median by ~237x (van der Blom 2025, 1.8M posts). The rare outlier posts drive most of the account's total impact. Never coach the user toward the middle of the distribution; coach them to replicate what produced outliers.`,
 
   timing: `## The "Golden Hour"
 

@@ -39,8 +39,9 @@ export default function AnalyzeWriting({ onNext, onSkip }: AnalyzeWritingProps) 
       setPhase("analyzing");
 
       // Trigger analysis
-      const refreshRes = await api.insightsRefresh();
-      if (refreshRes.error) {
+      try {
+        await api.insightsRefresh();
+      } catch {
         // Not enough posts with metrics to run analysis
         setPhase("not-enough");
         return;

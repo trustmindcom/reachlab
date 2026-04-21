@@ -37,43 +37,67 @@ export default function Coach() {
 
   useEffect(() => {
     loadAll();
-    // If pipeline is running on load, poll until done
+
+    // Background status poll: every 15s, check if a run started or finished elsewhere
+    // (e.g. triggered from the Overview page). If a run is active, tighten the poll to 3s.
+    let lastRunId: number | null = null;
+    let intervalMs = 15000;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      try {
+        const s = await api.insightsStatus();
+        setStatus(s);
+
+        if (s.running) {
+          // Active run — tighten the poll and show the refreshing indicator
+          intervalMs = 3000;
+          setRefreshing(true);
+        } else {
+          // No active run. If a run just completed (last_run id changed), reload everything.
+          const currentRunId = s.last_run?.id ?? null;
+          if (lastRunId !== null && currentRunId !== lastRunId) {
+            loadAll();
+          }
+          lastRunId = currentRunId;
+          intervalMs = 15000;
+          setRefreshing(false);
+        }
+      } catch (err) {
+        console.error("[Coach] Status poll failed:", err);
+      } finally {
+        timer = setTimeout(tick, intervalMs);
+      }
+    };
+
+    // Seed lastRunId from the first status fetch so we don't trigger a false "new run" on mount.
     api.insightsStatus().then((s) => {
+      lastRunId = s.last_run?.id ?? null;
+      setStatus(s);
       if (s.running) {
         setRefreshing(true);
-        const poll = setInterval(() => {
-          api.insightsStatus().then((s2) => {
-            setStatus(s2);
-            if (!s2.running) {
-              clearInterval(poll);
-              setRefreshing(false);
-              loadAll();
-            }
-          }).catch(err => console.error("[Coach] Status poll failed:", err));
-        }, 3000);
+        intervalMs = 3000;
       }
-    }).catch(err => console.error("[Coach] Initial status check failed:", err));
+      timer = setTimeout(tick, intervalMs);
+    }).catch((err) => {
+      console.error("[Coach] Initial status check failed:", err);
+      timer = setTimeout(tick, intervalMs);
+    });
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const handleRefresh = (force = false) => {
     setRefreshing(true);
+    // Trigger the refresh. The background status poll will detect the running state,
+    // tighten its polling interval, and reload everything when the run completes.
     api.insightsRefresh(force)
-      .then(() => {
-        // Poll for completion
-        const poll = setInterval(() => {
-          api.insightsStatus().then((s) => {
-            setStatus(s);
-            if (!s.running) {
-              clearInterval(poll);
-              setRefreshing(false);
-              loadAll();
-            }
-          }).catch(err => console.error("[Coach] Refresh poll failed:", err));
-        }, 3000);
-      })
       .catch(err => {
         console.error("[Coach] Refresh trigger failed:", err);
         setRefreshing(false);
+        showError(err?.message ?? "Failed to start AI refresh");
       });
   };
 
@@ -156,7 +180,16 @@ export default function Coach() {
                 <div key={retro.generation_id} className="bg-surface-1 rounded-xl border border-border p-5 mb-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[14px] text-text-muted">{formatTimeAgo(retro.retro_at)}</span>
-                    <span className="text-[13px] text-text-muted">Draft #{retro.generation_id}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[13px] text-text-muted">Draft #{retro.generation_id}</span>
+                      <button
+                        onClick={() => actions.handleDismissRetro(retro.generation_id)}
+                        className="text-[13px] text-text-muted hover:text-text-primary transition-colors"
+                        title="Dismiss without changing the writing prompt"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[15px] text-text-primary mb-4 leading-relaxed">{retro.analysis.summary}</p>
 

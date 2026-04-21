@@ -59,12 +59,18 @@ export const analyticsApi = {
       `/insights/tags?post_ids=${postIds.join(",")}`
     ),
   insightsTaxonomy: () => getUnscoped<{ taxonomy: TaxonomyItem[] }>("/insights/taxonomy"),
-  insightsRefresh: (force = false) =>
-    fetch(withPersonaId(`/api/insights/refresh`), {
+  insightsRefresh: async (force = false) => {
+    const r = await fetch(withPersonaId(`/api/insights/refresh`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ force }),
-    }).then((r) => r.json()),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(body?.error ?? `Refresh failed (${r.status})`);
+    }
+    return body;
+  },
   insightsStatus: () =>
     getUnscoped<AnalysisStatus>("/insights/status"),
   recommendationFeedback: (id: number, rating: string, reason?: string) =>

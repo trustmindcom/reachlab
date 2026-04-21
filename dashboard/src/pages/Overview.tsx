@@ -60,30 +60,54 @@ export default function Overview() {
       .catch(() => showError("Failed to load AI insights"));
   }, [range]);
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setRefreshing(true);
-    api
-      .insightsRefresh()
-      .then(() => {
-        // Pipeline runs async — poll for results every 5s for up to 3 minutes
-        let attempts = 0;
-        const poll = () => {
-          attempts++;
-          api
-            .insightsOverview()
-            .then((r) => {
-              if (r.overview || attempts >= 36) {
-                setAiOverview(r.overview);
-                setRefreshing(false);
-              } else {
-                setTimeout(poll, 5000);
-              }
-            })
-            .catch(() => setRefreshing(false));
-        };
-        setTimeout(poll, 5000);
-      })
-      .catch(() => setRefreshing(false));
+
+    // Capture the current last_run id BEFORE triggering refresh, so we can detect
+    // when a new run completes regardless of how long the pipeline takes.
+    let baselineRunId: number | null = null;
+    try {
+      const baseline = await api.insightsStatus();
+      baselineRunId = baseline.last_run?.id ?? null;
+    } catch {
+      /* non-fatal */
+    }
+
+    try {
+      await api.insightsRefresh(true);
+    } catch (err: any) {
+      setRefreshing(false);
+      showError(err?.message ?? "Failed to start AI refresh");
+      return;
+    }
+
+    // Poll every 3s for up to 20 minutes. Stop when last_run.id has advanced past baseline
+    // (meaning a new run has completed) OR when the max polling window is exceeded.
+    const MAX_ATTEMPTS = 400; // 20 minutes at 3s intervals
+    let attempts = 0;
+    const poll = () => {
+      attempts++;
+      api
+        .insightsStatus()
+        .then((s) => {
+          const currentRunId = s.last_run?.id ?? null;
+          const runAdvanced = currentRunId !== null && currentRunId !== baselineRunId;
+          if (runAdvanced || attempts >= MAX_ATTEMPTS) {
+            setRefreshing(false);
+            api
+              .insightsOverview()
+              .then((r) => setAiOverview(r.overview))
+              .catch(() => showError("Failed to load AI insights"));
+          } else {
+            setTimeout(poll, 3000);
+          }
+        })
+        .catch(() => {
+          setRefreshing(false);
+          showError("Failed to check refresh status");
+        });
+    };
+    setTimeout(poll, 3000);
   };
 
   let quickInsights: string[] = [];
@@ -129,7 +153,7 @@ export default function Overview() {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-50"
+            className="px-3 py-1.5 bg-accent/10 text-accent text-[14px] font-medium rounded-lg hover:bg-accent/20 transition-colors disabled:opacity-50"
           >
             {refreshing ? "Refreshing..." : "Refresh AI"}
           </button>

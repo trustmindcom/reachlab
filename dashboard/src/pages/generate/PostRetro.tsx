@@ -19,6 +19,7 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
   const [error, setError] = useState<string | null>(null);
   const [appliedRules, setAppliedRules] = useState<Set<number>>(new Set());
   const [appliedPromptEdits, setAppliedPromptEdits] = useState<Set<number>>(new Set());
+  const [promptEditsDismissed, setPromptEditsDismissed] = useState(false);
 
   // Load existing retro (including ones completed while we were away)
   useEffect(() => {
@@ -61,6 +62,15 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
       await api.generateAddRule(rule.category, rule.rule_text);
       setAppliedRules((prev) => new Set(prev).add(index));
     } catch { /* ignore */ }
+  };
+
+  const handleDismissPromptEdits = async () => {
+    try {
+      await api.markRetroApplied(generationId);
+      setPromptEditsDismissed(true);
+    } catch {
+      showError("Failed to dismiss suggestions");
+    }
   };
 
   const handleApplyPromptEdit = async (edit: RetroPromptEdit, index: number) => {
@@ -292,11 +302,20 @@ export default function PostRetro({ generationId, draftText, finalDraftText, onB
           )}
 
           {/* Prompt edits — with preview and Apply buttons */}
-          {analysis.prompt_edits && analysis.prompt_edits.length > 0 && (
+          {analysis.prompt_edits && analysis.prompt_edits.length > 0 && !promptEditsDismissed && (
             <div>
-              <h3 className="text-[14px] uppercase tracking-wider text-text-muted font-medium mb-3">
-                Writing Prompt Updates
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[14px] uppercase tracking-wider text-text-muted font-medium">
+                  Writing Prompt Updates
+                </h3>
+                <button
+                  onClick={handleDismissPromptEdits}
+                  className="text-[13px] text-text-muted hover:text-text-primary transition-colors"
+                  title="Dismiss all suggestions without changing the writing prompt"
+                >
+                  Dismiss all
+                </button>
+              </div>
               <div className="space-y-3">
                 {analysis.prompt_edits.map((edit, i) => {
                   const applied = appliedPromptEdits.has(i);

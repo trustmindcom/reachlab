@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type Database from "better-sqlite3";
+import { jsonrepair } from "jsonrepair";
 import type { AiLogger } from "./logger.js";
 import { MODELS } from "./client.js";
 import { taxonomyPrompt } from "./prompts.js";
@@ -73,7 +74,15 @@ export async function discoverTaxonomy(
     cleaned = fenceMatch[1].trim();
   }
 
-  const taxonomy = JSON.parse(cleaned) as {
+  // Extract the first JSON array from the response. Haiku occasionally appends
+  // trailing commentary after the array, which breaks raw JSON.parse at the
+  // position where the prose begins.
+  const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+  if (!arrayMatch) {
+    throw new Error("Taxonomy discovery returned no JSON array");
+  }
+
+  const taxonomy = JSON.parse(jsonrepair(arrayMatch[0])) as {
     name: string;
     description: string;
   }[];
