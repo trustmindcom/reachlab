@@ -110,7 +110,7 @@ function validate<T>(schema: z.ZodType<T>, data: unknown, pageName: string): T {
 async function scrapeCurrent(): Promise<ContentMessage> {
   const url = location.href;
 
-  if (url.includes("/feed/update/urn:li:activity:")) {
+  if (url.includes("/feed/update/urn:li:activity:") || url.includes("/posts/")) {
     await requireSelector(
       ".feed-shared-inline-show-more-text, .feed-shared-update-v2__description",
       "post-page"

@@ -16,6 +16,7 @@ import {
   getPostsNeedingVideoUrl,
   getPostsWithRecentMetrics,
   getImageLocalPaths,
+  getStoredImageUrls,
   setImageLocalPaths,
   getAvgScrapedPostCount,
   getPostCountInWindow,
@@ -51,6 +52,21 @@ export function registerIngestRoutes(
     let postsStatus = "pending";
     let followersStatus = "pending";
     let profileStatus = "pending";
+
+    // Snapshot stored image URLs BEFORE upsert so we can detect changes for re-download
+    const preUpsertImageUrls = new Map<string, string | null>();
+    if (payload.posts) {
+      for (const post of payload.posts) {
+        if (post.image_urls && post.image_urls.length > 0) {
+          preUpsertImageUrls.set(post.id, getStoredImageUrls(db, post.id));
+        }
+      }
+    }
+
+    const postCount = payload.posts?.length ?? 0;
+    const imagePostCount = payload.posts?.filter(p => p.image_urls && p.image_urls.length > 0).length ?? 0;
+    const sampleSize = payload.posts?.[0]?.image_urls?.[0]?.match(/shrink_(\d+)/)?.[1] ?? "none";
+    console.log(`[Ingest] Received ${postCount} posts (${imagePostCount} with images, sample size: shrink_${sampleSize})`);
 
     // Upsert posts
     if (payload.posts) {
@@ -214,18 +230,39 @@ export function registerIngestRoutes(
         // Fire and forget — don't block the response
         import("../ai/image-downloader.js").then(({ downloadPostImages }) => {
           const dataDir = path.join(path.dirname(dbPath), "images");
+          let skippedUnchanged = 0, skipped160 = 0, downloading = 0;
           for (const post of postsWithImages) {
-            // Check if already downloaded
-            if (getImageLocalPaths(db, post.id)) continue;
+            const existing = getImageLocalPaths(db, post.id);
+            const oldUrls = preUpsertImageUrls.get(post.id) ?? null;
+            const incomingUrls = JSON.stringify(post.image_urls);
+            const sizeMatch = post.image_urls![0].match(/shrink_(\d+)/);
+            const size = sizeMatch ? sizeMatch[1] : "unknown";
+            // Skip if local paths exist AND URLs haven't changed
+            if (existing && oldUrls === incomingUrls) {
+              skippedUnchanged++;
+              continue;
+            }
+            // Never download shrink_160 thumbnails — wait for the high-res
+            // scrape from scrapePostPages which sends shrink_800+
+            if (post.image_urls![0].includes("shrink_160")) {
+              skipped160++;
+              continue;
+            }
+            downloading++;
+            console.log(`[Image Download] ${existing ? "Re-downloading" : "Downloading"} ${post.id} (shrink_${size})`);
 
             downloadPostImages(post.id, post.image_urls!, dataDir).then((paths) => {
               if (paths.length > 0) {
                 setImageLocalPaths(db, post.id, JSON.stringify(paths));
+                console.log(`[Image Download] OK ${post.id} — saved ${paths.length} image(s)`);
+              } else {
+                console.warn(`[Image Download] ${post.id} — download returned 0 paths`);
               }
             }).catch((err: any) => {
-              console.error(`[Image Download] Failed for ${post.id}:`, err.message);
+              console.error(`[Image Download] FAILED ${post.id} (shrink_${size}): ${err.message}`);
             });
           }
+          console.log(`[Image Download] Summary: ${downloading} downloading, ${skipped160} skipped (shrink_160), ${skippedUnchanged} skipped (unchanged)`);
         }).catch(err => console.error("[Image Download] Failed to load image-downloader module:", err));
       }
     }
@@ -320,6 +357,7 @@ export function registerIngestRoutes(
     // Include posts needing scraping so the extension doesn't need separate API calls
     const needsContent = payload.posts ? getPostsNeedingContent(db, personaId) : undefined;
     const needsImages = payload.posts ? getPostsNeedingImages(db, personaId) : undefined;
+    console.log(`[Ingest Response] needs_content: ${needsContent?.length ?? 0}, needs_images: ${needsImages?.length ?? 0}`);
     const needsVideoUrl = payload.posts ? getPostsNeedingVideoUrl(db, personaId) : undefined;
     const hasRecentMetrics = payload.posts ? getPostsWithRecentMetrics(db, personaId) : undefined;
     // Recent posts that have never had metrics scraped (not on top-posts page)
@@ -375,7 +413,9 @@ export function registerIngestRoutes(
 
   app.get(`${prefix}/posts/needs-images`, async (request) => {
     const personaId = getPersonaId(request);
-    return { post_ids: getPostsNeedingImages(db, personaId) };
+    const ids = getPostsNeedingImages(db, personaId);
+    console.log(`[DEBUG needs-images] persona=${personaId} returning ${ids.length} post IDs`);
+    return { post_ids: ids };
   });
 
   app.get(`${prefix}/posts/needs-video-url`, async (request) => {

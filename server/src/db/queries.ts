@@ -522,8 +522,11 @@ export function getPostsNeedingImages(db: Database.Database, personaId: number):
     `SELECT id FROM posts
      WHERE persona_id = ?
        AND content_type IN ('image', 'carousel')
-       AND (image_local_paths IS NULL OR image_local_paths = '[]')
-       AND (image_urls IS NULL OR image_urls = '[]')
+       AND (
+         (image_urls IS NULL OR image_urls = '[]')
+         OR image_urls LIKE '%shrink_160%'
+         OR (image_local_paths IS NULL OR image_local_paths = '[]')
+       )
      ORDER BY published_at DESC`
   ).all(personaId) as { id: string }[]).map(r => r.id);
 }
@@ -550,6 +553,11 @@ export function getPostsWithRecentMetrics(db: Database.Database, personaId: numb
 export function getImageLocalPaths(db: Database.Database, postId: string): string | null {
   const row = db.prepare("SELECT image_local_paths FROM posts WHERE id = ?").get(postId) as { image_local_paths: string | null } | undefined;
   return row?.image_local_paths ?? null;
+}
+
+export function getStoredImageUrls(db: Database.Database, postId: string): string | null {
+  const row = db.prepare("SELECT image_urls FROM posts WHERE id = ?").get(postId) as { image_urls: string | null } | undefined;
+  return row?.image_urls ?? null;
 }
 
 export function setImageLocalPaths(db: Database.Database, postId: string, paths: string): void {

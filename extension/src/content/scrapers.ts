@@ -232,19 +232,23 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
     }
   }
 
-  // Extract image URLs — look for LinkedIn CDN images in the post
+  // Extract image URLs — look for LinkedIn CDN images in the post.
+  // Selectors cover both feed view (.feed-shared-*) and single-post view (.feed-images-content).
   const imageUrls: string[] = [];
   const images = doc.querySelectorAll(
     '.feed-shared-image img[src*="media.licdn.com"], ' +
     '.feed-shared-carousel img[src*="media.licdn.com"], ' +
-    '.feed-shared-document img[src*="media.licdn.com"]'
+    '.feed-shared-document img[src*="media.licdn.com"], ' +
+    '.feed-images-content img[src*="media.licdn.com"], ' +
+    '.update-components-image img[src*="media.licdn.com"]'
   );
   for (const img of images) {
     const src = img.getAttribute("src");
-    if (src && src.includes("media.licdn.com")) {
+    if (src && src.includes("media.licdn.com") && src.includes("feedshare-shrink")) {
       imageUrls.push(src);
     }
   }
+  console.log(`[ReachLab Scraper] URL: ${doc.location?.href}, selectors matched: ${images.length}, image_urls: ${imageUrls.length > 0 ? imageUrls.map(u => u.substring(u.indexOf('shrink_'), u.indexOf('shrink_') + 12)).join(', ') : 'none'}`);
 
   // Video URL capture is handled by the service worker's webRequest listener
   // (content scripts can't access performance entries from the page's isolated world,

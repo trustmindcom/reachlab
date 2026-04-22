@@ -98,6 +98,14 @@ chrome.webRequest.onCompleted.addListener(
 // Also try to drain offline queue on worker start
 drainOfflineQueue();
 
+// Keep service worker alive while a port is connected (used during sync/backfill)
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "keepalive") {
+    // Hold the port open — Chrome won't kill the service worker while a port is connected
+    port.onDisconnect.addListener(() => {});
+  }
+});
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
     await drainOfflineQueue();
@@ -105,6 +113,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   } else if (alarm.name === "sync-continue") {
     await continueSyncBatch();
   } else if (alarm.name === "backfill-continue") {
+    console.log("[ReachLab] backfill-continue alarm fired");
     await continueBackfill();
   } else if (alarm.name === "publish-scrape") {
     await scrapeLatestPost();
@@ -207,10 +216,8 @@ async function drainOfflineQueue() {
 
 async function trySync(manual = false) {
   // Check if already syncing or backfilling
-  const { syncInProgress, backfillQueue } = await chrome.storage.session.get([
-    "syncInProgress",
-    "backfillQueue",
-  ]);
+  const { syncInProgress } = await chrome.storage.session.get(["syncInProgress"]);
+  const { backfillQueue } = await chrome.storage.local.get(["backfillQueue"]);
   if (syncInProgress) return;
   if (backfillQueue) return; // Backfill still running, skip sync
 
@@ -506,25 +513,20 @@ async function syncPersonalPersona(persona: SyncPersona) {
         ],
       });
 
-      // Scrape post pages for content + images (merged, using ingest response)
+      // Queue posts needing content/images for backfill (processes in batches via alarms,
+      // survives service worker restarts, won't hit Chrome's 5-minute execution limit)
       try {
         const needsContentIds: string[] = ingestResult?.needs_content ?? [];
         const needsImageIds: string[] = ingestResult?.needs_images ?? [];
-        const currentPostIds = new Set<string>([
-          ...posts.map((p: ScrapedPost) => p.id),
-          ...syntheticIds,
-        ]);
-        const toScrape = [...new Set([...needsContentIds, ...needsImageIds])].filter(
-          (id: string) => currentPostIds.has(id)
-        );
+        const toScrape = [...new Set([...needsContentIds, ...needsImageIds])];
         if (toScrape.length > 0) {
-          await scrapePostPages(tab.id!, toScrape, isBackfill);
+          const { backfillQueue: existingQueue } = await chrome.storage.local.get(["backfillQueue"]);
+          const merged = [...new Set([...(existingQueue ?? []), ...toScrape])];
+          await chrome.storage.local.set({ backfillQueue: merged, backfillCursor: 0 });
+          console.log(`[ReachLab] Queued ${toScrape.length} posts for image backfill (${merged.length} total in queue)`);
         }
       } catch (err: any) {
-        console.error(
-          "[ReachLab] Post page scraping failed:",
-          err.message
-        );
+        console.error("[ReachLab] Failed to queue image backfill:", err.message);
       }
 
       const recentMetricsSet = new Set<string>(ingestResult?.has_recent_metrics ?? []);
@@ -696,6 +698,7 @@ async function scrapePostContent(
     videoUrl = hookResult.data.video_url ?? null;
     authorReplies = hookResult.data.author_replies ?? null;
     hasThreads = hookResult.data.has_threads ?? null;
+    console.log(`[ReachLab] Scraped ${postId}: ${imageUrls.length} images, URLs: ${imageUrls.map(u => u.substring(u.indexOf('shrink_'), u.indexOf('shrink_') + 12)).join(', ') || 'none'}`);
   } else {
     console.warn(
       `[ReachLab] Post content scrape returned ${hookResult.type} for ${postId}:`,
@@ -775,10 +778,8 @@ async function scrapeAndSendPostContent(
  */
 async function scrapeLatestPost(): Promise<void> {
   // Skip if a sync or backfill is in progress — avoid conflicting scrapes
-  const { syncInProgress, backfillQueue } = await chrome.storage.session.get([
-    "syncInProgress",
-    "backfillQueue",
-  ]);
+  const { syncInProgress } = await chrome.storage.session.get(["syncInProgress"]);
+  const { backfillQueue } = await chrome.storage.local.get(["backfillQueue"]);
   if (syncInProgress || backfillQueue) {
     console.log("[Publish] Skipping publish scrape — sync/backfill in progress");
     // Reschedule so the publish isn't lost — will fire after sync completes
@@ -933,9 +934,14 @@ async function scrapePostPages(
   postIds: string[],
   isBackfill: boolean
 ): Promise<void> {
-  const pacingMin = isBackfill ? BACKFILL_PACING_MIN_MS : PACING_MIN_MS;
-  const pacingMax = isBackfill ? BACKFILL_PACING_MAX_MS : PACING_MAX_MS;
+  console.log(`[ReachLab] scrapePostPages: ${postIds.length} posts to scrape (backfill: ${isBackfill})`);
+  // Keep service worker alive during long scrape sessions by pinging a Chrome API
+  const keepalive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
+  // Use shorter pacing for image-only scrapes (visiting our own posts, not suspicious)
+  const pacingMin = 1000;
+  const pacingMax = 2000;
   const batch: ScrapedContent[] = [];
+  let batchNum = 0;
 
   for (const postId of postIds) {
     await randomDelay(pacingMin, pacingMax);
@@ -945,7 +951,10 @@ async function scrapePostPages(
 
       // Flush batch when full
       if (batch.length >= CONTENT_BATCH_SIZE) {
+        batchNum++;
+        console.log(`[ReachLab] scrapePostPages: sending batch ${batchNum} (${batch.length} posts)`);
         await postToServer({ posts: [...batch] });
+        console.log(`[ReachLab] scrapePostPages: batch ${batchNum} sent OK`);
         batch.length = 0;
       }
     } catch (err: any) {
@@ -958,8 +967,13 @@ async function scrapePostPages(
 
   // Flush remaining
   if (batch.length > 0) {
+    batchNum++;
+    console.log(`[ReachLab] scrapePostPages: sending final batch ${batchNum} (${batch.length} posts)`);
     await postToServer({ posts: batch });
+    console.log(`[ReachLab] scrapePostPages: final batch sent OK`);
   }
+  clearInterval(keepalive);
+  console.log(`[ReachLab] scrapePostPages: done — ${batchNum} batches sent`);
 }
 
 async function scrapeRemainingPages(tabId: number) {
@@ -1085,12 +1099,15 @@ async function scrapeAndSendProfilePhoto(tabId: number): Promise<void> {
 }
 
 async function continueBackfill() {
-  const { backfillQueue, backfillCursor = 0 } = await chrome.storage.session.get([
+  console.log("[ReachLab] continueBackfill called");
+  // Use storage.local (not session) so the queue survives service worker restarts
+  const { backfillQueue, backfillCursor = 0 } = await chrome.storage.local.get([
     "backfillQueue",
     "backfillCursor",
   ]);
+  console.log(`[ReachLab] Backfill queue: ${backfillQueue?.length ?? 'null'}, cursor: ${backfillCursor}`);
   if (!backfillQueue || backfillCursor >= backfillQueue.length) {
-    await chrome.storage.session.set({ backfillQueue: null, backfillCursor: null });
+    await chrome.storage.local.set({ backfillQueue: null, backfillCursor: null });
     return;
   }
 
@@ -1098,29 +1115,37 @@ async function continueBackfill() {
   if (!tab.id) return;
 
   const batchEnd = Math.min(backfillCursor + 5, backfillQueue.length);
+  console.log(`[ReachLab] Processing backfill batch ${backfillCursor}-${batchEnd} of ${backfillQueue.length}`);
+  const keepalive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
 
   try {
     for (let i = backfillCursor; i < batchEnd; i++) {
       const postId = backfillQueue[i];
+      console.log(`[ReachLab] Backfill scraping post ${postId} (${i + 1}/${backfillQueue.length})`);
       await randomDelay(BACKFILL_PACING_MIN_MS, BACKFILL_PACING_MAX_MS);
       try {
         await scrapeAndSendPostContent(tab.id, postId);
+        console.log(`[ReachLab] Backfill sent ${postId} OK`);
       } catch (err: any) {
         console.error(`[ReachLab] Backfill failed for ${postId}:`, err.message);
       }
     }
 
-    await chrome.storage.session.set({ backfillCursor: batchEnd });
+    await chrome.storage.local.set({ backfillCursor: batchEnd });
+    console.log(`[ReachLab] Backfill cursor advanced to ${batchEnd}`);
 
     if (batchEnd < backfillQueue.length) {
-      chrome.alarms.create("backfill-continue", { delayInMinutes: 0.1 });
+      console.log(`[ReachLab] Scheduling next backfill batch in 30s`);
+      chrome.alarms.create("backfill-continue", { delayInMinutes: 0.5 });
     } else {
-      await chrome.storage.session.set({ backfillQueue: null, backfillCursor: null });
+      await chrome.storage.local.set({ backfillQueue: null, backfillCursor: null });
+      console.log("[ReachLab] Backfill complete — all posts processed");
     }
   } catch (err: any) {
-    console.error("[ReachLab] Backfill error:", err.message);
-    await chrome.storage.session.set({ backfillQueue: null, backfillCursor: null });
+    console.error("[ReachLab] Backfill OUTER error (queue cleared):", err.message);
+    await chrome.storage.local.set({ backfillQueue: null, backfillCursor: null });
   } finally {
+    clearInterval(keepalive);
     try { await chrome.tabs.remove(tab.id); } catch {}
   }
 }
@@ -1153,11 +1178,12 @@ async function finishSync() {
     }
     const uniqueIds = [...new Set(allIds)];
     if (uniqueIds.length > 0) {
-      await chrome.storage.session.set({
+      console.log(`[ReachLab] Setting backfill queue: ${uniqueIds.length} posts`);
+      await chrome.storage.local.set({
         backfillQueue: uniqueIds,
         backfillCursor: 0,
       });
-      chrome.alarms.create("backfill-continue", { delayInMinutes: 0.1 });
+      chrome.alarms.create("backfill-continue", { delayInMinutes: 0.5 });
     }
   } catch {
     // Non-fatal — backfill will happen next sync
@@ -1257,6 +1283,10 @@ async function sendScrapeCommand(tabId: number): Promise<ContentMessage> {
 /** POST to server directly — throws on failure */
 async function postToServerDirect(payload: Record<string, unknown>, personaId?: number) {
   const pid = personaId ?? (await chrome.storage.session.get("syncActivePersonaId")).syncActivePersonaId ?? 1;
+  const posts = payload.posts as ScrapedContent[] | undefined;
+  const postCount = posts?.length ?? 0;
+  const imgCount = posts?.filter(p => p.image_urls?.length > 0).length ?? 0;
+  console.log(`[ReachLab] postToServerDirect: ${postCount} posts (${imgCount} with images) → persona ${pid}`);
   const response = await fetch(`${SERVER_URL}/api/personas/${pid}/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1265,17 +1295,21 @@ async function postToServerDirect(payload: Record<string, unknown>, personaId?: 
 
   if (!response.ok) {
     const text = await response.text();
+    console.error(`[ReachLab] postToServerDirect FAILED: ${response.status} ${text.substring(0, 200)}`);
     throw new Error(`Server ingest failed (${response.status}): ${text}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  console.log(`[ReachLab] postToServerDirect OK: upserted=${result.posts_upserted}, needs_images=${result.needs_images?.length ?? 0}`);
+  return result;
 }
 
 /** POST to server with offline queue fallback */
 async function postToServer(payload: Record<string, unknown>) {
   try {
     return await postToServerDirect(payload);
-  } catch (err) {
+  } catch (err: any) {
+    console.error(`[ReachLab] postToServer failed, queuing offline: ${err.message}`);
     await queueForRetry(payload);
     throw err;
   }

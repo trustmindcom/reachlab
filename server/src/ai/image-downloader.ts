@@ -10,6 +10,7 @@ export function isAllowedImageUrl(url: string): boolean {
   return ALLOWED_CDN_PATTERN.test(url);
 }
 
+
 async function fetchWithRetry(
   url: string,
   retryDelays: number[] = RETRY_DELAYS_MS
@@ -19,6 +20,10 @@ async function fetchWithRetry(
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
+      }
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.startsWith("image/")) {
+        throw new Error(`Not an image (${contentType})`);
       }
       return await response.arrayBuffer();
     } catch (err) {
@@ -61,8 +66,10 @@ export async function downloadPostImages(
 
     try {
       const data = await fetchWithRetry(imageUrls[i], retryDelays);
-      fs.writeFileSync(filePath, Buffer.from(data));
+      const buf = Buffer.from(data);
+      fs.writeFileSync(filePath, buf);
       localPaths.push(relativePath);
+      console.log(`[Image Download] Saved ${relativePath} (${buf.length} bytes)`);
     } catch (err) {
       console.error(
         `[Image Download] Failed for post ${postId}, image ${i}: ${err instanceof Error ? err.message : err}`

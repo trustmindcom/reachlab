@@ -62,13 +62,7 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
     }
   }, [gen.finalDraft]);
 
-  // ── Auto-resize draft textarea ──
-  useEffect(() => {
-    if (draftTextareaRef.current) {
-      draftTextareaRef.current.style.height = "auto";
-      draftTextareaRef.current.style.height = draftTextareaRef.current.scrollHeight + "px";
-    }
-  }, [localDraft]);
+  // Draft textarea scrolls within its container — no auto-resize needed
 
   // ── Draft editing marks dirty flag ──
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -150,10 +144,10 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
   const hasAssistantMessage = gen.chatMessages.some(m => m.role === "assistant");
 
   return (
-    <div className={`flex flex-col lg:flex-row min-h-[70vh] gap-5`}>
+    <div className={`flex flex-col lg:flex-row h-[calc(100vh-180px)] gap-5`}>
       {/* ── Left panel: Chat (togglable) ── */}
       {chatVisible && (
-        <div className="w-full lg:w-1/2 flex flex-col min-h-0">
+        <div className="w-full lg:w-1/2 flex flex-col min-h-0 overflow-hidden">
           {/* Error banner */}
           {error && (
             <div className="mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400 flex items-center justify-between">
@@ -174,26 +168,26 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
       )}
 
       {/* ── Draft panel: full-width when chat hidden, half when visible ── */}
-      <div className={`w-full ${chatVisible ? "lg:w-1/2" : ""} flex flex-col min-h-0`}>
+      <div className={`w-full ${chatVisible ? "lg:w-1/2" : ""} flex flex-col min-h-0 overflow-hidden`}>
         {/* First-turn sentinel label */}
         {isFirstTurn && loading && (
-          <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide animate-pulse">
+          <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide animate-pulse flex-shrink-0">
             Combining drafts...
           </div>
         )}
         {!hasAssistantMessage && !loading && localDraft && (
-          <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide">
+          <div className="mb-2 text-[13px] text-gen-text-3 tracking-wide flex-shrink-0">
             Starting draft
           </div>
         )}
 
         {/* Draft textarea */}
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
           <textarea
             ref={draftTextareaRef}
             value={localDraft}
             onChange={handleDraftChange}
-            className={`w-full h-full bg-gen-bg-1/30 border border-gen-border-1 rounded-xl px-5 py-4 text-[15px] leading-[1.85] text-gen-text-1 resize-none focus-visible:outline-none focus-visible:border-gen-accent/40 min-h-[400px] ${
+            className={`w-full h-full bg-gen-bg-1/30 border border-gen-border-1 rounded-xl px-5 py-4 text-[15px] leading-[1.85] text-gen-text-1 resize-none focus-visible:outline-none focus-visible:border-gen-accent/40 ${
               draftHighlight
                 ? "bg-gen-accent/5 transition-colors duration-500"
                 : "transition-colors duration-500"
@@ -202,8 +196,8 @@ export default function GhostwriterChat({ gen, setGen, loading, setLoading, onBa
           />
         </div>
 
-        {/* Draft footer — sticky at bottom */}
-        <div className="flex items-center justify-between mt-3 sticky bottom-0 py-3 bg-gen-bg-0 z-20">
+        {/* Draft footer */}
+        <div className="flex items-center justify-between mt-3 py-3 flex-shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-[14px] text-gen-text-3 tabular-nums">{wordCount} words</span>
             <button

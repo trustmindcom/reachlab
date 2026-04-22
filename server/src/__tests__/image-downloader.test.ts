@@ -17,6 +17,7 @@ test("downloadPostImages saves images and returns local paths", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
+    headers: new Headers({ "content-type": "image/jpeg" }),
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
   });
 
@@ -52,6 +53,7 @@ test("downloadPostImages retries on failure", async () => {
     if (attempts < 3) return Promise.reject(new Error("Network error"));
     return Promise.resolve({
       ok: true,
+      headers: new Headers({ "content-type": "image/jpeg" }),
       arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
     });
   });

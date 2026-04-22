@@ -14,7 +14,6 @@ import {
   queryFollowers,
   queryProfile,
   queryHealth,
-  getPostsNeedingImageDownload,
   setImageLocalPaths,
   upsertScrapeError,
   getActiveScrapeErrors,
@@ -37,7 +36,10 @@ import { validateBody } from "./validation.js";
 import { scrapeErrorBody, syncStateBody } from "./schemas/app.js";
 
 export function buildApp(dbPath: string) {
-  const app = Fastify({ logger: { level: process.env.NODE_ENV === "development" ? "info" : "warn" } });
+  const app = Fastify({
+    logger: { level: process.env.NODE_ENV === "development" ? "info" : "warn" },
+    ignoreTrailingSlash: true,
+  });
   const db = initDatabase(dbPath);
 
   // Log 5xx details (request URL + error) to a file alongside the DB so they
@@ -268,24 +270,8 @@ export function buildApp(dbPath: string) {
       console.log(`[Startup] Pruned ${pruned} AI log entries older than 30 days`);
     }
 
-    const postsNeedingDownload = getPostsNeedingImageDownload(db);
-
-    if (postsNeedingDownload.length > 0) {
-      console.log(`[Image Download] Retrying downloads for ${postsNeedingDownload.length} posts...`);
-      import("./ai/image-downloader.js").then(({ downloadPostImages }) => {
-        const imagesDir = path.join(path.dirname(dbPath), "images");
-        for (const post of postsNeedingDownload) {
-          const urls = JSON.parse(post.image_urls) as string[];
-          downloadPostImages(post.id, urls, imagesDir).then((paths) => {
-            if (paths.length > 0) {
-              setImageLocalPaths(db, post.id, JSON.stringify(paths));
-            }
-          }).catch((err: any) => {
-            console.error(`[Image Download] Retry failed for ${post.id}:`, err.message);
-          });
-        }
-      }).catch(err => console.error("[Image Download] Failed to load image-downloader module:", err));
-    }
+    // Image downloads are handled at ingest time and by the extension backfill.
+    // No startup retry — it would use stale DB URLs that may be expired or low-res.
 
     // Also auto-transcribe any video posts that need it
     import("./ai/video-transcriber.js").then(({ transcribeAllPending }) => {

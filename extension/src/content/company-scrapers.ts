@@ -140,7 +140,8 @@ export function scrapeCompanyPosts(doc: Document): (ScrapedPostContent & { id: s
     // Images: non-profile, non-logo images
     const images = Array.from(post.querySelectorAll("img") as NodeListOf<HTMLImageElement>)
       .map((img: HTMLImageElement) => img.getAttribute("src") ?? "")
-      .filter(src => src.includes("media.licdn.com") && !src.includes("profile") && !src.includes("logo"));
+      .filter(src => src.includes("media.licdn.com") && !src.includes("profile") && !src.includes("logo"))
+;
 
     // Video
     const videoEl = post.querySelector("video");

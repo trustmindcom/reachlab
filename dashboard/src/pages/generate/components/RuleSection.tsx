@@ -54,13 +54,13 @@ export default function RuleSection({
               e.stopPropagation();
               masterToggle.onToggle(!masterToggle.enabled);
             }}
-            className={`w-9 h-5 rounded-full transition-colors duration-150 ease-[var(--ease-snappy)] relative cursor-pointer ${
-              masterToggle.enabled ? "bg-gen-accent" : "bg-gen-bg-3"
+            className={`w-10 h-[22px] rounded-full transition-colors duration-150 ease-[var(--ease-snappy)] relative cursor-pointer flex-shrink-0 ${
+              masterToggle.enabled ? "bg-gen-accent" : "bg-gen-border-2"
             }`}
           >
             <span
-              className={`absolute top-[3px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                masterToggle.enabled ? "translate-x-[18px]" : "translate-x-[3px]"
+              className={`absolute top-[3px] left-[3px] w-4 h-4 rounded-full bg-white transition-transform duration-150 ${
+                masterToggle.enabled ? "translate-x-[18px]" : "translate-x-0"
               }`}
             />
           </div>
@@ -80,7 +80,7 @@ export default function RuleSection({
           ))}
 
           {/* Add rule input */}
-          <div className="mt-3 pt-2 border-t border-gen-border-1">
+          <div className="mt-3 pt-2 border-t border-gen-border-1 flex items-center gap-2">
             <input
               type="text"
               value={newRuleText}
@@ -92,8 +92,21 @@ export default function RuleSection({
                 }
               }}
               placeholder={`Add a ${categoryLabel} rule...`}
-              className="w-full bg-transparent text-[15px] text-gen-text-2 placeholder:text-gen-text-4 focus-visible:outline-none"
+              className="flex-1 bg-transparent text-[15px] text-gen-text-2 placeholder:text-gen-text-4 focus-visible:outline-none"
             />
+            {newRuleText.trim() && (
+              <button
+                onClick={() => {
+                  onAddRule(newRuleText.trim());
+                  setNewRuleText("");
+                }}
+                className="text-gen-text-3 hover:text-gen-accent transition-colors duration-150 ease-[var(--ease-snappy)] flex-shrink-0"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path d="M3.75 9h10.5M10.5 5.25L14.25 9l-3.75 3.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       )}
