@@ -513,22 +513,17 @@ async function syncPersonalPersona(persona: SyncPersona) {
         ],
       });
 
-      // Queue posts needing content/images for backfill (processes in batches via alarms,
-      // survives service worker restarts, won't hit Chrome's 5-minute execution limit)
+      // Scrape post pages for content + images
       try {
         const needsContentIds: string[] = ingestResult?.needs_content ?? [];
         const needsImageIds: string[] = ingestResult?.needs_images ?? [];
         const toScrape = [...new Set([...needsContentIds, ...needsImageIds])];
+        console.log(`[ReachLab] Sync scrape: ${needsContentIds.length} need content, ${needsImageIds.length} need images → scraping ${toScrape.length} posts`);
         if (toScrape.length > 0) {
-          const { backfillQueue: existingQueue } = await chrome.storage.local.get(["backfillQueue"]);
-          const merged = [...new Set([...(existingQueue ?? []), ...toScrape])];
-          await chrome.storage.local.set({ backfillQueue: merged, backfillCursor: 0 });
-          console.log(`[ReachLab] Queued ${toScrape.length} posts for image backfill (${merged.length} total in queue), starting immediately`);
-          // Start backfill immediately — don't wait for an alarm (service worker may die before it fires)
-          continueBackfill().catch(err => console.error("[ReachLab] Immediate backfill failed:", err.message));
+          await scrapePostPages(tab.id!, toScrape, isBackfill);
         }
       } catch (err: any) {
-        console.error("[ReachLab] Failed to queue image backfill:", err.message);
+        console.error("[ReachLab] Post page scraping failed:", err.message);
       }
 
       const recentMetricsSet = new Set<string>(ingestResult?.has_recent_metrics ?? []);
