@@ -523,8 +523,9 @@ async function syncPersonalPersona(persona: SyncPersona) {
           const { backfillQueue: existingQueue } = await chrome.storage.local.get(["backfillQueue"]);
           const merged = [...new Set([...(existingQueue ?? []), ...toScrape])];
           await chrome.storage.local.set({ backfillQueue: merged, backfillCursor: 0 });
-          chrome.alarms.create("backfill-continue", { delayInMinutes: 0.5 });
-          console.log(`[ReachLab] Queued ${toScrape.length} posts for image backfill (${merged.length} total in queue), alarm set`);
+          console.log(`[ReachLab] Queued ${toScrape.length} posts for image backfill (${merged.length} total in queue), starting immediately`);
+          // Start backfill immediately — don't wait for an alarm (service worker may die before it fires)
+          continueBackfill().catch(err => console.error("[ReachLab] Immediate backfill failed:", err.message));
         }
       } catch (err: any) {
         console.error("[ReachLab] Failed to queue image backfill:", err.message);
@@ -1115,8 +1116,10 @@ async function continueBackfill() {
   const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
   if (!tab.id) return;
 
-  const batchEnd = Math.min(backfillCursor + 5, backfillQueue.length);
-  console.log(`[ReachLab] Processing backfill batch ${backfillCursor}-${batchEnd} of ${backfillQueue.length}`);
+  // Process all remaining posts in one go — the keepalive ping prevents Chrome from killing
+  // the service worker during active execution
+  const batchEnd = backfillQueue.length;
+  console.log(`[ReachLab] Processing backfill: ${backfillCursor} to ${batchEnd} of ${backfillQueue.length}`);
   const keepalive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
 
   try {
