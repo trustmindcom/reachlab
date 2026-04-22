@@ -217,9 +217,14 @@ async function drainOfflineQueue() {
 async function trySync(manual = false) {
   // Check if already syncing or backfilling
   const { syncInProgress } = await chrome.storage.session.get(["syncInProgress"]);
-  const { backfillQueue } = await chrome.storage.local.get(["backfillQueue"]);
   if (syncInProgress) return;
-  if (backfillQueue) return; // Backfill still running, skip sync
+  // Clear any stale backfill queue from a previous crashed sync
+  if (manual) {
+    await chrome.storage.local.set({ backfillQueue: null, backfillCursor: null });
+  } else {
+    const { backfillQueue } = await chrome.storage.local.get(["backfillQueue"]);
+    if (backfillQueue) return; // Backfill still running, skip auto-sync
+  }
 
   if (!manual) {
     // Only sync during configured time windows (e.g. 9 AM, 9 PM)

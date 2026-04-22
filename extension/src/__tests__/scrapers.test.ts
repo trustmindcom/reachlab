@@ -246,12 +246,12 @@ describe("scrapePostPage", () => {
           <span class="break-words"><span dir="ltr">Post text</span></span>
         </div>
         <div class="feed-shared-image">
-          <img src="https://media.licdn.com/dms/image/v2/test1.jpg" />
+          <img src="https://media.licdn.com/dms/image/v2/feedshare-shrink_800/test1.jpg" />
         </div>
       </div>
     `);
     const result = scrapePostPage(doc);
-    expect(result.image_urls).toEqual(["https://media.licdn.com/dms/image/v2/test1.jpg"]);
+    expect(result.image_urls).toEqual(["https://media.licdn.com/dms/image/v2/feedshare-shrink_800/test1.jpg"]);
   });
 
   it("extracts multiple image URLs from carousel", () => {
@@ -261,9 +261,9 @@ describe("scrapePostPage", () => {
           <span class="break-words"><span dir="ltr">Carousel post</span></span>
         </div>
         <div class="feed-shared-carousel">
-          <img src="https://media.licdn.com/dms/image/v2/slide1.jpg" />
-          <img src="https://media.licdn.com/dms/image/v2/slide2.jpg" />
-          <img src="https://media.licdn.com/dms/image/v2/slide3.jpg" />
+          <img src="https://media.licdn.com/dms/image/v2/feedshare-shrink_800/slide1.jpg" />
+          <img src="https://media.licdn.com/dms/image/v2/feedshare-shrink_800/slide2.jpg" />
+          <img src="https://media.licdn.com/dms/image/v2/feedshare-shrink_800/slide3.jpg" />
         </div>
       </div>
     `);
@@ -288,14 +288,14 @@ describe("scrapePostPage", () => {
     const doc = createDoc(`
       <div class="feed-shared-update-v2">
         <div class="feed-shared-image">
-          <img src="https://media.licdn.com/dms/image/v2/test.jpg" />
+          <img src="https://media.licdn.com/dms/image/v2/feedshare-shrink_800/test.jpg" />
         </div>
       </div>
     `);
     const result = scrapePostPage(doc);
     expect(result.hook_text).toBeNull();
     expect(result.full_text).toBeNull();
-    expect(result.image_urls).toEqual(["https://media.licdn.com/dms/image/v2/test.jpg"]);
+    expect(result.image_urls).toEqual(["https://media.licdn.com/dms/image/v2/feedshare-shrink_800/test.jpg"]);
   });
 });
 
