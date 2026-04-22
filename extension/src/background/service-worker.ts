@@ -523,7 +523,8 @@ async function syncPersonalPersona(persona: SyncPersona) {
           const { backfillQueue: existingQueue } = await chrome.storage.local.get(["backfillQueue"]);
           const merged = [...new Set([...(existingQueue ?? []), ...toScrape])];
           await chrome.storage.local.set({ backfillQueue: merged, backfillCursor: 0 });
-          console.log(`[ReachLab] Queued ${toScrape.length} posts for image backfill (${merged.length} total in queue)`);
+          chrome.alarms.create("backfill-continue", { delayInMinutes: 0.5 });
+          console.log(`[ReachLab] Queued ${toScrape.length} posts for image backfill (${merged.length} total in queue), alarm set`);
         }
       } catch (err: any) {
         console.error("[ReachLab] Failed to queue image backfill:", err.message);
