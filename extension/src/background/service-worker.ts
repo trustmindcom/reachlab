@@ -5,6 +5,7 @@ import type {
   ContentMessage,
 } from "../shared/types.js";
 import { activityIdToDate } from "../shared/utils.js";
+import { getBatchSlice, getServerUrlCandidates } from "./sync-helpers.js";
 
 interface SyncPersona {
   id: number;
@@ -13,13 +14,16 @@ interface SyncPersona {
   type: "personal" | "company_page";
 }
 
-const SERVER_URL = "http://localhost:3210";
+const SERVER_URLS = ["http://localhost:3211", "http://localhost:3210"];
 const ALARM_NAME = "daily-sync";
+const PAGE_SCRAPE_ALARM_NAME = "sync-post-pages-continue";
 const ALARM_PERIOD_MINUTES = 30;
 const SYNC_HOURS = [9, 21]; // 9 AM and 9 PM local time
 const SYNC_WINDOW_MS = 45 * 60 * 1000; // 45-minute window after target hour
 const LIGHT_SYNC_RECENT_POSTS = 5; // Evening sync: only scrape metrics for this many recent posts
 const BATCH_SIZE = 25;
+const CONTENT_BATCH_SIZE = 10;
+const BACKFILL_BATCH_SIZE = 5;
 const PACING_MIN_MS = 3000;
 const PACING_MAX_MS = 6000;
 const BACKFILL_PACING_MIN_MS = 4000;
@@ -29,6 +33,32 @@ const LONG_PAUSE_MIN_MS = 10000;
 const LONG_PAUSE_MAX_MS = 20000;
 const METRIC_DECAY_DAYS = 30;
 const OFFLINE_QUEUE_MAX_BYTES = 5 * 1024 * 1024; // 5MB cap
+let preferredServerUrl: string | null = null;
+
+type BestEffortSendStatus = "sent" | "queued";
+
+async function fetchFromServer(
+  path: string,
+  init?: RequestInit
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (const baseUrl of getServerUrlCandidates(preferredServerUrl, SERVER_URLS)) {
+    try {
+      const response = await fetch(`${baseUrl}${path}`, init);
+      if (preferredServerUrl !== baseUrl) {
+        console.log(`[ReachLab] Using server ${baseUrl}`);
+      }
+      preferredServerUrl = baseUrl;
+      return response;
+    } catch (err: any) {
+      if (preferredServerUrl === baseUrl) preferredServerUrl = null;
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to fetch ${path}`);
+}
 
 // Re-register alarm on every service worker start
 chrome.alarms.get(ALARM_NAME, (alarm) => {
@@ -57,7 +87,7 @@ chrome.webRequest.onCompleted.addListener(
       // Fire-and-forget POST to server (use persona 1 as default since
       // we have no persona context in passive webRequest listeners;
       // post IDs are globally unique so the server can resolve the post)
-      fetch(`${SERVER_URL}/api/personas/1/ingest`, {
+      fetchFromServer("/api/personas/1/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -110,6 +140,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === ALARM_NAME) {
     await drainOfflineQueue();
     await trySync();
+  } else if (alarm.name === PAGE_SCRAPE_ALARM_NAME) {
+    await continuePostPageScrape();
   } else if (alarm.name === "sync-continue") {
     await continueSyncBatch();
   } else if (alarm.name === "backfill-continue") {
@@ -139,7 +171,7 @@ async function getSyncStatus() {
   // Read last sync time from server (persona 1 as default)
   let lastSyncAt: number | null = null;
   try {
-    const res = await fetch(`${SERVER_URL}/api/personas/1/sync-state`);
+    const res = await fetchFromServer("/api/personas/1/sync-state");
     if (res.ok) {
       const data = await res.json();
       lastSyncAt = data.last_sync_at ?? null;
@@ -241,7 +273,7 @@ async function trySync(manual = false) {
 
     // Check if we already synced during this window (check persona 1 as proxy)
     try {
-      const res = await fetch(`${SERVER_URL}/api/personas/1/sync-state`);
+      const res = await fetchFromServer("/api/personas/1/sync-state");
       if (res.ok) {
         const data = await res.json();
         // Skip if synced within the last 6 hours (prevents double-sync in same window)
@@ -252,7 +284,7 @@ async function trySync(manual = false) {
 
   // Check server health
   try {
-    const res = await fetch(`${SERVER_URL}/api/personas/1/health`);
+    const res = await fetchFromServer("/api/personas/1/health");
     if (!res.ok) return;
   } catch {
     return; // Server not running
@@ -272,7 +304,7 @@ async function startSync() {
   // Fetch persona list from server
   let personas: SyncPersona[] = [];
   try {
-    const res = await fetch(`${SERVER_URL}/api/personas`);
+    const res = await fetchFromServer("/api/personas");
     if (res.ok) {
       const data = await res.json();
       personas = data.personas;
@@ -434,7 +466,7 @@ async function syncPersonalPersona(persona: SyncPersona) {
   let isBackfill = true;
   let lastSyncAt: number | null = null;
   try {
-    const res = await fetch(`${SERVER_URL}/api/personas/${persona.id}/sync-state`);
+    const res = await fetchFromServer(`/api/personas/${persona.id}/sync-state`);
     if (res.ok) {
       const data = await res.json();
       lastSyncAt = data.last_sync_at ?? null;
@@ -449,6 +481,8 @@ async function syncPersonalPersona(persona: SyncPersona) {
   await chrome.storage.session.set({
     syncBatchCursor: 0,
     syncPosts: [],
+    syncPageScrapeCursor: 0,
+    syncPageScrapePosts: [],
     isBackfill,
     isLightSync,
   });
@@ -518,21 +552,11 @@ async function syncPersonalPersona(persona: SyncPersona) {
         ],
       });
 
-      // Scrape post pages for content + images
-      try {
-        const needsContentIds: string[] = ingestResult?.needs_content ?? [];
-        const needsImageIds: string[] = ingestResult?.needs_images ?? [];
-        const toScrape = [...new Set([...needsContentIds, ...needsImageIds])];
-        console.log(`[ReachLab] Sync scrape: ${needsContentIds.length} need content, ${needsImageIds.length} need images → scraping ${toScrape.length} posts`);
-        if (toScrape.length > 0) {
-          await scrapePostPages(tab.id!, toScrape, isBackfill);
-        }
-      } catch (err: any) {
-        console.error("[ReachLab] Post page scraping failed:", err.message);
-      }
-
       const recentMetricsSet = new Set<string>(ingestResult?.has_recent_metrics ?? []);
       const needsMetricsIds: string[] = ingestResult?.needs_metrics ?? [];
+      const needsContentIds: string[] = ingestResult?.needs_content ?? [];
+      const needsImageIds: string[] = ingestResult?.needs_images ?? [];
+      const toScrape = [...new Set([...needsContentIds, ...needsImageIds])];
       let postIdsToScrape: string[];
       if (isBackfill) {
         postIdsToScrape = posts.map((p) => p.id);
@@ -561,9 +585,17 @@ async function syncPersonalPersona(persona: SyncPersona) {
       await chrome.storage.session.set({
         syncPosts: postIdsToScrape,
         syncBatchCursor: 0,
+        syncPageScrapePosts: toScrape,
+        syncPageScrapeCursor: 0,
       });
 
-      if (postIdsToScrape.length === 0) {
+      console.log(
+        `[ReachLab] Sync scrape: ${needsContentIds.length} need content, ${needsImageIds.length} need images → scraping ${toScrape.length} posts`
+      );
+
+      if (toScrape.length > 0) {
+        await scrapePostPages(tab.id, toScrape, isBackfill);
+      } else if (postIdsToScrape.length === 0) {
         await scrapeRemainingPages(tab.id);
       } else {
         await processBatch(tab.id, postIdsToScrape, 0, isBackfill);
@@ -597,6 +629,28 @@ async function continueSyncBatch() {
   }
 
   await processBatch(syncTabId, syncPosts, syncBatchCursor, isBackfill);
+}
+
+async function continuePostPageScrape() {
+  const { syncTabId, syncPageScrapePosts, syncPageScrapeCursor, isBackfill } =
+    await chrome.storage.session.get([
+      "syncTabId",
+      "syncPageScrapePosts",
+      "syncPageScrapeCursor",
+      "isBackfill",
+    ]);
+
+  if (!syncTabId || !syncPageScrapePosts) {
+    await finishSyncWithError("Lost post-page scrape state");
+    return;
+  }
+
+  await processPostPageScrapeBatch(
+    syncTabId,
+    syncPageScrapePosts,
+    syncPageScrapeCursor ?? 0,
+    Boolean(isBackfill)
+  );
 }
 
 async function processBatch(
@@ -674,8 +728,10 @@ async function scrapePostContent(
   postId: string,
 ): Promise<ScrapedContent> {
   const postUrl = `https://www.linkedin.com/feed/update/urn:li:activity:${postId}/`;
+  console.log(`[ReachLab] scrapePostContent start ${postId} → ${postUrl}`);
   await chrome.tabs.update(tabId, { url: postUrl });
   await waitForTabLoad(tabId);
+  console.log(`[ReachLab] scrapePostContent loaded ${postId}`);
   // Brief delay to ensure content script is injected on the new page
   await new Promise((r) => setTimeout(r, 500));
 
@@ -711,6 +767,7 @@ async function scrapePostContent(
   // Phase 2: Click "see more" if present, then re-scrape for full_text
   let fullText: string | null = hookText; // default to hook if no expansion
   try {
+    console.log(`[ReachLab] scrapePostContent phase2 click-check ${postId}`);
     const [clickResult] = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -724,9 +781,13 @@ async function scrapePostContent(
         return false;
       },
     });
+    console.log(
+      `[ReachLab] scrapePostContent phase2 click-result ${postId}: ${clickResult?.result ? "clicked" : "not-found"}`
+    );
 
     if (clickResult?.result) {
       // Poll for text expansion (up to 3s) instead of fixed wait
+      console.log(`[ReachLab] scrapePostContent phase2 wait-start ${postId}`);
       await chrome.scripting.executeScript({
         target: { tabId },
         func: () =>
@@ -742,7 +803,9 @@ async function scrapePostContent(
             check();
           }),
       });
+      console.log(`[ReachLab] scrapePostContent phase2 wait-done ${postId}`);
       const fullResult = await sendScrapeCommand(tabId);
+      console.log(`[ReachLab] scrapePostContent phase2 rescrape ${postId}: ${fullResult.type}`);
       if (fullResult.type === "post-content") {
         fullText = fullResult.data.full_text;
         // Update comment stats from the expanded page (more comments may be visible)
@@ -750,10 +813,15 @@ async function scrapePostContent(
         hasThreads = fullResult.data.has_threads ?? hasThreads;
       }
     }
-  } catch {
+  } catch (err: any) {
     // No see more button or script injection failed — continue with hook as full
+    console.warn(
+      `[ReachLab] scrapePostContent phase2 skipped ${postId}:`,
+      err?.message ?? String(err)
+    );
   }
 
+  console.log(`[ReachLab] scrapePostContent return ${postId}`);
   return { id: postId, hook_text: hookText, full_text: fullText, image_urls: imageUrls, video_url: videoUrl, author_replies: authorReplies, has_threads: hasThreads };
 }
 
@@ -763,9 +831,9 @@ async function scrapePostContent(
 async function scrapeAndSendPostContent(
   tabId: number,
   postId: string,
-): Promise<void> {
+): Promise<BestEffortSendStatus> {
   const content = await scrapePostContent(tabId, postId);
-  await postToServer({
+  return await postToServerBestEffort({
     posts: [content],
   });
 }
@@ -929,53 +997,130 @@ async function discoverRecentActivityIds(cutoffMs: number): Promise<string[]> {
   }
 }
 
-const CONTENT_BATCH_SIZE = 10;
-
 async function scrapePostPages(
   tabId: number,
   postIds: string[],
   isBackfill: boolean
 ): Promise<void> {
-  console.log(`[ReachLab] scrapePostPages: ${postIds.length} posts to scrape (backfill: ${isBackfill})`);
-  // Keep service worker alive during long scrape sessions by pinging a Chrome API
-  const keepalive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
-  // Use shorter pacing for image-only scrapes (visiting our own posts, not suspicious)
+  console.log(
+    `[ReachLab] scrapePostPages: ${postIds.length} posts to scrape (backfill: ${isBackfill})`
+  );
+  await chrome.storage.session.set({
+    syncPageScrapePosts: postIds,
+    syncPageScrapeCursor: 0,
+  });
+  await processPostPageScrapeBatch(tabId, postIds, 0, isBackfill);
+}
+
+async function processPostPageScrapeBatch(
+  tabId: number,
+  postIds: string[],
+  cursor: number,
+  isBackfill: boolean
+): Promise<void> {
+  const { batch: batchIds, nextCursor } = getBatchSlice(
+    postIds,
+    cursor,
+    CONTENT_BATCH_SIZE
+  );
+  if (batchIds.length === 0) {
+    const { syncPosts, syncBatchCursor = 0 } = await chrome.storage.session.get([
+      "syncPosts",
+      "syncBatchCursor",
+    ]);
+    if (!syncPosts || syncPosts.length === 0) {
+      await scrapeRemainingPages(tabId);
+    } else {
+      await processBatch(tabId, syncPosts, syncBatchCursor, isBackfill);
+    }
+    return;
+  }
+
+  console.log(
+    `[ReachLab] scrapePostPages: processing ${cursor} to ${nextCursor} of ${postIds.length}`
+  );
+  const keepalive = setInterval(
+    () => chrome.runtime.getPlatformInfo(() => {}),
+    20000
+  );
   const pacingMin = 1000;
   const pacingMax = 2000;
-  const batch: ScrapedContent[] = [];
-  let batchNum = 0;
+  const batchNum = Math.floor(cursor / CONTENT_BATCH_SIZE) + 1;
+  const scrapedBatch: ScrapedContent[] = [];
 
-  for (const postId of postIds) {
-    await randomDelay(pacingMin, pacingMax);
-    try {
-      const content = await scrapePostContent(tabId, postId);
-      batch.push(content);
+  try {
+    for (let i = 0; i < batchIds.length; i++) {
+      const postId = batchIds[i];
+      console.log(
+        `[ReachLab] scrapePostPages: starting ${cursor + i + 1}/${postIds.length} ${postId}`
+      );
+      await randomDelay(pacingMin, pacingMax);
 
-      // Flush batch when full
-      if (batch.length >= CONTENT_BATCH_SIZE) {
-        batchNum++;
-        console.log(`[ReachLab] scrapePostPages: sending batch ${batchNum} (${batch.length} posts)`);
-        await postToServer({ posts: [...batch] });
-        console.log(`[ReachLab] scrapePostPages: batch ${batchNum} sent OK`);
-        batch.length = 0;
+      try {
+        const content = await scrapePostContent(tabId, postId);
+        scrapedBatch.push(content);
+        console.log(
+          `[ReachLab] scrapePostPages: completed ${cursor + i + 1}/${postIds.length} ${postId}`
+        );
+      } catch (err: any) {
+        console.error(
+          `[ReachLab] Failed to scrape post page ${postId}:`,
+          err.message
+        );
       }
-    } catch (err: any) {
-      console.error(
-        `[ReachLab] Failed to scrape content for ${postId}:`,
-        err.message
+    }
+
+    if (scrapedBatch.length > 0) {
+      console.log(
+        `[ReachLab] scrapePostPages: sending batch ${batchNum} (${scrapedBatch.length} posts)`
+      );
+      const sendStatus = await postToServerBestEffort({ posts: scrapedBatch });
+      console.log(
+        `[ReachLab] scrapePostPages: batch ${batchNum} ${
+          sendStatus === "sent" ? "sent OK" : "queued offline"
+        }`
       );
     }
-  }
 
-  // Flush remaining
-  if (batch.length > 0) {
-    batchNum++;
-    console.log(`[ReachLab] scrapePostPages: sending final batch ${batchNum} (${batch.length} posts)`);
-    await postToServer({ posts: batch });
-    console.log(`[ReachLab] scrapePostPages: final batch sent OK`);
+    await chrome.storage.session.set({ syncPageScrapeCursor: nextCursor });
+
+    if (nextCursor < postIds.length) {
+      chrome.alarms.create(PAGE_SCRAPE_ALARM_NAME, { delayInMinutes: 0.05 });
+      return;
+    }
+
+    await chrome.storage.session.set({
+      syncPageScrapePosts: null,
+      syncPageScrapeCursor: null,
+    });
+
+    const { syncPosts, syncBatchCursor = 0 } = await chrome.storage.session.get([
+      "syncPosts",
+      "syncBatchCursor",
+    ]);
+    if (!syncPosts || syncPosts.length === 0) {
+      await scrapeRemainingPages(tabId);
+    } else {
+      await processBatch(tabId, syncPosts, syncBatchCursor, isBackfill);
+    }
+  } catch (err: any) {
+    console.error("[ReachLab] processPostPageScrapeBatch failed:", err.message);
+    await chrome.storage.session.set({
+      syncPageScrapePosts: null,
+      syncPageScrapeCursor: null,
+    });
+    const { syncPosts, syncBatchCursor = 0 } = await chrome.storage.session.get([
+      "syncPosts",
+      "syncBatchCursor",
+    ]);
+    if (!syncPosts || syncPosts.length === 0) {
+      await scrapeRemainingPages(tabId);
+    } else {
+      await processBatch(tabId, syncPosts, syncBatchCursor, isBackfill);
+    }
+  } finally {
+    clearInterval(keepalive);
   }
-  clearInterval(keepalive);
-  console.log(`[ReachLab] scrapePostPages: done — ${batchNum} batches sent`);
 }
 
 async function scrapeRemainingPages(tabId: number) {
@@ -1058,7 +1203,7 @@ async function scrapeRemainingPages(tabId: number) {
 /** Update per-persona sync timestamp on the server */
 async function finishPersonaSync(personaId: number) {
   try {
-    await fetch(`${SERVER_URL}/api/personas/${personaId}/sync-state`, {
+    await fetchFromServer(`/api/personas/${personaId}/sync-state`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ last_sync_at: Date.now() }),
@@ -1116,20 +1261,27 @@ async function continueBackfill() {
   const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
   if (!tab.id) return;
 
-  // Process all remaining posts in one go — the keepalive ping prevents Chrome from killing
-  // the service worker during active execution
-  const batchEnd = backfillQueue.length;
+  const { batch: batchIds, nextCursor } = getBatchSlice(
+    backfillQueue,
+    backfillCursor,
+    BACKFILL_BATCH_SIZE
+  );
+  const batchEnd = nextCursor;
   console.log(`[ReachLab] Processing backfill: ${backfillCursor} to ${batchEnd} of ${backfillQueue.length}`);
   const keepalive = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
 
   try {
-    for (let i = backfillCursor; i < batchEnd; i++) {
-      const postId = backfillQueue[i];
-      console.log(`[ReachLab] Backfill scraping post ${postId} (${i + 1}/${backfillQueue.length})`);
+    for (let i = 0; i < batchIds.length; i++) {
+      const postId = batchIds[i];
+      console.log(
+        `[ReachLab] Backfill scraping post ${postId} (${backfillCursor + i + 1}/${backfillQueue.length})`
+      );
       await randomDelay(BACKFILL_PACING_MIN_MS, BACKFILL_PACING_MAX_MS);
       try {
-        await scrapeAndSendPostContent(tab.id, postId);
-        console.log(`[ReachLab] Backfill sent ${postId} OK`);
+        const sendStatus = await scrapeAndSendPostContent(tab.id, postId);
+        console.log(
+          `[ReachLab] Backfill ${sendStatus === "sent" ? "sent" : "queued"} ${postId}`
+        );
       } catch (err: any) {
         console.error(`[ReachLab] Backfill failed for ${postId}:`, err.message);
       }
@@ -1171,9 +1323,9 @@ async function finishSync() {
     const allIds: string[] = [];
     for (const p of personas) {
       const [contentRes, imagesRes, videoRes] = await Promise.all([
-        fetch(`${SERVER_URL}/api/personas/${p.id}/posts/needs-content`),
-        fetch(`${SERVER_URL}/api/personas/${p.id}/posts/needs-images`),
-        fetch(`${SERVER_URL}/api/personas/${p.id}/posts/needs-video-url`),
+        fetchFromServer(`/api/personas/${p.id}/posts/needs-content`),
+        fetchFromServer(`/api/personas/${p.id}/posts/needs-images`),
+        fetchFromServer(`/api/personas/${p.id}/posts/needs-video-url`),
       ]);
       const contentIds = contentRes.ok ? (await contentRes.json()).post_ids : [];
       const imageIds = imagesRes.ok ? (await imagesRes.json()).post_ids : [];
@@ -1198,6 +1350,8 @@ async function finishSync() {
     syncTabId: null,
     syncPosts: null,
     syncBatchCursor: null,
+    syncPageScrapePosts: null,
+    syncPageScrapeCursor: null,
     syncPersonas: null,
     syncPersonaIndex: null,
     syncActivePersonaId: null,
@@ -1217,6 +1371,10 @@ async function finishSyncWithError(error: string) {
     syncInProgress: false,
     syncTabId: null,
     syncError: error,
+    syncPosts: null,
+    syncBatchCursor: null,
+    syncPageScrapePosts: null,
+    syncPageScrapeCursor: null,
     syncPersonas: null,
     syncPersonaIndex: null,
     syncActivePersonaId: null,
@@ -1291,7 +1449,7 @@ async function postToServerDirect(payload: Record<string, unknown>, personaId?: 
   const postCount = posts?.length ?? 0;
   const imgCount = posts?.filter(p => p.image_urls?.length > 0).length ?? 0;
   console.log(`[ReachLab] postToServerDirect: ${postCount} posts (${imgCount} with images) → persona ${pid}`);
-  const response = await fetch(`${SERVER_URL}/api/personas/${pid}/ingest`, {
+  const response = await fetchFromServer(`/api/personas/${pid}/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -1308,13 +1466,36 @@ async function postToServerDirect(payload: Record<string, unknown>, personaId?: 
   return result;
 }
 
+async function queuePayloadForRetry(payload: Record<string, unknown>, err: Error) {
+  console.error(`[ReachLab] postToServer failed, queuing offline: ${err.message}`);
+  await queueForRetry(payload);
+}
+
 /** POST to server with offline queue fallback */
 async function postToServer(payload: Record<string, unknown>) {
   try {
     return await postToServerDirect(payload);
   } catch (err: any) {
-    console.error(`[ReachLab] postToServer failed, queuing offline: ${err.message}`);
-    await queueForRetry(payload);
+    await queuePayloadForRetry(
+      payload,
+      err instanceof Error ? err : new Error(String(err))
+    );
     throw err;
+  }
+}
+
+/** POST to server, but treat an offline-queue fallback as successful progress */
+async function postToServerBestEffort(
+  payload: Record<string, unknown>
+): Promise<BestEffortSendStatus> {
+  try {
+    await postToServerDirect(payload);
+    return "sent";
+  } catch (err: any) {
+    await queuePayloadForRetry(
+      payload,
+      err instanceof Error ? err : new Error(String(err))
+    );
+    return "queued";
   }
 }

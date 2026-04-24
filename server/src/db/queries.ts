@@ -1,5 +1,54 @@
 import type Database from "better-sqlite3";
 
+function parseImageUrls(value: string | null | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function getMaxImageSize(urls: string[]): number | null {
+  let maxSize: number | null = null;
+  for (const url of urls) {
+    const match = url.match(/shrink_(\d+)/);
+    if (!match) continue;
+    const size = parseInt(match[1], 10);
+    if (!Number.isNaN(size) && (maxSize == null || size > maxSize)) {
+      maxSize = size;
+    }
+  }
+  return maxSize;
+}
+
+function chooseImageUrlsJson(
+  existingJson: string | null | undefined,
+  incomingUrls: string[] | null | undefined
+): string | null {
+  const incoming = incomingUrls && incomingUrls.length > 0 ? incomingUrls : null;
+  if (!incoming) return null;
+
+  const existing = parseImageUrls(existingJson);
+  if (existing.length === 0) return JSON.stringify(incoming);
+
+  const existingMaxSize = getMaxImageSize(existing);
+  const incomingMaxSize = getMaxImageSize(incoming);
+
+  const existingHasMoreImages = existing.length > incoming.length;
+  const existingHasHigherResolution =
+    existingMaxSize != null &&
+    incomingMaxSize != null &&
+    existingMaxSize > incomingMaxSize;
+
+  if (existingHasMoreImages || existingHasHigherResolution) {
+    return existingJson ?? JSON.stringify(existing);
+  }
+
+  return JSON.stringify(incoming);
+}
+
 export function upsertPost(
   db: Database.Database,
   personaId: number,
@@ -15,11 +64,14 @@ export function upsertPost(
     video_url?: string | null;
   }
 ): void {
-  const imageUrlsJson = post.image_urls && post.image_urls.length > 0 ? JSON.stringify(post.image_urls) : null;
+  const existingRow = db
+    .prepare("SELECT image_urls FROM posts WHERE id = ?")
+    .get(post.id) as { image_urls: string | null } | undefined;
+  const imageUrlsJson = chooseImageUrlsJson(existingRow?.image_urls, post.image_urls);
 
   // If the post already exists, do a partial UPDATE (avoids NOT NULL constraint
   // issues when content_type/published_at are omitted in a partial update).
-  if (postExists(db, post.id)) {
+  if (existingRow) {
     db.prepare(
       `UPDATE posts SET
          content_preview = COALESCE(@content_preview, content_preview),

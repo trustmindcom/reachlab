@@ -14,6 +14,66 @@ import type {
   ScrapedSearchAppearances,
 } from "../shared/types.js";
 
+const POST_PAGE_READY_SELECTORS = [
+  ".feed-shared-inline-show-more-text",
+  ".feed-shared-update-v2__description",
+  '[data-testid="expandable-text-box"]',
+];
+
+const POST_PAGE_TEXT_SELECTORS = [
+  ".feed-shared-inline-show-more-text .break-words",
+  ".feed-shared-update-v2__description .break-words",
+  '[data-testid="expandable-text-box"]',
+];
+
+export const POST_PAGE_READY_SELECTOR = POST_PAGE_READY_SELECTORS.join(", ");
+
+function normalizeText(text: string | null | undefined): string | null {
+  return text?.trim().replace(/\n{3,}/g, "\n\n") || null;
+}
+
+function extractRichText(el: HTMLElement): string | null {
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+  clone.querySelectorAll("p, div").forEach((block) => {
+    block.insertAdjacentText("beforebegin", "\n");
+  });
+  return normalizeText(clone.textContent);
+}
+
+function extractPostText(el: HTMLElement): string | null {
+  const rendered = normalizeText(el.innerText);
+  const structured = extractRichText(el);
+
+  if (!rendered) return structured;
+  if (!structured) return rendered;
+
+  const renderedNewlines = (rendered.match(/\n/g) ?? []).length;
+  const structuredNewlines = (structured.match(/\n/g) ?? []).length;
+
+  if (renderedNewlines !== structuredNewlines) {
+    return renderedNewlines > structuredNewlines ? rendered : structured;
+  }
+
+  return rendered.length >= structured.length ? rendered : structured;
+}
+
+function getPrimaryPostScope(doc: Document): ParentNode {
+  const postMenu = doc.querySelector(
+    'button[aria-label^="Open control menu for post by"]'
+  );
+
+  let current = postMenu?.parentElement ?? null;
+  while (current) {
+    if (current.querySelector(POST_PAGE_TEXT_SELECTORS.join(", "))) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  return doc;
+}
+
 /**
  * Extract summary KPI values from a page using the shared
  * .member-analytics-addon-summary pattern.
@@ -216,28 +276,23 @@ export function scrapePostPage(doc: Document): ScrapedPostContent {
   let hookText: string | null = null;
   let fullText: string | null = null;
 
-  const textContainer = doc.querySelector(".feed-shared-inline-show-more-text");
-  if (textContainer) {
-    const textSpan = textContainer.querySelector(".break-words");
-    if (textSpan) {
-      hookText = textSpan.textContent?.trim() || null;
-      // Preserve paragraph breaks: replace <br> tags with newlines, then get text
-      const clone = textSpan.cloneNode(true) as HTMLElement;
-      clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
-      // Also treat block-level elements as paragraph breaks
-      clone.querySelectorAll("p, div").forEach((el) => {
-        el.insertAdjacentText("beforebegin", "\n");
-      });
-      fullText = clone.textContent?.trim().replace(/\n{3,}/g, "\n\n") || null;
-    }
+  const postScope = getPrimaryPostScope(doc);
+  const textEl = postScope.querySelector(
+    POST_PAGE_TEXT_SELECTORS.join(", ")
+  ) as HTMLElement | null;
+  if (textEl) {
+    const extractedText = extractPostText(textEl);
+    hookText = extractedText;
+    fullText = extractedText;
   }
 
   // Extract image URLs — look for LinkedIn CDN images in the post.
   // Selectors cover both feed view (.feed-shared-*) and single-post view (.feed-images-content).
   const imageUrls: string[] = [];
-  const images = doc.querySelectorAll(
+  const images = postScope.querySelectorAll(
     '.feed-shared-image img[src*="media.licdn.com"], ' +
     '.feed-shared-carousel img[src*="media.licdn.com"], ' +
+    '.feed-shared-celebration-image img[src*="media.licdn.com"], ' +
     '.feed-shared-document img[src*="media.licdn.com"], ' +
     '.feed-images-content img[src*="media.licdn.com"], ' +
     '.update-components-image img[src*="media.licdn.com"]'

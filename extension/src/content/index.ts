@@ -7,6 +7,7 @@ import {
   scrapeSearchAppearances,
   scrapePostPage,
   scrapeProfilePhoto,
+  POST_PAGE_READY_SELECTOR,
 } from "./scrapers.js";
 import { scrapeCompanyAnalytics, scrapeCompanyPosts, hasMoreAnalyticsPages } from "./company-scrapers.js";
 import {
@@ -77,6 +78,8 @@ async function requireSelector(
     // Gather diagnostic info about what IS on the page
     const bodyClasses = document.body.className;
     const mainSelectors = [
+      POST_PAGE_READY_SELECTOR,
+      'button[aria-label^="Open control menu for post by"]',
       ".member-analytics-addon__mini-update-item",
       ".member-analytics-addon-card__base-card",
       ".member-analytics-addon-summary__list-item",
@@ -111,10 +114,7 @@ async function scrapeCurrent(): Promise<ContentMessage> {
   const url = location.href;
 
   if (url.includes("/feed/update/urn:li:activity:") || url.includes("/posts/")) {
-    await requireSelector(
-      ".feed-shared-inline-show-more-text, .feed-shared-update-v2__description",
-      "post-page"
-    );
+    await requireSelector(POST_PAGE_READY_SELECTOR, "post-page");
     const raw = scrapePostPage(document);
     const data = validate(scrapedPostContentSchema, raw, "post-content");
     return { type: "post-content", data };

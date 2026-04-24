@@ -271,6 +271,83 @@ describe("scrapePostPage", () => {
     expect(result.image_urls).toHaveLength(3);
   });
 
+  it("extracts image URLs from celebration image posts", () => {
+    const doc = createDoc(`
+      <div class="feed-shared-update-v2">
+        <div class="feed-shared-inline-show-more-text">
+          <span class="break-words"><span dir="ltr">Celebration post</span></span>
+        </div>
+        <div class="feed-shared-celebration-image">
+          <div class="feed-shared-celebration-image__image-container">
+            <img
+              class="feed-shared-celebration-image__image"
+              src="https://media.licdn.com/dms/image/v2/D5622AQEXuhcd3wqGqg/feedshare-shrink_800/test.jpg"
+            />
+          </div>
+        </div>
+      </div>
+    `);
+    const result = scrapePostPage(doc);
+    expect(result.image_urls).toEqual([
+      "https://media.licdn.com/dms/image/v2/D5622AQEXuhcd3wqGqg/feedshare-shrink_800/test.jpg",
+    ]);
+  });
+
+  it("extracts the main post text from the new post detail layout", () => {
+    const doc = createDoc(`
+      <main>
+        <div role="listitem">
+          <div class="post-shell">
+            <button aria-label="Open control menu for post by Nate Lee"></button>
+            <p class="post-copy">
+              <span data-testid="expandable-text-box">Main post first paragraph.
+
+Main post second paragraph.</span>
+            </p>
+            <div class="feed-shared-image">
+              <img src="https://media.licdn.com/dms/image/v2/feedshare-shrink_1280/detail.jpg" />
+            </div>
+          </div>
+        </div>
+        <section class="comments">
+          <p><span data-testid="expandable-text-box">Comment text that should not be scraped</span></p>
+        </section>
+      </main>
+    `);
+
+    const result = scrapePostPage(doc);
+    expect(result.hook_text).toBe("Main post first paragraph.\n\nMain post second paragraph.");
+    expect(result.full_text).toBe("Main post first paragraph.\n\nMain post second paragraph.");
+    expect(result.image_urls).toEqual([
+      "https://media.licdn.com/dms/image/v2/feedshare-shrink_1280/detail.jpg",
+    ]);
+  });
+
+  it("prefers rendered text when DOM text is flattened in the new detail layout", () => {
+    const doc = createDoc(`
+      <main>
+        <div role="listitem">
+          <div class="post-shell">
+            <button aria-label="Open control menu for post by Nate Lee"></button>
+            <p class="post-copy">
+              <span data-testid="expandable-text-box">Paragraph one.Paragraph two with a link inside.</span>
+            </p>
+          </div>
+        </div>
+      </main>
+    `);
+
+    const textEl = doc.querySelector('[data-testid="expandable-text-box"]') as HTMLElement;
+    Object.defineProperty(textEl, "innerText", {
+      configurable: true,
+      value: "Paragraph one.\n\nParagraph two with a link inside.",
+    });
+
+    const result = scrapePostPage(doc);
+    expect(result.hook_text).toBe("Paragraph one.\n\nParagraph two with a link inside.");
+    expect(result.full_text).toBe("Paragraph one.\n\nParagraph two with a link inside.");
+  });
+
   it("returns empty arrays for text-only posts", () => {
     const doc = createDoc(`
       <div class="feed-shared-update-v2">
