@@ -53,6 +53,47 @@ export function balancePoolByDomain(items: RssItem[], maxPerDomain: number): Rss
 }
 
 /**
+ * Post-hoc safety net. If the LLM skipped domains entirely (it does this
+ * even with hard instructions), synthesize a basic topic from the freshest
+ * pool item in each missing domain. Not as polished as an LLM summary but
+ * better than silently dropping a domain.
+ */
+export function backfillMissingDomains(
+  topics: DiscoveryTopic[],
+  pool: RssItem[]
+): DiscoveryTopic[] {
+  const covered = new Set(topics.map((t) => extractDomain(t.source_url)));
+  const byDomain = new Map<string, RssItem[]>();
+  for (const item of pool) {
+    const d = extractDomain(item.link);
+    let bucket = byDomain.get(d);
+    if (!bucket) {
+      bucket = [];
+      byDomain.set(d, bucket);
+    }
+    bucket.push(item);
+  }
+  const additions: DiscoveryTopic[] = [];
+  for (const [domain, bucket] of byDomain) {
+    if (covered.has(domain)) continue;
+    bucket.sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime());
+    const item = bucket[0];
+    const summary =
+      (item.summary && item.summary.trim().length >= 40
+        ? item.summary.trim()
+        : item.title).slice(0, 400);
+    additions.push({
+      label: item.title.slice(0, 80),
+      summary,
+      source_headline: item.title,
+      source_url: item.link,
+      category_tag: "News",
+    });
+  }
+  return [...topics, ...additions];
+}
+
+/**
  * Post-hoc safety net. If the LLM ignored the per-domain cap (it sometimes
  * does), trim any domain that exceeded maxPerDomain while preserving order.
  */
@@ -101,33 +142,34 @@ export function buildClusteringPrompt(items: RssItem[], authorContext?: string, 
     .join("\n");
 
   const contextBlock = authorContext
-    ? `\nAUTHOR CONTEXT — this creator's areas of expertise:\n${authorContext}\n`
+    ? `\nAUTHOR CONTEXT — this creator's areas of expertise (use for framing, not for filtering):\n${authorContext}\n`
     : "";
 
   const avoidBlock = previousLabels && previousLabels.length > 0
     ? `\nAVOID THESE TOPICS — they were already suggested. Find DIFFERENT angles and topics:\n${previousLabels.map(l => `- ${l}`).join("\n")}\n`
     : "";
 
-  const { maxPerDomain, targetTopics, minDomains } = computePoolShape(items);
+  const { maxPerDomain, targetTopics } = computePoolShape(items);
+  const poolDomains = [...new Set(items.map((i) => extractDomain(i.link)))];
+  const domainList = poolDomains.join(", ");
 
   return `You are a content researcher selecting trending topics for a LinkedIn content creator.
 ${contextBlock}${avoidBlock}
-RSS items from the past week:
+The items below come from RSS feeds the creator has deliberately subscribed to. Treat every item as topically relevant by default — do not re-filter for expertise. Your job is to pick the strongest, most post-worthy stories and give them a good framing.
+
+RSS items (pre-selected from the author's chosen feeds):
 ${itemList}
 
-Filter to only items relevant to the author's expertise and interests described above. Discard general news, politics, and anything outside their domain.
-
-IMPORTANT: The author's core expertise areas (from AUTHOR CONTEXT above) MUST each be represented. For example, if the author writes about security AND AI, include topics covering BOTH — don't let one area dominate.
-
-Select exactly ${targetTopics} distinct topics. For each topic:
+Select ${targetTopics} distinct topics. For each topic:
 - "label": a 3-5 word provocative title capturing an angle or debate
 - "summary": 3-4 sentences explaining what happened, the key details, and why it matters. Give enough context that someone could write a LinkedIn post about it without reading the original article.
 - "source_headline": the original article headline
 - "source_url": the article URL from the list
 - "category_tag": a short category label for color coding (e.g., "Security", "AI", "Dev Tools", "Trust & Safety", "Infrastructure", "Strategy")
 
-DIVERSITY RULES:
-- Max ${maxPerDomain} topic${maxPerDomain === 1 ? "" : "s"} from the same source domain. At least ${minDomains} distinct source domain${minDomains === 1 ? "" : "s"}.
+DOMAIN COVERAGE (hard requirement):
+- You MUST include at least one topic from EACH of these source domains: ${domainList}.
+- Max ${maxPerDomain} topic${maxPerDomain === 1 ? "" : "s"} from any single source domain.
 - No two topics should cover the same story from different angles — each topic must be a distinct news item.
 - No overlap: if two RSS items are about the same event, pick the better one.
 
@@ -214,8 +256,10 @@ export async function discoverTopics(
   });
 
   const result = parseClusteringResponse(text);
-  // Safety net: trim any domain that slipped past the cap.
-  const diversified = enforceDiversity(result.topics, rawShape.maxPerDomain);
+  // Safety nets: (1) trim domains that slipped past the cap, then (2) backfill
+  // any pool domain the LLM skipped entirely using its freshest item.
+  const trimmed = enforceDiversity(result.topics, rawShape.maxPerDomain);
+  const diversified = backfillMissingDomains(trimmed, rssItems);
   if (diversified.length === 0) {
     throw new Error("Topic discovery returned no topics");
   }
