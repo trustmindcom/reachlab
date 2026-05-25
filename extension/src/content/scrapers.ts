@@ -113,6 +113,46 @@ export function scrapeTopPosts(doc: Document): ScrapedPost[] {
 }
 
 /**
+ * Extract a (label, value) pair from an analytics list-item, trying each
+ * known markup variant in turn. LinkedIn serves different DOM depending on
+ * account tier and card type, so this is a best-effort probe.
+ */
+function extractListItemLabelValue(
+  item: Element
+): { label: string; valueText: string } | null {
+  // Variant A — "cta" with text-body-small label + <strong> value (Premium).
+  let label = item
+    .querySelector(".text-body-small")
+    ?.textContent?.trim()
+    ?.toLowerCase();
+  let valueText = item.querySelector("strong")?.textContent?.trim();
+
+  // Variant B — "cta" with title/text classes (Free).
+  if (!label || !valueText) {
+    label = item
+      .querySelector(".member-analytics-addon__cta-list-item-title")
+      ?.textContent?.trim()
+      ?.toLowerCase();
+    valueText = item
+      .querySelector(".member-analytics-addon__cta-list-item-text")
+      ?.textContent?.trim();
+  }
+
+  // Variant C — "summary" with description label + text-heading-large value
+  // (used by Video performance on every tier and by Discovery on Free).
+  if (!label || !valueText) {
+    label = item
+      .querySelector(".member-analytics-addon-list-item__description")
+      ?.textContent?.trim()
+      ?.toLowerCase();
+    valueText = item.querySelector(".text-heading-large")?.textContent?.trim();
+  }
+
+  if (!label || !valueText) return null;
+  return { label, valueText };
+}
+
+/**
  * Scrape a post detail page for all metrics.
  */
 export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
@@ -140,17 +180,17 @@ export function scrapePostDetail(doc: Document): ScrapedPostMetrics {
       ?.textContent?.trim();
 
     if (title === "Discovery" || title === "Social engagement") {
-      // CTA list item pattern
+      // LinkedIn serves two different layouts for these cards depending on
+      // account tier (Premium vs Free). Both share the same set of labels
+      // but use different DOM classes, so we try each list-item pattern and
+      // each label/value selector pair in order.
       const items = card.querySelectorAll(
-        ".member-analytics-addon__cta-list-item"
+        ".member-analytics-addon__cta-list-item, .member-analytics-addon-summary__list-item"
       );
       for (const item of items) {
-        const label = item
-          .querySelector(".text-body-small")
-          ?.textContent?.trim()
-          ?.toLowerCase();
-        const valueText = item.querySelector("strong")?.textContent?.trim();
-        if (!label || !valueText) continue;
+        const parsed = extractListItemLabelValue(item);
+        if (!parsed) continue;
+        const { label, valueText } = parsed;
 
         const value = parseMetricValue(valueText);
         if (label === "impressions") result.impressions = value;
