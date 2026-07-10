@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test.db");
+const MIGRATION_TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-migration-030.db");
 
 describe("Database initialization", () => {
   afterEach(() => {
@@ -12,6 +13,11 @@ describe("Database initialization", () => {
       fs.unlinkSync(TEST_DB_PATH);
       fs.unlinkSync(TEST_DB_PATH + "-wal");
       fs.unlinkSync(TEST_DB_PATH + "-shm");
+    } catch {}
+    try {
+      fs.unlinkSync(MIGRATION_TEST_DB_PATH);
+      fs.unlinkSync(MIGRATION_TEST_DB_PATH + "-wal");
+      fs.unlinkSync(MIGRATION_TEST_DB_PATH + "-shm");
     } catch {}
   });
 
@@ -154,5 +160,78 @@ describe("Database initialization", () => {
     expect(indexes).toContain("idx_ai_post_topics_post_id");
     expect(indexes).toContain("idx_ai_post_topics_taxonomy_id");
     db.close();
+  });
+
+  it("migration 030 upgrades an existing generation with constrained research and linked AI runs", () => {
+    const db = new Database(MIGRATION_TEST_DB_PATH);
+    try {
+      db.pragma("foreign_keys = ON");
+      db.exec(fs.readFileSync(path.join(import.meta.dirname, "../db/schema.sql"), "utf-8"));
+
+      const migrationsDir = path.join(import.meta.dirname, "../db/migrations");
+      const migrationFiles = fs.readdirSync(migrationsDir).filter((file) => file.endsWith(".sql")).sort();
+      for (const file of migrationFiles.filter((file) => Number.parseInt(file, 10) <= 29)) {
+        db.exec(fs.readFileSync(path.join(migrationsDir, file), "utf-8"));
+        db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(Number.parseInt(file, 10));
+      }
+
+      const generationId = Number(db.prepare(`
+        INSERT INTO generations (persona_id, post_type, drafts_json, status)
+        VALUES (1, 'general', '[]', 'draft')
+      `).run().lastInsertRowid);
+
+      const migration030 = migrationFiles.find((file) => file.startsWith("030-"));
+      expect(migration030).toBeDefined();
+      db.transaction(() => {
+        db.exec(fs.readFileSync(path.join(migrationsDir, migration030!), "utf-8"));
+        db.prepare("INSERT INTO schema_version (version) VALUES (30)").run();
+      })();
+
+      const generation = db
+        .prepare("SELECT author_intent, drafts_json FROM generations WHERE id = ?")
+        .get(generationId) as { author_intent: string | null; drafts_json: string };
+      expect(generation).toEqual({ author_intent: null, drafts_json: "[]" });
+
+      const researchColumns = db
+        .prepare("PRAGMA table_info(generation_research)")
+        .all()
+        .map((column: any) => column.name);
+      expect(researchColumns).toContain("search_scope");
+      expect(researchColumns).toContain("recent_cutoff");
+      expect(() => db.prepare(`
+        INSERT INTO generation_research (persona_id, post_type, stories_json, search_scope)
+        VALUES (1, 'general', '[]', 'invalid')
+      `).run()).toThrow(/CHECK constraint failed/);
+
+      const aiRunColumns = db
+        .prepare("PRAGMA table_info(ai_runs)")
+        .all()
+        .map((column: any) => column.name);
+      expect(aiRunColumns).toContain("generation_id");
+
+      const generationForeignKey = (db.prepare("PRAGMA foreign_key_list(ai_runs)").all() as any[])
+        .find((foreignKey) => foreignKey.from === "generation_id");
+      expect(generationForeignKey).toMatchObject({
+        table: "generations",
+        to: "id",
+        on_delete: "SET NULL",
+      });
+
+      const indexColumns = db
+        .prepare("PRAGMA index_info('idx_ai_runs_generation')")
+        .all()
+        .map((column: any) => column.name);
+      expect(indexColumns).toEqual(["generation_id", "id"]);
+
+      const aiRunId = Number(db.prepare(`
+        INSERT INTO ai_runs (persona_id, triggered_by, generation_id)
+        VALUES (1, 'migration-test', ?)
+      `).run(generationId).lastInsertRowid);
+      db.prepare("DELETE FROM generations WHERE id = ?").run(generationId);
+      expect(db.prepare("SELECT generation_id FROM ai_runs WHERE id = ?").get(aiRunId))
+        .toEqual({ generation_id: null });
+    } finally {
+      db.close();
+    }
   });
 });

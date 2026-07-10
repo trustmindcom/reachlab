@@ -49,6 +49,7 @@ export interface CoachCheckQuality {
 export interface GenerationRecord {
   id: number;
   persona_id: number;
+  author_intent: string | null;
   research_id: number | null;
   post_type: string;
   selected_story_index: number | null;
@@ -153,7 +154,7 @@ export function insertGeneration(
     research_id?: number | null;
     post_type: string;
     selected_story_index?: number | null;
-    drafts_json: string;
+    drafts_json?: string;
     prompt_snapshot?: string;
     personal_connection?: string;
     draft_length?: string;
@@ -171,7 +172,7 @@ export function insertGeneration(
       data.research_id ?? null,
       data.post_type,
       data.selected_story_index ?? null,
-      data.drafts_json,
+      data.drafts_json ?? null,
       data.prompt_snapshot ?? null,
       data.personal_connection ?? null,
       data.draft_length ?? null,
@@ -179,6 +180,20 @@ export function insertGeneration(
       data.brainstorm_angle ?? null,
     );
   return Number(result.lastInsertRowid);
+}
+
+export function startGeneration(
+  db: Database.Database,
+  personaId: number,
+  submittedIntent: string,
+): number {
+  const authorIntent = submittedIntent.trim();
+  if (!authorIntent) throw new Error("Author intent is required");
+
+  return Number(db.prepare(`
+    INSERT INTO generations (persona_id, post_type, author_intent, status)
+    VALUES (?, 'general', ?, 'draft')
+  `).run(personaId, authorIntent).lastInsertRowid);
 }
 
 export function getGeneration(
@@ -206,6 +221,10 @@ export function updateGeneration(
     prompt_snapshot: string;
     published_text: string;
     drafts_json: string;
+    research_id: number | null;
+    selected_story_index: number | null;
+    personal_connection: string | null;
+    draft_length: string | null;
   }>
 ): void {
   const ALLOWED_COLUMNS = new Set([
@@ -213,6 +232,7 @@ export function updateGeneration(
     "quality_gate_json", "status", "matched_post_id",
     "total_input_tokens", "total_output_tokens", "total_cost_cents",
     "prompt_snapshot", "published_text", "drafts_json",
+    "research_id", "selected_story_index", "personal_connection", "draft_length",
   ]);
   const sets: string[] = ["updated_at = CURRENT_TIMESTAMP"];
   const params: any[] = [];

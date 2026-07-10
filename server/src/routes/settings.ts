@@ -43,11 +43,17 @@ const CONFIGURABLE_KEYS: Record<string, { label: string; required: boolean; pref
     prefix: "sk-",
     url: "https://platform.openai.com/api-keys",
   },
+  PERPLEXITY_API_KEY: {
+    label: "Perplexity API Key",
+    required: false,
+    prefix: "pplx-",
+    url: "https://www.perplexity.ai/settings/api",
+  },
 };
 
 function getEnvPath(): string {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(__dirname, "../.env");
+  return path.join(__dirname, "../../.env");
 }
 
 function readEnvFile(): Map<string, string> {
@@ -249,32 +255,40 @@ export function registerSettingsRoutes(
     return { keys };
   });
 
-  app.post("/api/config/keys", async (request, reply) => {
-    const { keys } = validateBody(configKeysBody, request.body);
-    if (!keys || typeof keys !== "object") {
-      return reply.status(400).send({ error: "keys object is required" });
-    }
-
-    // Validate all keys are in the allowlist
-    for (const key of Object.keys(keys)) {
-      if (!CONFIGURABLE_KEYS[key]) {
-        return reply.status(400).send({ error: `Unknown key: ${key}` });
+  app.route({
+    method: ["POST", "PUT"],
+    url: "/api/config/keys",
+    handler: async (request, reply) => {
+      const { keys } = validateBody(configKeysBody, request.body);
+      if (!keys || typeof keys !== "object") {
+        return reply.status(400).send({ error: "keys object is required" });
       }
-      if (typeof keys[key] !== "string" || keys[key].length > 500) {
-        return reply.status(400).send({ error: `Invalid value for ${key}` });
-      }
-    }
 
-    // Read existing .env, merge new keys, write back
-    const entries = readEnvFile();
-    for (const [key, value] of Object.entries(keys)) {
-      if (value.trim()) {
-        entries.set(key, value.trim());
-        process.env[key] = value.trim();
+      // Validate all keys are in the allowlist
+      for (const key of Object.keys(keys)) {
+        if (!CONFIGURABLE_KEYS[key]) {
+          return reply.status(400).send({ error: `Unknown key: ${key}` });
+        }
+        if (
+          typeof keys[key] !== "string"
+          || keys[key].length > 500
+          || /[\r\n\0]/.test(keys[key])
+        ) {
+          return reply.status(400).send({ error: `Invalid value for ${key}` });
+        }
       }
-    }
-    writeEnvFile(entries);
 
-    return { ok: true };
+      // Read existing .env, merge new keys, write back
+      const entries = readEnvFile();
+      for (const [key, value] of Object.entries(keys)) {
+        if (value.trim()) {
+          entries.set(key, value.trim());
+          process.env[key] = value.trim();
+        }
+      }
+      writeEnvFile(entries);
+
+      return { ok: true };
+    },
   });
 }

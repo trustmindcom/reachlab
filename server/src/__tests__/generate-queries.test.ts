@@ -11,6 +11,7 @@ import {
   insertResearch,
   getResearch,
   insertGeneration,
+  startGeneration,
   getGeneration,
   updateGeneration,
   listGenerations,
@@ -121,10 +122,76 @@ describe("generation_research", () => {
     expect(research!.post_type).toBe("news");
     expect(JSON.parse(research!.stories_json)).toHaveLength(1);
   });
+
+  it("persists research scope and the optional recent cutoff", () => {
+    const id = insertResearch(db, PERSONA_ID, {
+      post_type: "general",
+      stories_json: "[]",
+      search_scope: "all_time",
+      recent_cutoff: "05/10/2026",
+    });
+
+    expect(getResearch(db, id)).toMatchObject({
+      search_scope: "all_time",
+      recent_cutoff: "05/10/2026",
+    });
+  });
 });
 
 describe("generations", () => {
   let genId: number;
+
+  it("starts a generation with canonical intent and no AI artifacts", () => {
+    const id = startGeneration(db, PERSONA_ID, "  Build  vs. BUY?!\nKeep\tOptions Open.  ");
+    const row = getGeneration(db, id)!;
+
+    expect(row.author_intent).toBe("Build  vs. BUY?!\nKeep\tOptions Open.");
+    expect(row.persona_id).toBe(PERSONA_ID);
+    expect(row.post_type).toBe("general");
+    expect(row.status).toBe("draft");
+    expect(row.research_id).toBeNull();
+    expect(row.drafts_json).toBeNull();
+    expect(row.brainstorm_topic).toBeNull();
+    expect(row.brainstorm_angle).toBeNull();
+  });
+
+  it("rejects blank intent", () => {
+    let thrown: unknown;
+    try {
+      startGeneration(db, PERSONA_ID, "   ");
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe("Author intent is required");
+  });
+
+  it("hydrates an early generation without replacing its author intent", () => {
+    const id = startGeneration(db, PERSONA_ID, "The original author intent");
+    const researchId = insertResearch(db, PERSONA_ID, {
+      post_type: "general",
+      stories_json: JSON.stringify([{ headline: "Supporting evidence" }]),
+    });
+
+    updateGeneration(db, id, {
+      research_id: researchId,
+      selected_story_index: 0,
+      personal_connection: "I faced this decision last quarter.",
+      draft_length: "short",
+      drafts_json: JSON.stringify([{ type: "contrarian", hook: "A draft hook" }]),
+    });
+
+    const row = getGeneration(db, id)!;
+    expect(row.author_intent).toBe("The original author intent");
+    expect(row.research_id).toBe(researchId);
+    expect(row.selected_story_index).toBe(0);
+    expect(row.personal_connection).toBe("I faced this decision last quarter.");
+    expect(row.draft_length).toBe("short");
+    expect(row.drafts_json).toBe(JSON.stringify([{ type: "contrarian", hook: "A draft hook" }]));
+
+    updateGeneration(db, id, { status: "discarded" });
+  });
 
   it("inserts a generation", () => {
     const researchId = insertResearch(db, PERSONA_ID, {
