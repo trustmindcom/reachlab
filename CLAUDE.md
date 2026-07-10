@@ -28,6 +28,7 @@ The extension always talks to `localhost:3210`. In dev, Vite proxies `/api` to 3
 |---|---|
 | `TRUSTMIND_LLM_API_KEY` | OpenRouter API key (required for AI) |
 | `OPENAI_API_KEY` | OpenAI key for voice interview TTS/STT |
+| `PERPLEXITY_API_KEY` | Perplexity key for source discovery and intent research |
 | `REACHLAB_DB` | DB path (default: `data/linkedin.db`) |
 
 Loaded from `server/.env` via a hand-rolled parser (not dotenv). Won't override existing env vars.
