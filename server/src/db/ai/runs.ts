@@ -22,13 +22,15 @@ export function createRun(
   db: Database.Database,
   personaId: number,
   triggered_by: string,
-  post_count: number
+  post_count: number,
+  generationId: number | null = null,
 ): number {
   const result = db
     .prepare(
-      `INSERT INTO ai_runs (persona_id, triggered_by, post_count) VALUES (?, ?, ?)`
+      `INSERT INTO ai_runs (persona_id, triggered_by, post_count, generation_id)
+       VALUES (?, ?, ?, ?)`
     )
-    .run(personaId, triggered_by, post_count);
+    .run(personaId, triggered_by, post_count, generationId);
   return Number(result.lastInsertRowid);
 }
 
@@ -125,15 +127,15 @@ export function getAiLogsForRun(db: Database.Database, runId: number): any[] {
   return db.prepare("SELECT * FROM ai_logs WHERE run_id = ? ORDER BY id").all(runId);
 }
 
-// ── completed runs list ────────────────────────────────────
+// ── finished runs list ─────────────────────────────────────
 
-export function listCompletedRuns(db: Database.Database, personaId: number): any[] {
+export function listFinishedRuns(db: Database.Database, personaId: number): any[] {
   return db
     .prepare(
       `SELECT id, triggered_by, post_count, status, started_at, completed_at,
-              total_input_tokens, total_output_tokens, total_cost_cents
+              total_input_tokens, total_output_tokens, total_cost_cents, generation_id
        FROM ai_runs
-       WHERE status = 'completed' AND persona_id = ?
+       WHERE status IN ('completed', 'failed') AND persona_id = ?
        ORDER BY id DESC LIMIT 20`
     )
     .all(personaId);

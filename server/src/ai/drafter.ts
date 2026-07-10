@@ -38,6 +38,102 @@ export const LENGTH_INSTRUCTIONS: Record<DraftLength, string> = {
   long: "Target approximately 300-450 words. Develop the argument fully with evidence, examples, and nuance. Still one idea — just explored in depth.",
 };
 
+function logProviderFailure(
+  logger: AiLogger,
+  step: string,
+  system: string,
+  messages: Array<{ role: "user"; content: string }>,
+  startedAt: number,
+  error: unknown,
+): void {
+  const message = error instanceof Error ? error.message : String(error);
+  logger.log({
+    step,
+    model: MODELS.SONNET,
+    input_messages: JSON.stringify({ system, messages }),
+    output_text: `Provider call failed: ${message}`,
+    tool_calls: null,
+    input_tokens: 0,
+    output_tokens: 0,
+    thinking_tokens: 0,
+    duration_ms: Date.now() - startedAt,
+  });
+}
+
+async function awaitAllDraftAttempts<T>(attempts: Promise<T>[]): Promise<T[]> {
+  const settled = await Promise.allSettled(attempts);
+  const failure = settled.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
+  return settled.map((result) => (result as PromiseFulfilledResult<T>).value);
+}
+
+export function buildReviseSelectedPrompt(
+  context: WritingContext,
+  selectedDrafts: Draft[],
+  feedback: string,
+  length?: DraftLength,
+): string {
+  const selectedDraftData = JSON.stringify(selectedDrafts.map((draft) => ({
+    type: draft.type,
+    hook: draft.hook,
+    body: draft.body,
+    closing: draft.closing,
+  })));
+  const feedbackData = JSON.stringify(feedback);
+  const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
+
+  return `${renderWritingContext(context)}
+
+## SELECTED DRAFTS TO REVISE
+
+Selected draft data: ${selectedDraftData}
+
+## FEEDBACK
+
+The user reviewed the selected drafts and gave this feedback data:
+${feedbackData}
+
+Rewrite the selected variation to address the feedback. Preserve the variation characteristics represented in the selected draft data while incorporating what the user wants changed.${lengthContext}
+
+Return JSON:
+{
+  "hook": "string — the opening 1-2 sentences that stop the scroll",
+  "body": "string — the main content, use \\n for line breaks",
+  "closing": "string — the closing question or reflection",
+  "word_count": number,
+  "structure_label": "string — brief description like 'Contrarian take with personal evidence'"
+}`;
+}
+
+export function buildRestartFromIntentPrompt(
+  context: WritingContext,
+  feedback: string,
+  length?: DraftLength,
+): string {
+  const feedbackData = JSON.stringify(feedback);
+  const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
+
+  return `${renderWritingContext(context)}
+
+## FEEDBACK FOR A FRESH START
+
+The user rejected the prior approaches and provided this feedback data:
+${feedbackData}
+
+Create a completely fresh variation from the controlling author intent and factual evidence. Follow the feedback without reconstructing or copying any prior draft.${lengthContext}
+
+Return JSON:
+{
+  "hook": "string — the opening 1-2 sentences that stop the scroll",
+  "body": "string — the main content, use \\n for line breaks",
+  "closing": "string — the closing question or reflection",
+  "word_count": number,
+  "structure_label": "string — brief description like 'Contrarian take with personal evidence'"
+}`;
+}
+
 /**
  * Generate 3 draft variations (contrarian, operator, future-facing).
  */
@@ -60,14 +156,10 @@ export async function generateDrafts(
   const draftPromises = Object.entries(VARIATION_INSTRUCTIONS).map(
     async ([variationType, instruction]): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
       const start = Date.now();
-      const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
-        model: MODELS.SONNET,
-        max_tokens: 2000,
-        system: assembled.system,
-        messages: [
-          {
-            role: "user",
-            content: `${writingContext}
+      const messages = [
+        {
+          role: "user" as const,
+          content: `${writingContext}
 
 ${instruction}${connectionContext}${lengthContext}
 
@@ -79,16 +171,30 @@ Return JSON:
   "word_count": number,
   "structure_label": "string — brief description like 'Contrarian take with personal evidence'"
 }`,
-          },
-        ],
-      });
+        },
+      ];
+      let providerResult: Awaited<ReturnType<typeof streamWithIdleTimeout>>;
+      try {
+        providerResult = await streamWithIdleTimeout(client, {
+          model: MODELS.SONNET,
+          max_tokens: 2000,
+          system: assembled.system,
+          messages,
+        });
+      } catch (error) {
+        logProviderFailure(
+          logger, `draft_${variationType}`, assembled.system, messages, start, error,
+        );
+        throw error;
+      }
+      const { text, input_tokens, output_tokens, thinking_tokens } = providerResult;
 
       const duration = Date.now() - start;
 
       logger.log({
         step: `draft_${variationType}`,
         model: MODELS.SONNET,
-        input_messages: JSON.stringify([{ role: "user", content: instruction }]),
+        input_messages: JSON.stringify({ system: assembled.system, messages }),
         output_text: text,
         tool_calls: null,
         input_tokens,
@@ -119,7 +225,7 @@ Return JSON:
     }
   );
 
-  const results = await Promise.all(draftPromises);
+  const results = await awaitAllDraftAttempts(draftPromises);
   const drafts = results.map((r) => r.draft);
   const totalInput = results.reduce((sum, r) => sum + r.input_tokens, 0);
   const totalOutput = results.reduce((sum, r) => sum + r.output_tokens, 0);
@@ -146,58 +252,36 @@ export async function reviseDrafts(
   length?: DraftLength
 ): Promise<DraftResult> {
   const assembled = assemblePrompt(db, personaId, "");
-  const writingContext = renderWritingContext(context);
-  const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
 
   const draftPromises = currentDrafts.map(
-    async (draft, i): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
+    async (draft): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
       const start = Date.now();
-      const currentDraftData = JSON.stringify({
-        type: draft.type,
-        hook: draft.hook,
-        body: draft.body,
-        closing: draft.closing,
-      });
-      const feedbackData = JSON.stringify(feedback);
-
-      const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
-        model: MODELS.SONNET,
-        max_tokens: 2000,
-        system: assembled.system,
-        messages: [
-          {
-            role: "user",
-            content: `${writingContext}
-
-## SELECTED DRAFT TO REVISE
-
-Selected draft data: ${currentDraftData}
-
-## FEEDBACK
-
-The user reviewed the selected drafts and gave this feedback data:
-${feedbackData}
-
-Rewrite this selected variation to address the feedback. Preserve the variation characteristics represented in the selected draft data while incorporating what the user wants changed.${lengthContext}
-
-Return JSON:
-{
-  "hook": "string — the opening 1-2 sentences that stop the scroll",
-  "body": "string — the main content, use \\n for line breaks",
-  "closing": "string — the closing question or reflection",
-  "word_count": number,
-  "structure_label": "string — brief description like 'Contrarian take with personal evidence'"
-}`,
-          },
-        ],
-      });
+      const messages = [{
+        role: "user" as const,
+        content: buildReviseSelectedPrompt(context, [draft], feedback, length),
+      }];
+      let providerResult: Awaited<ReturnType<typeof streamWithIdleTimeout>>;
+      try {
+        providerResult = await streamWithIdleTimeout(client, {
+          model: MODELS.SONNET,
+          max_tokens: 2000,
+          system: assembled.system,
+          messages,
+        });
+      } catch (error) {
+        logProviderFailure(
+          logger, `revise_${draft.type}`, assembled.system, messages, start, error,
+        );
+        throw error;
+      }
+      const { text, input_tokens, output_tokens, thinking_tokens } = providerResult;
 
       const duration = Date.now() - start;
 
       logger.log({
         step: `revise_${draft.type}`,
         model: MODELS.SONNET,
-        input_messages: JSON.stringify([{ role: "user", content: `Revise ${draft.type}: ${feedback}` }]),
+        input_messages: JSON.stringify({ system: assembled.system, messages }),
         output_text: text,
         tool_calls: null,
         input_tokens,
@@ -228,15 +312,90 @@ Return JSON:
     }
   );
 
-  const results = await Promise.all(draftPromises);
+  const results = await awaitAllDraftAttempts(draftPromises);
   const drafts = results.map((r) => r.draft);
   const totalInput = results.reduce((sum, r) => sum + r.input_tokens, 0);
   const totalOutput = results.reduce((sum, r) => sum + r.output_tokens, 0);
 
   return {
     drafts,
-    prompt_snapshot: `${assembled.system}\n\n${writingContext}`,
+    prompt_snapshot: `${assembled.system}\n\n${renderWritingContext(context)}`,
     input_tokens: totalInput,
     output_tokens: totalOutput,
+  };
+}
+
+export async function restartDraftsFromIntent(
+  client: Anthropic,
+  db: Database.Database,
+  personaId: number,
+  logger: AiLogger,
+  context: WritingContext,
+  feedback: string,
+  length?: DraftLength,
+): Promise<DraftResult> {
+  const assembled = assemblePrompt(db, personaId, "");
+  const basePrompt = buildRestartFromIntentPrompt(context, feedback, length);
+
+  const draftPromises = Object.entries(VARIATION_INSTRUCTIONS).map(
+    async ([variationType, instruction]): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
+      const start = Date.now();
+      const messages = [{ role: "user" as const, content: `${basePrompt}\n\n${instruction}` }];
+      let providerResult: Awaited<ReturnType<typeof streamWithIdleTimeout>>;
+      try {
+        providerResult = await streamWithIdleTimeout(client, {
+          model: MODELS.SONNET,
+          max_tokens: 2000,
+          system: assembled.system,
+          messages,
+        });
+      } catch (error) {
+        logProviderFailure(
+          logger, `restart_${variationType}`, assembled.system, messages, start, error,
+        );
+        throw error;
+      }
+      const { text, input_tokens, output_tokens, thinking_tokens } = providerResult;
+      const duration = Date.now() - start;
+
+      logger.log({
+        step: `restart_${variationType}`,
+        model: MODELS.SONNET,
+        input_messages: JSON.stringify({ system: assembled.system, messages }),
+        output_text: text,
+        tool_calls: null,
+        input_tokens,
+        output_tokens,
+        thinking_tokens,
+        duration_ms: duration,
+      });
+
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error(`Restarted draft ${variationType} response did not contain valid JSON`);
+      }
+      const parsed = JSON.parse(jsonrepair(jsonMatch[0]));
+      return {
+        draft: {
+          type: variationType as Draft["type"],
+          hook: parsed.hook,
+          body: parsed.body,
+          closing: parsed.closing,
+          word_count: parsed.word_count ?? 0,
+          structure_label: parsed.structure_label ?? variationType,
+        },
+        input_tokens,
+        output_tokens,
+      };
+    },
+  );
+
+  const results = await awaitAllDraftAttempts(draftPromises);
+  return {
+    drafts: results.map((result) => result.draft),
+    prompt_snapshot: `${assembled.system}\n\n${renderWritingContext(context)}`,
+    input_tokens: results.reduce((sum, result) => sum + result.input_tokens, 0),
+    output_tokens: results.reduce((sum, result) => sum + result.output_tokens, 0),
   };
 }

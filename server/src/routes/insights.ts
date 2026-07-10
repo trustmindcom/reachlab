@@ -28,7 +28,7 @@ import {
   getRecommendationById,
   markRecommendationActedOn,
   getAiLogsForRun,
-  listCompletedRuns,
+  listFinishedRuns,
   getTotalCostForPersona,
   getLastFullRun,
   getPostCountWithMetrics,
@@ -236,7 +236,7 @@ export function registerInsightsRoutes(app: FastifyInstance, db: Database.Databa
 
   app.get("/api/insights/runs", async (request) => {
     const personaId = getPersonaId(request);
-    const runs = listCompletedRuns(db, personaId);
+    const runs = listFinishedRuns(db, personaId);
     return { runs, total_cost_cents: getTotalCostForPersona(db, personaId) };
   });
 

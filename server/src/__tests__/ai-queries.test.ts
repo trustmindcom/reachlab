@@ -40,6 +40,7 @@ import {
   upsertAnalysisGap,
   getLatestAnalysisGaps,
   getLatestPromptSuggestions,
+  listFinishedRuns,
 } from "../db/ai-queries.js";
 import fs from "fs";
 import path from "path";
@@ -98,6 +99,61 @@ describe("AI queries", () => {
       const id = createRun(db, PERSONA_ID, "manual", 10);
       expect(id).toBeTypeOf("number");
       expect(id).toBeGreaterThan(0);
+    });
+
+    it("creates unrelated runs with no generation correlation by default", () => {
+      const id = createRun(db, PERSONA_ID, "manual", 10);
+
+      const row = db.prepare("SELECT generation_id FROM ai_runs WHERE id = ?").get(id) as {
+        generation_id: number | null;
+      };
+      expect(row.generation_id).toBeNull();
+    });
+
+    it("correlates successful and failed writing runs to their generation", () => {
+      const generationId = Number(db.prepare(
+        `INSERT INTO generations (persona_id, post_type, status, author_intent)
+         VALUES (?, 'general', 'draft', 'Stored intent')`,
+      ).run(PERSONA_ID).lastInsertRowid);
+      const completedRunId = createRun(db, PERSONA_ID, "generate_drafts", 0, generationId);
+      const failedRunId = createRun(db, PERSONA_ID, "revise_drafts", 0, generationId);
+      completeRun(db, completedRunId, { input_tokens: 10, output_tokens: 5, cost_cents: 0.01 });
+      failRun(db, failedRunId, "provider unavailable");
+
+      const rows = db.prepare(
+        "SELECT id, status, generation_id FROM ai_runs WHERE id IN (?, ?) ORDER BY id",
+      ).all(completedRunId, failedRunId);
+      expect(rows).toEqual([
+        { id: completedRunId, status: "completed", generation_id: generationId },
+        { id: failedRunId, status: "failed", generation_id: generationId },
+      ]);
+      expect(listFinishedRuns(db, PERSONA_ID)).toEqual([
+        expect.objectContaining({
+          id: failedRunId,
+          status: "failed",
+          generation_id: generationId,
+        }),
+        expect.objectContaining({
+          id: completedRunId,
+          status: "completed",
+          generation_id: generationId,
+        }),
+      ]);
+    });
+
+    it("sets writing run generation correlation to null when the generation is deleted", () => {
+      const generationId = Number(db.prepare(
+        `INSERT INTO generations (persona_id, post_type, status, author_intent)
+         VALUES (?, 'general', 'draft', 'Disposable intent')`,
+      ).run(PERSONA_ID).lastInsertRowid);
+      const runId = createRun(db, PERSONA_ID, "ghostwriter", 0, generationId);
+
+      db.prepare("DELETE FROM generations WHERE id = ?").run(generationId);
+
+      const row = db.prepare("SELECT generation_id FROM ai_runs WHERE id = ?").get(runId) as {
+        generation_id: number | null;
+      };
+      expect(row.generation_id).toBeNull();
     });
 
     it("getRunningRun returns a running run", () => {

@@ -46,3 +46,13 @@ export function getGenerationMessages(
     )
     .all(generationId, limit) as GenerationMessage[];
 }
+
+export function getGenerationMessageCount(
+  db: Database.Database,
+  generationId: number,
+): number {
+  const row = db.prepare(
+    "SELECT COUNT(*) AS count FROM generation_messages WHERE generation_id = ?",
+  ).get(generationId) as { count: number };
+  return row.count;
+}

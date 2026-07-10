@@ -44,7 +44,7 @@ const storySchema = z.object({
   headline: z.string().min(1),
   summary: z.string().min(1),
   source: z.string().min(1),
-  source_url: httpUrlSchema.optional(),
+  source_url: httpUrlSchema,
   age: z.string().min(1),
   tag: z.string().min(1),
   angles: z.array(z.string().min(1)),
@@ -172,7 +172,8 @@ async function synthesizeStories(
   const parsed = storySchema.array().min(1).max(3).safeParse(
     await synthesize({ intent, pages }),
   );
-  if (!parsed.success) {
+  const selectedUrls = new Set(pages.map((page) => page.url));
+  if (!parsed.success || parsed.data.some((story) => !selectedUrls.has(story.source_url))) {
     throw new Error("Synthesis returned invalid stories");
   }
   return parsed.data;

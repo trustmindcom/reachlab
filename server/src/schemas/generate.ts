@@ -24,6 +24,7 @@ export const draftsBody = z.object({
 export const reviseDraftsBody = z.object({
   generation_id: z.number().int().positive(),
   feedback: z.string().trim().min(1).max(10000),
+  mode: z.enum(["revise_selected", "restart_from_intent"]),
 });
 
 export const combineBody = z.object({
