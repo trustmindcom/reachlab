@@ -4,12 +4,12 @@ import path from "path";
 import type { Story } from "@reachlab/shared";
 import { initDatabase } from "../db/index.js";
 import {
-  insertGeneration,
   insertResearch,
   startGeneration,
   updateGeneration,
 } from "../db/generate-queries.js";
 import { loadWritingContext, renderWritingContext } from "../ai/writing-context.js";
+import { insertLegacyGenerationFixture } from "./helpers/generation-fixtures.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-writing-context.db");
 const PERSONA_ID = 1;
@@ -152,7 +152,7 @@ describe("loadWritingContext", () => {
   });
 
   it("rejects historical rows without intent", () => {
-    const generationId = insertGeneration(db, PERSONA_ID, { post_type: "general" });
+    const generationId = insertLegacyGenerationFixture(db, PERSONA_ID, { post_type: "general" });
 
     expect(() => loadWritingContext(db, PERSONA_ID, generationId))
       .toThrow("Generation has no author intent");
@@ -178,6 +178,38 @@ describe("loadWritingContext", () => {
     expect(parse).toHaveBeenCalledTimes(1);
     expect(context.anchorEvidence).toEqual(storyB);
     expect(context.supportingEvidence).toEqual([storyA, storyC]);
+  });
+
+  it("applies an in-memory selection override without mutating persisted selection", () => {
+    const generationId = startGeneration(db, PERSONA_ID, "Preview a different evidence selection.");
+    const researchId = insertResearch(db, PERSONA_ID, {
+      post_type: "general",
+      stories_json: JSON.stringify([storyA, storyB]),
+    });
+    updateGeneration(db, generationId, { research_id: researchId, selected_story_index: 0 });
+
+    const context = loadWritingContext(db, PERSONA_ID, generationId, 1);
+
+    expect(context.anchorEvidence).toEqual(storyB);
+    expect(context.supportingEvidence).toEqual([storyA]);
+    expect(db.prepare("SELECT selected_story_index FROM generations WHERE id = ?").get(generationId))
+      .toEqual({ selected_story_index: 0 });
+  });
+
+  it("supports an explicit no-selection override without mutating persisted selection", () => {
+    const generationId = startGeneration(db, PERSONA_ID, "Preview all evidence as supporting.");
+    const researchId = insertResearch(db, PERSONA_ID, {
+      post_type: "general",
+      stories_json: JSON.stringify([storyA, storyB]),
+    });
+    updateGeneration(db, generationId, { research_id: researchId, selected_story_index: 0 });
+
+    const context = loadWritingContext(db, PERSONA_ID, generationId, null);
+
+    expect(context.anchorEvidence).toBeNull();
+    expect(context.supportingEvidence).toEqual([storyA, storyB]);
+    expect(db.prepare("SELECT selected_story_index FROM generations WHERE id = ?").get(generationId))
+      .toEqual({ selected_story_index: 0 });
   });
 
   it("uses every linked story as supporting evidence when no anchor is selected", () => {

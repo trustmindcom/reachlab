@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import fs from "fs";
 import path from "path";
 import { initDatabase } from "../db/index.js";
+import { insertLegacyGenerationFixture } from "./helpers/generation-fixtures.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-generate-routes.db");
 
@@ -97,7 +98,7 @@ describe("POST /api/generate/history/:id/discard", () => {
 });
 
 describe("POST /api/generate/research", () => {
-  it("rejects missing topic", async () => {
+  it("rejects missing generation_id", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/generate/research?personaId=1",
@@ -109,12 +110,24 @@ describe("POST /api/generate/research", () => {
   // Note: actual research requires TRUSTMIND_LLM_API_KEY, so we only test validation
 });
 
+describe("POST /api/generate/brainstorm", () => {
+  it("is not registered after the intent-led flow replaces brainstorming", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/generate/brainstorm?personaId=1",
+      payload: { topic: "Legacy brainstorm topic" },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+});
+
 describe("POST /api/generate/drafts", () => {
-  it("returns 404 for non-existent research", async () => {
+  it("returns 404 for non-existent generation", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/generate/drafts?personaId=1",
-      payload: { research_id: 999, story_index: 0 },
+      payload: { generation_id: 999, story_index: 0 },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -190,14 +203,14 @@ describe("GET /api/generate/active", () => {
     // Insert research + generation directly via the DB
     const db = initDatabase(TEST_DB_PATH);
     try {
-      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const { insertResearch } = await import("../db/generate-queries.js");
       const researchId = insertResearch(db, 1, {
         post_type: "general",
         stories_json: JSON.stringify([{ headline: "Test story", summary: "s", source: "src", age: "today", tag: "t", angles: [], is_stretch: false }]),
         article_count: 3,
         source_count: 2,
       });
-      insertGeneration(db, 1, {
+      insertLegacyGenerationFixture(db, 1, {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
@@ -249,12 +262,12 @@ describe("POST /api/generate/ghostwrite", () => {
     // Create a generation for persona 1, then request as persona 2
     const db = initDatabase(TEST_DB_PATH);
     try {
-      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const { insertResearch } = await import("../db/generate-queries.js");
       const researchId = insertResearch(db, 1, {
         post_type: "general",
         stories_json: "[]",
       });
-      const genId = insertGeneration(db, 1, {
+      const genId = insertLegacyGenerationFixture(db, 1, {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
@@ -282,12 +295,12 @@ describe("PATCH /api/generate/:id/selection", () => {
     const db = initDatabase(TEST_DB_PATH);
     let genId: number;
     try {
-      const { insertResearch, insertGeneration, getGeneration } = await import("../db/generate-queries.js");
+      const { insertResearch, getGeneration } = await import("../db/generate-queries.js");
       const researchId = insertResearch(db, 1, {
         post_type: "general",
         stories_json: "[]",
       });
-      genId = insertGeneration(db, 1, {
+      genId = insertLegacyGenerationFixture(db, 1, {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
@@ -312,12 +325,12 @@ describe("PATCH /api/generate/:id/selection", () => {
     const db = initDatabase(TEST_DB_PATH);
     let genId: number;
     try {
-      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const { insertResearch } = await import("../db/generate-queries.js");
       const researchId = insertResearch(db, 1, {
         post_type: "general",
         stories_json: "[]",
       });
-      genId = insertGeneration(db, 1, {
+      genId = insertLegacyGenerationFixture(db, 1, {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
@@ -343,12 +356,12 @@ describe("PATCH /api/generate/:id/draft", () => {
     const db = initDatabase(TEST_DB_PATH);
     let genId: number;
     try {
-      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const { insertResearch } = await import("../db/generate-queries.js");
       const researchId = insertResearch(db, 1, {
         post_type: "general",
         stories_json: "[]",
       });
-      genId = insertGeneration(db, 1, {
+      genId = insertLegacyGenerationFixture(db, 1, {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
@@ -373,12 +386,12 @@ describe("PATCH /api/generate/:id/draft", () => {
     const db = initDatabase(TEST_DB_PATH);
     let genId: number;
     try {
-      const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+      const { insertResearch } = await import("../db/generate-queries.js");
       const researchId = insertResearch(db, 1, {
         post_type: "general",
         stories_json: "[]",
       });
-      genId = insertGeneration(db, 1, {
+      genId = insertLegacyGenerationFixture(db, 1, {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,

@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import {
   insertResearch,
   getResearch,
-  insertGeneration,
+  startGeneration,
   getGeneration,
   updateGeneration,
   getRules,
@@ -26,7 +26,10 @@ import { streamWithIdleTimeout } from "../ai/stream-with-idle.js";
 import { getClient, MODELS } from "../ai/client.js";
 import { AiLogger } from "../ai/logger.js";
 import { researchStories } from "../ai/researcher.js";
-import { generateDrafts, reviseDrafts, brainstormAngles } from "../ai/drafter.js";
+import { selectRelevantIntentPages, synthesizeIntentPages } from "../ai/researcher.js";
+import { researchIntent, searchPerplexity } from "../ai/intent-research.js";
+import { loadWritingContext } from "../ai/writing-context.js";
+import { generateDrafts, reviseDrafts } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
 import { coachCheck } from "../ai/coach-check.js";
 import { registerCoachingRoutes } from "./generate-coaching.js";
@@ -35,9 +38,29 @@ import { registerRetroRoutes } from "./generate-retro.js";
 import { registerSourceRoutes } from "./generate-sources.js";
 import { getPersonaId } from "../utils.js";
 import { validateBody } from "../validation.js";
-import { researchBody, draftsBody, brainstormBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
+import { startGenerationBody, researchBody, draftsBody, reviseDraftsBody, combineBody, chatBody, rulesBody, addRuleBody, ghostwriteBody, selectionBody, draftSaveBody } from "../schemas/generate.js";
 import { ghostwriterTurn, buildFirstTurnPrompt, buildSubsequentTurnPrompt, expandMessageRow } from "../ai/ghostwriter.js";
 import { createPersonaGuard } from "../middleware/persona-guard.js";
+
+function parsePersistedDraftSelection(
+  rawSelection: string | null,
+  draftCount: number,
+): { valid: true; indices: number[] } | { valid: false } {
+  if (rawSelection === null) return { valid: true, indices: [] };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawSelection);
+  } catch {
+    return { valid: false };
+  }
+  if (!Array.isArray(parsed) || parsed.some((index) =>
+    !Number.isInteger(index) || index < 0 || index >= draftCount
+  )) {
+    return { valid: false };
+  }
+  return { valid: true, indices: parsed as number[] };
+}
 
 export function registerGenerateRoutes(app: FastifyInstance, db: Database.Database): void {
   const personaGuard = createPersonaGuard(db);
@@ -47,36 +70,97 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     seedDefaultRules(db, 1);
   }
 
+  // ── Start ────────────────────────────────────────────────
+
+  app.post("/api/generate/start", async (request) => {
+    const personaId = getPersonaId(request);
+    const { author_intent } = validateBody(startGenerationBody, request.body);
+    return {
+      generation_id: startGeneration(db, personaId, author_intent),
+      author_intent,
+    };
+  });
+
   // ── Research ─────────────────────────────────────────────
 
   app.post("/api/generate/research", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { topic, avoid, source_context } = validateBody(researchBody, request.body);
-    const safeAvoid = Array.isArray(avoid) ? avoid.slice(0, 50).map((s) => String(s).slice(0, 200)) : undefined;
+    const { generation_id, avoid, source_context } = validateBody(researchBody, request.body);
+    const generation = getGeneration(db, generation_id);
+    if (!generation) {
+      return reply.status(404).send({ error: "Generation not found" });
+    }
+    if (generation.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
+    if (!generation.author_intent) {
+      return reply.status(400).send({ error: "Generation has no author intent" });
+    }
 
     const client = getClient();
     const runId = createRun(db, personaId, "generate_research", 0);
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await researchStories(client, db, logger, topic, safeAvoid, source_context);
+      let researchData: Parameters<typeof insertResearch>[2];
+      let stories: Story[];
+      let articleCount: number;
+      let sourceCount: number;
 
-      const researchId = insertResearch(db, personaId, {
-        post_type: "general",
-        topic,
-        stories_json: JSON.stringify(result.stories),
-        sources_json: JSON.stringify(result.sources_metadata),
-        article_count: result.article_count,
-        source_count: result.source_count,
-      });
+      if (source_context) {
+        const result = await researchStories(
+          client, db, logger, source_context.source_headline, avoid, source_context,
+          generation.author_intent,
+        );
+        stories = result.stories;
+        articleCount = result.article_count;
+        sourceCount = result.source_count;
+        researchData = {
+          post_type: "general",
+          topic: generation.author_intent,
+          stories_json: JSON.stringify(stories),
+          sources_json: JSON.stringify(result.sources_metadata),
+          article_count: articleCount,
+          source_count: sourceCount,
+          search_scope: "anchor",
+          recent_cutoff: null,
+        };
+      } else {
+        const result = await researchIntent({
+          intent: generation.author_intent,
+          now: new Date(),
+          search: searchPerplexity,
+          selectRelevant: (input) => selectRelevantIntentPages(client, logger, input),
+          synthesize: (input) => synthesizeIntentPages(client, logger, { ...input, avoid }),
+        });
+        stories = result.stories;
+        articleCount = result.evidence.length;
+        sourceCount = result.evidence.length;
+        researchData = {
+          post_type: "general",
+          topic: generation.author_intent,
+          stories_json: JSON.stringify(stories),
+          sources_json: JSON.stringify(result.evidence),
+          article_count: articleCount,
+          source_count: sourceCount,
+          search_scope: result.searchScope,
+          recent_cutoff: result.recentCutoff,
+        };
+      }
+
+      const researchId = db.transaction(() => {
+        const id = insertResearch(db, personaId, researchData);
+        updateGeneration(db, generation_id, { research_id: id, selected_story_index: null });
+        return id;
+      })();
 
       completeRun(db, runId, getRunCost(db, runId));
 
       return {
         research_id: researchId,
-        stories: result.stories,
-        article_count: result.article_count,
-        source_count: result.source_count,
+        stories,
+        article_count: articleCount,
+        source_count: sourceCount,
       };
     } catch (err: any) {
       failRun(db, runId, err.message);
@@ -84,25 +168,6 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     }
   });
 
-  // ── Brainstorm angles (thought-leadership path) ──────────
-
-  app.post("/api/generate/brainstorm", async (request, reply) => {
-    const personaId = getPersonaId(request);
-    const { topic } = validateBody(brainstormBody, request.body);
-
-    const client = getClient();
-    const runId = createRun(db, personaId, "brainstorm_angles", 0);
-    const logger = new AiLogger(db, runId);
-
-    try {
-      const result = await brainstormAngles(client, db, personaId, logger, topic);
-      completeRun(db, runId, getRunCost(db, runId));
-      return { angles: result.angles };
-    } catch (err: any) {
-      failRun(db, runId, err.message);
-      return reply.status(500).send({ error: err.message });
-    }
-  });
 
   // ── Drafts ───────────────────────────────────────────────
 
@@ -110,21 +175,24 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const personaId = getPersonaId(request);
     const body = validateBody(draftsBody, request.body);
 
-    // Validate inputs before creating the AI client/run (which requires API key)
-    let storyForDrafts: Story | undefined;
-    if (body.research_id != null && body.story_index != null) {
-      const research = getResearch(db, body.research_id);
-      if (!research) {
-        return reply.status(404).send({ error: "Research not found" });
-      }
-      if ((research as any).persona_id !== personaId) {
-        return reply.status(403).send({ error: "Not authorized" });
-      }
-      const stories: Story[] = JSON.parse(research.stories_json);
-      if (body.story_index < 0 || body.story_index >= stories.length) {
+    const generation = getGeneration(db, body.generation_id);
+    if (!generation) {
+      return reply.status(404).send({ error: "Generation not found" });
+    }
+    if (generation.persona_id !== personaId) {
+      return reply.status(403).send({ error: "Not authorized" });
+    }
+
+    let context: ReturnType<typeof loadWritingContext>;
+    try {
+      context = loadWritingContext(
+        db, personaId, body.generation_id, body.story_index ?? null,
+      );
+    } catch (err: any) {
+      if (err.message === "Generation has invalid selected story index") {
         return reply.status(400).send({ error: "Invalid story_index" });
       }
-      storyForDrafts = stories[body.story_index];
+      throw err;
     }
 
     const client = getClient();
@@ -132,55 +200,29 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     const logger = new AiLogger(db, runId);
 
     try {
-      let result;
-      let generationId: number;
+      const result = await generateDrafts(
+        client, db, personaId, logger, context, body.personal_connection, body.length,
+      );
 
-      if (storyForDrafts && body.research_id != null && body.story_index != null) {
-        // ── Story-based path ──────────────────────────────
-        result = await generateDrafts(client, db, personaId, logger, storyForDrafts, body.personal_connection, body.length);
-
-        generationId = insertGeneration(db, personaId, {
-          research_id: body.research_id,
-          post_type: "general",
-          selected_story_index: body.story_index,
+      db.transaction(() => {
+        updateGeneration(db, body.generation_id, {
+          selected_story_index: body.story_index ?? null,
           drafts_json: JSON.stringify(result.drafts),
           prompt_snapshot: result.prompt_snapshot,
-          personal_connection: body.personal_connection,
-          draft_length: body.length,
+          personal_connection: body.personal_connection ?? null,
+          draft_length: body.length ?? null,
         });
 
         insertTopicLog(db, {
-          generation_id: generationId,
-          topic_category: storyForDrafts.tag,
-          was_stretch: storyForDrafts.is_stretch,
+          generation_id: body.generation_id,
+          topic_category: (context.anchorEvidence?.tag ?? context.authorIntent).slice(0, 50),
+          was_stretch: context.anchorEvidence?.is_stretch ?? false,
         });
-      } else {
-        // ── Brainstorm/angle path (thought-leadership) ────
-        const topic = body.topic!;
-        const angle = body.angle!;
-
-        result = await generateDrafts(client, db, personaId, logger, { topic, angle }, body.personal_connection, body.length);
-
-        generationId = insertGeneration(db, personaId, {
-          post_type: "general",
-          drafts_json: JSON.stringify(result.drafts),
-          prompt_snapshot: result.prompt_snapshot,
-          personal_connection: body.personal_connection,
-          draft_length: body.length,
-          brainstorm_topic: topic,
-          brainstorm_angle: angle,
-        });
-
-        insertTopicLog(db, {
-          generation_id: generationId,
-          topic_category: topic.slice(0, 50),
-          was_stretch: false,
-        });
-      }
+      })();
 
       completeRun(db, runId, getRunCost(db, runId));
 
-      return { generation_id: generationId, drafts: result.drafts };
+      return { generation_id: body.generation_id, drafts: result.drafts };
     } catch (err: any) {
       failRun(db, runId, err.message);
       return reply.status(500).send({ error: err.message });
@@ -201,7 +243,19 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(403).send({ error: "Not authorized" });
     }
 
-    const currentDrafts: Draft[] = JSON.parse(generation.drafts_json!);
+    const context = loadWritingContext(db, personaId, generation_id);
+    const currentDrafts: Draft[] = generation.drafts_json ? JSON.parse(generation.drafts_json) : [];
+    const selection = parsePersistedDraftSelection(
+      generation.selected_draft_indices, currentDrafts.length,
+    );
+    if (!selection.valid) {
+      return reply.status(400).send({ error: "Generation has invalid selected draft indices" });
+    }
+    const selectedIndices = selection.indices;
+    if (selectedIndices.length === 0) {
+      return reply.status(400).send({ error: "Select at least one draft to revise" });
+    }
+    const selectedDrafts = selectedIndices.map((index) => currentDrafts[index]);
     const client = getClient();
     const runId = createRun(db, personaId, "revise_drafts", 0);
     const logger = new AiLogger(db, runId);
@@ -209,12 +263,13 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
     try {
       const result = await reviseDrafts(
         client, db, personaId, logger,
-        currentDrafts, feedback,
+        context, selectedDrafts, feedback,
         (generation as any).draft_length
       );
 
       updateGeneration(db, generation_id, {
         drafts_json: JSON.stringify(result.drafts),
+        selected_draft_indices: JSON.stringify([]),
       });
 
       completeRun(db, runId, getRunCost(db, runId));
@@ -503,6 +558,14 @@ Return JSON only:
       return reply.status(403).send({ error: "Not authorized" });
     }
 
+    const context = loadWritingContext(db, personaId, generation_id);
+    const drafts: Draft[] = gen.drafts_json ? JSON.parse(gen.drafts_json) : [];
+    const selection = parsePersistedDraftSelection(gen.selected_draft_indices, drafts.length);
+    if (!selection.valid) {
+      return reply.status(400).send({ error: "Generation has invalid selected draft indices" });
+    }
+    const selectedDrafts = selection.indices.map((index) => drafts[index]);
+
     // GUARD: concurrent request lock
     if (activeGhostwriteRequests.has(generation_id)) {
       return reply.status(429).send({ error: "Request already in progress" });
@@ -528,27 +591,13 @@ Return JSON only:
 
       // Build system prompt — simplified after first turn
       const isFirstTurn = history.length === 0;
-      const drafts: Draft[] = gen.drafts_json ? JSON.parse(gen.drafts_json) : [];
-      const selectedIndices: number[] = gen.selected_draft_indices
-        ? JSON.parse(gen.selected_draft_indices)
-        : [];
-      const selectedDrafts = selectedIndices.map((i) => drafts[i]).filter(Boolean);
-      const research = gen.research_id ? getResearch(db, gen.research_id) : null;
-      const stories: Story[] = research?.stories_json ? JSON.parse(research.stories_json) : [];
-      const story = gen.selected_story_index != null ? stories[gen.selected_story_index] : null;
-      const storyContext = story
-        ? `**${story.headline}**\n${story.summary}`
-        : gen.brainstorm_angle
-          ? `Topic: ${gen.brainstorm_topic}\nAngle: ${gen.brainstorm_angle}`
-          : "";
-
       const systemPrompt = isFirstTurn
         ? buildFirstTurnPrompt(
+            context,
             selectedDrafts.length > 0 ? selectedDrafts : drafts,
             gen.combining_guidance ?? message,
-            storyContext
           )
-        : buildSubsequentTurnPrompt(storyContext);
+        : buildSubsequentTurnPrompt(context);
 
       // Add user message to the messages array for the API call (NOT yet persisted)
       messages.push({ role: "user" as const, content: message });

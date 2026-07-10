@@ -11,6 +11,7 @@ export default function StoryCard({ story, index, selected, onSelect }: StoryCar
   return (
     <button
       onClick={onSelect}
+      aria-pressed={selected}
       className={`w-full text-left rounded-xl p-5 transition-all border ${
         selected
           ? "border-gen-accent-border bg-gen-bg-2 shadow-[inset_3px_0_0_0_var(--color-gen-accent)]"

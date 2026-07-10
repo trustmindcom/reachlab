@@ -10,11 +10,21 @@ import {
   toggleLockedTopic,
   isTopicLocked,
 } from "./lockedTopics";
+import {
+  canGenerateDrafts,
+  canRetryResearch,
+  resolveAmbientIntent,
+  shouldClearAmbientSelection,
+  type ResearchRequest,
+  type ResearchStatus,
+  type SourceContext,
+} from "./generationFlow";
 
 interface DiscoveryViewProps {
   gen: {
+    authorIntent: string;
+    generationId: number | null;
     discoveryTopics: DiscoveryTopic[] | null;
-    selectedTopic: string | null;
     stories: GenStory[];
     articleCount: number;
     sourceCount: number;
@@ -22,14 +32,13 @@ interface DiscoveryViewProps {
     selectedStoryIndex: number | null;
     personalConnection: string;
     draftLength: "short" | "medium" | "long";
-    brainstormAngles: string[];
-    brainstormTopic: string | null;
-    selectedAngle: string | null;
   };
   setGen: SetGen;
   loading: boolean;
   setLoading: (v: boolean) => void;
   onNext: () => void;
+  onStartOver: () => void;
+  onUserActed: () => void;
 }
 
 const DISCOVERY_MESSAGES = [
@@ -50,12 +59,6 @@ const DRAFTS_MESSAGES = [
   "Applying your voice...",
   "Refining structure...",
   "Polishing language...",
-];
-
-const BRAINSTORM_MESSAGES = [
-  "Reading your voice...",
-  "Thinking about angles...",
-  "Finding hot takes...",
 ];
 
 const CACHE_KEY = "reachlab_discovery_cache";
@@ -196,8 +199,8 @@ function flipAnimate(
 
 // ── Main component ─────────────────────────────────────────
 
-export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext }: DiscoveryViewProps) {
-  const [topicInput, setTopicInput] = useState("");
+export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext, onStartOver, onUserActed }: DiscoveryViewProps) {
+  const [topicInput, setTopicInput] = useState(gen.authorIntent);
   const [error, setError] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [activeMessages, setActiveMessages] = useState<string[]>(DISCOVERY_MESSAGES);
@@ -205,6 +208,32 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const [guidanceText, setGuidanceText] = useState("");
   const [isAnimating, setIsAnimating] = useState(false);
   const [lockedTopics, setLockedTopics] = useState<DiscoveryTopic[]>(() => getLockedTopics());
+  const [researchStatus, setResearchStatus] = useState<ResearchStatus>(gen.researchId !== null ? "succeeded" : "idle");
+  const [retryRequest, setRetryRequest] = useState<ResearchRequest | null>(null);
+  const requestTokenRef = useRef(0);
+  const activeAsyncRef = useRef<"discovery" | "generation" | null>(null);
+  const ownedGenerationRef = useRef<{ generationId: number | null; authorIntent: string } | null>(null);
+  const topicInputDirtyRef = useRef(false);
+  const lifecycleEpochRef = useRef(0);
+  const observedPropsRef = useRef({
+    generationId: gen.generationId,
+    authorIntent: gen.authorIntent,
+    researchId: gen.researchId,
+    storiesLength: gen.stories.length,
+  });
+
+  const beginAsyncWork = (kind: "discovery" | "generation") => {
+    const token = ++requestTokenRef.current;
+    activeAsyncRef.current = kind;
+    return token;
+  };
+
+  const isCurrentWork = (token: number) => requestTokenRef.current === token;
+
+  const invalidateAsyncWork = () => {
+    requestTokenRef.current += 1;
+    activeAsyncRef.current = null;
+  };
 
   const isLocked = useCallback(
     (topic: DiscoveryTopic) => isTopicLocked(lockedTopics, topic),
@@ -222,6 +251,48 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   const gridRef = useRef<HTMLDivElement>(null);
   const discoverStartedRef = useRef(false);
 
+  useEffect(() => {
+    const epoch = ++lifecycleEpochRef.current;
+    return () => {
+      queueMicrotask(() => {
+        if (lifecycleEpochRef.current !== epoch) return;
+        invalidateAsyncWork();
+        setLoading(false);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    const previous = observedPropsRef.current;
+    const changed = previous.generationId !== gen.generationId
+      || previous.authorIntent !== gen.authorIntent
+      || previous.researchId !== gen.researchId
+      || previous.storiesLength !== gen.stories.length;
+    observedPropsRef.current = {
+      generationId: gen.generationId,
+      authorIntent: gen.authorIntent,
+      researchId: gen.researchId,
+      storiesLength: gen.stories.length,
+    };
+    if (!changed || activeAsyncRef.current === "generation") return;
+    const ownedGeneration = ownedGenerationRef.current;
+    if (ownedGeneration
+      && ownedGeneration.authorIntent === gen.authorIntent
+      && ownedGeneration.generationId === gen.generationId) {
+      ownedGenerationRef.current = null;
+      return;
+    }
+
+    invalidateAsyncWork();
+    ownedGenerationRef.current = null;
+    if (!topicInputDirtyRef.current) setTopicInput(gen.authorIntent);
+    setResearchStatus(gen.researchId !== null || gen.stories.length > 0 ? "succeeded" : "idle");
+    setRetryRequest(null);
+    setError(null);
+    setIsDiscovering(false);
+    setLoading(false);
+  }, [gen.generationId, gen.authorIntent, gen.researchId, gen.stories.length]);
+
   // Auto-discover on mount: use daily cache if available (StrictMode-safe)
   useEffect(() => {
     if (discoverStartedRef.current) return;
@@ -235,7 +306,6 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
           stories: [],
           researchId: null,
           selectedStoryIndex: null,
-          selectedTopic: null,
         }));
       } else {
         handleDiscover();
@@ -265,6 +335,8 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
   }, [expandedIndex, isAnimating]);
 
   const handleDiscover = async () => {
+    if (activeAsyncRef.current !== null) return;
+    const token = beginAsyncWork("discovery");
     setIsDiscovering(true);
     setLoading(true);
     setError(null);
@@ -272,6 +344,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
     try {
       const res = await api.generateDiscover();
+      if (!isCurrentWork(token)) return;
       const merged = mergeLocked(lockedTopics, res.topics);
       setCachedTopics(merged);
       setGen((prev) => ({
@@ -280,11 +353,13 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
         stories: [],
         researchId: null,
         selectedStoryIndex: null,
-        selectedTopic: null,
       }));
     } catch (err: any) {
+      if (!isCurrentWork(token)) return;
       setError(err.message ?? "Couldn't load topics. Try again.");
     } finally {
+      if (!isCurrentWork(token)) return;
+      activeAsyncRef.current = null;
       setLoading(false);
       setIsDiscovering(false);
     }
@@ -297,17 +372,17 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
     handleDiscover();
   };
 
-  const handleTopicClick = async (label: string, guidance?: string, sourceContext?: { summary: string; source_headline: string; source_url: string }) => {
+  const researchGeneration = async (request: ResearchRequest, existingToken?: number) => {
+    if (existingToken === undefined && activeAsyncRef.current !== null) return;
+    const token = existingToken ?? beginAsyncWork("generation");
     setLoading(true);
     setError(null);
     setActiveMessages(RESEARCH_MESSAGES);
-    const fullTopic = guidance ? `${label} — ${guidance}` : label;
-    setGen((prev) => ({ ...prev, selectedTopic: fullTopic }));
-
-    const avoid = gen.stories.map((s) => s.headline).filter(Boolean);
+    setResearchStatus("loading");
 
     try {
-      const res = await api.generateResearch(fullTopic, avoid.length > 0 ? avoid : undefined, sourceContext);
+      const res = await api.generateResearch(request.generationId, request.avoid, request.sourceContext);
+      if (!isCurrentWork(token)) return;
       setGen((prev) => ({
         ...prev,
         researchId: res.research_id,
@@ -316,36 +391,109 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
         sourceCount: res.source_count,
         selectedStoryIndex: null,
       }));
+      setResearchStatus("succeeded");
     } catch (err: any) {
+      if (!isCurrentWork(token)) return;
       setError(err.message ?? "Research failed. Try again.");
+      setResearchStatus("failed");
     } finally {
+      if (!isCurrentWork(token)) return;
+      activeAsyncRef.current = null;
       setLoading(false);
     }
+  };
+
+  const startIntent = async (authorIntent: string, sourceContext?: SourceContext, clearAmbient = false) => {
+    if (loading || activeAsyncRef.current !== null) return;
+    const intent = authorIntent.trim();
+    if (!intent) return;
+    onUserActed();
+    const token = beginAsyncWork("generation");
+    ownedGenerationRef.current = { generationId: null, authorIntent: intent };
+    if (clearAmbient && shouldClearAmbientSelection(intent)) {
+      setExpandedIndex(null);
+      setGuidanceText("");
+    }
+    setLoading(true);
+    setError(null);
+    setActiveMessages(RESEARCH_MESSAGES);
+    setResearchStatus("loading");
+    setGen((prev) => ({
+      ...prev,
+      authorIntent: intent,
+      generationId: null,
+      discoveryTopics: clearAmbient ? null : prev.discoveryTopics,
+      researchId: null,
+      stories: [],
+      articleCount: 0,
+      sourceCount: 0,
+      selectedStoryIndex: null,
+    }));
+    try {
+      const started = await api.startGeneration(intent);
+      if (!isCurrentWork(token)) return;
+      const request: ResearchRequest = {
+        generationId: started.generation_id,
+        authorIntent: intent,
+        sourceContext,
+      };
+      ownedGenerationRef.current = { generationId: started.generation_id, authorIntent: intent };
+      setRetryRequest(request);
+      setGen((prev) => ({
+        ...prev,
+        authorIntent: intent,
+        generationId: started.generation_id,
+      }));
+      await researchGeneration(request, token);
+    } catch (err: any) {
+      if (!isCurrentWork(token)) return;
+      setError(err.message ?? "Couldn't start generation. Try again.");
+      setResearchStatus("failed");
+      activeAsyncRef.current = null;
+      setLoading(false);
+    }
+  };
+
+  const handleTopicClick = (label: string, guidance: string, sourceContext: SourceContext) => {
+    if (loading || activeAsyncRef.current !== null) return;
+    void startIntent(resolveAmbientIntent(guidance, label), sourceContext);
   };
 
   const handleGoTopic = () => {
+    if (loading || activeAsyncRef.current !== null) return;
     const trimmed = topicInput.trim();
     if (!trimmed) return;
-    handleTopicClick(trimmed);
+    void startIntent(trimmed, undefined, true);
   };
 
-  const handleBackToTopics = () => {
-    setGen((prev) => ({
-      ...prev,
-      stories: [],
-      researchId: null,
-      selectedStoryIndex: null,
-      selectedTopic: null,
-    }));
+  const handleStartOver = () => {
+    invalidateAsyncWork();
+    ownedGenerationRef.current = null;
+    topicInputDirtyRef.current = false;
+    setLoading(false);
+    setTopicInput("");
+    setError(null);
+    setExpandedIndex(null);
+    setGuidanceText("");
+    setResearchStatus("idle");
+    setRetryRequest(null);
+    setIsDiscovering(false);
+    onStartOver();
   };
 
   const handleGenerateDrafts = async () => {
-    // Story-based path
-    if (gen.selectedStoryIndex !== null && gen.researchId !== null) {
+    if (loading || activeAsyncRef.current !== null) return;
+    if (canGenerateDrafts({
+      generationId: gen.generationId,
+      researchStatus,
+      allowIntentOnlyAfterFailure: researchStatus === "failed",
+    }) && gen.generationId !== null) {
+      const token = beginAsyncWork("generation");
       setLoading(true);
       setActiveMessages(DRAFTS_MESSAGES);
       try {
-        const res = await api.generateDrafts(gen.researchId, gen.selectedStoryIndex, gen.personalConnection || undefined, gen.draftLength);
+        const res = await api.generateDrafts(gen.generationId, gen.selectedStoryIndex, gen.personalConnection || undefined, gen.draftLength);
+        if (!isCurrentWork(token)) return;
         setGen((prev) => ({
           ...prev,
           generationId: res.generation_id,
@@ -354,56 +502,14 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
         }));
         onNext();
       } catch (err: any) {
+        if (!isCurrentWork(token)) return;
         setError(err.message ?? "Draft generation failed. Try again.");
       } finally {
+        if (!isCurrentWork(token)) return;
+        activeAsyncRef.current = null;
         setLoading(false);
       }
       return;
-    }
-
-    // Brainstorm/angle path
-    if (gen.selectedAngle && gen.brainstormTopic) {
-      setLoading(true);
-      setActiveMessages(DRAFTS_MESSAGES);
-      try {
-        const res = await api.generateDrafts(null, null, gen.personalConnection || undefined, gen.draftLength, gen.brainstormTopic, gen.selectedAngle);
-        setGen((prev) => ({
-          ...prev,
-          generationId: res.generation_id,
-          drafts: res.drafts,
-          selectedDraftIndices: [],
-        }));
-        onNext();
-      } catch (err: any) {
-        setError(err.message ?? "Draft generation failed. Try again.");
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleBrainstorm = async () => {
-    const topic = gen.selectedTopic || topicInput.trim();
-    if (!topic) return;
-    setLoading(true);
-    setActiveMessages(BRAINSTORM_MESSAGES);
-    setError(null);
-    try {
-      const res = await api.brainstormAngles(topic);
-      setGen((prev) => ({
-        ...prev,
-        brainstormAngles: res.angles,
-        brainstormTopic: topic,
-        selectedAngle: null,
-        // Clear story selection
-        stories: [],
-        researchId: null,
-        selectedStoryIndex: null,
-      }));
-    } catch (err: any) {
-      setError(err.message ?? "Brainstorm failed. Try again.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -475,13 +581,43 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
 
   const hasStories = gen.stories.length > 0;
   const hasTopics = gen.discoveryTopics && gen.discoveryTopics.length > 0;
+  const currentRetryRequest: ResearchRequest | null = retryRequest && gen.generationId !== null
+    ? { ...retryRequest, generationId: gen.generationId, authorIntent: gen.authorIntent }
+    : null;
+  const retryEligible = retryRequest !== null
+    && currentRetryRequest !== null
+    && canRetryResearch(researchStatus, retryRequest, currentRetryRequest);
+  const showDraftControls = canGenerateDrafts({
+    generationId: gen.generationId,
+    researchStatus,
+    allowIntentOnlyAfterFailure: false,
+  });
 
   return (
     <div>
       {/* Error state */}
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[15px] text-red-400">
-          {error}
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-[15px] text-red-400">
+          <p>{error}</p>
+          {researchStatus === "failed" && gen.generationId !== null && (
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={handleGenerateDrafts}
+                disabled={loading}
+                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 font-medium rounded-lg"
+              >
+                Generate from my intent
+              </button>
+              {retryEligible && retryRequest && (
+                <button
+                  onClick={() => void researchGeneration(retryRequest)}
+                  className="px-4 py-2 border border-red-500/30 text-red-300 font-medium rounded-lg"
+                >
+                  Retry research
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -491,6 +627,8 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
           <textarea
             value={topicInput}
             onChange={(e) => {
+              onUserActed();
+              topicInputDirtyRef.current = true;
               setTopicInput(e.target.value);
               // Auto-expand: reset height then set to scrollHeight
               e.target.style.height = "auto";
@@ -508,6 +646,14 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
           >
             Go
           </button>
+          {gen.generationId !== null && (
+            <button
+              onClick={handleStartOver}
+              className="px-4 py-3 border border-gen-border-1 text-gen-text-2 text-[15px] font-medium rounded-[10px] hover:text-gen-text-0 hover:border-gen-border-2 transition-colors"
+            >
+              Start over
+            </button>
+          )}
         </div>
       )}
 
@@ -662,7 +808,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                               />
                               <div className="flex items-center gap-3">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleTopicClick(topic.label, guidanceText.trim() || undefined, { summary: topic.summary, source_headline: topic.source_headline, source_url: topic.source_url }); }}
+                                  onClick={(e) => { e.stopPropagation(); handleTopicClick(topic.label, guidanceText, { summary: topic.summary, source_headline: topic.source_headline, source_url: topic.source_url }); }}
                                   className="px-7 py-3 bg-gen-accent text-white text-[15px] font-medium rounded-[10px] hover:opacity-90 transition-opacity duration-150"
                                 >
                                   Write about this
@@ -711,21 +857,27 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
       )}
 
       {/* Story cards — shown after clicking a topic or entering a topic */}
-      {!loading && hasStories && (
+      {!loading && (hasStories || showDraftControls) && researchStatus !== "failed" && (
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[15px] font-medium text-gen-text-0">
-              Pick a story to write about
+              {hasStories ? "Choose supporting evidence (optional)" : "Generate directly from your intent"}
             </h2>
             <button
-              onClick={handleBackToTopics}
+              onClick={handleStartOver}
               className="text-[15px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
             >
               Back to topics
             </button>
           </div>
 
-          <div className="space-y-3">
+          {hasStories && (
+            <p className="text-[14px] text-gen-text-3 mb-4">
+              Select a story to anchor the draft, or leave all stories unselected to use them as supporting evidence.
+            </p>
+          )}
+
+          {hasStories && <div className="space-y-3">
             {gen.stories.map((story, i) => (
               <StoryCard
                 key={i}
@@ -733,26 +885,17 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 index={i}
                 selected={gen.selectedStoryIndex === i}
                 onSelect={() =>
-                  setGen((prev) => ({ ...prev, selectedStoryIndex: i }))
+                  setGen((prev) => ({
+                    ...prev,
+                    selectedStoryIndex: prev.selectedStoryIndex === i ? null : i,
+                  }))
                 }
               />
             ))}
-          </div>
-
-          {/* Brainstorm option — skip stories, find your own angle */}
-          <div className="mt-4 pt-4 border-t border-gen-border-1">
-            <button
-              onClick={handleBrainstorm}
-              className="w-full text-left px-5 py-4 rounded-xl border border-dashed border-gen-border-2 text-gen-text-2 hover:text-gen-text-0 hover:border-gen-accent/40 hover:bg-gen-bg-2/30 transition-colors duration-150 ease-[var(--ease-snappy)]"
-            >
-              <span className="text-[15px] font-medium">I don't need a story</span>
-              <span className="text-[14px] text-gen-text-3 ml-2">— help me find my angle on this topic</span>
-            </button>
-          </div>
+          </div>}
 
           {/* Personal connection */}
-          {gen.selectedStoryIndex !== null && (
-            <div className="mt-4 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-xl space-y-2">
+          <div className="mt-4 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-xl space-y-2">
               <h3 className="text-[16px] font-medium text-gen-text-0">
                 What's your personal connection to this?
               </h3>
@@ -765,15 +908,14 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    if (gen.selectedStoryIndex !== null && !loading) handleGenerateDrafts();
+                    if (!loading && showDraftControls) handleGenerateDrafts();
                   }
                 }}
                 rows={3}
                 placeholder='e.g. "We migrated off Heroku to AWS and it took 6 months longer than estimated..."'
                 className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[15px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
               />
-            </div>
-          )}
+          </div>
 
           {/* Bottom bar */}
           <div className="flex items-center justify-between mt-6 pt-4 border-t border-gen-border-1">
@@ -798,125 +940,7 @@ export default function DiscoveryView({ gen, setGen, loading, setLoading, onNext
               </div>
               <button
                 onClick={handleGenerateDrafts}
-                disabled={gen.selectedStoryIndex === null || loading}
-                className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Generate drafts
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Brainstorm angles — shown after clicking "I don't need a story" */}
-      {!loading && gen.brainstormAngles.length > 0 && !hasStories && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[15px] font-medium text-gen-text-0">
-              Pick an angle to write about
-            </h2>
-            <button
-              onClick={() => {
-                setGen((prev) => ({
-                  ...prev,
-                  brainstormAngles: [],
-                  brainstormTopic: null,
-                  selectedAngle: null,
-                }));
-              }}
-              className="text-[15px] text-gen-text-3 hover:text-gen-text-1 transition-colors duration-150 ease-[var(--ease-snappy)]"
-            >
-              Back
-            </button>
-          </div>
-
-          <p className="text-[14px] text-gen-text-3 mb-4">
-            {gen.brainstormTopic}
-          </p>
-
-          <div className="space-y-2">
-            {gen.brainstormAngles.map((angle, i) => {
-              const isSelected = gen.selectedAngle === angle;
-              return (
-                <button
-                  key={i}
-                  onClick={() => setGen((prev) => ({ ...prev, selectedAngle: isSelected ? null : angle }))}
-                  className={`w-full text-left rounded-xl px-5 py-4 transition-all border ${
-                    isSelected
-                      ? "border-gen-accent-border bg-gen-bg-2 shadow-[inset_3px_0_0_0_var(--color-gen-accent)]"
-                      : "border-gen-border-1 bg-gen-bg-1 hover:border-gen-border-2"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-1 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                      isSelected ? "border-gen-accent bg-gen-accent" : "border-gen-text-4"
-                    }`}>
-                      {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                    </div>
-                    <span className="text-[15px] text-gen-text-1 leading-snug">{angle}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Or write your own */}
-          <div className="mt-4">
-            <textarea
-              value={gen.selectedAngle && !gen.brainstormAngles.includes(gen.selectedAngle) ? gen.selectedAngle : ""}
-              onChange={(e) => setGen((prev) => ({ ...prev, selectedAngle: e.target.value || null }))}
-              rows={2}
-              placeholder="Or write your own angle..."
-              className="w-full bg-gen-bg-1 border border-gen-border-1 rounded-lg px-4 py-3 text-[15px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
-            />
-          </div>
-
-          {/* Personal connection */}
-          {gen.selectedAngle && (
-            <div className="mt-4 p-4 bg-gen-bg-1 border border-gen-border-1 rounded-xl space-y-2">
-              <h3 className="text-[16px] font-medium text-gen-text-0">
-                What's your personal connection to this?
-              </h3>
-              <p className="text-[14px] text-gen-text-3">
-                Optional — helps the AI ground the draft in your real experience.
-              </p>
-              <textarea
-                value={gen.personalConnection}
-                onChange={(e) => setGen((prev) => ({ ...prev, personalConnection: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (gen.selectedAngle && !loading) handleGenerateDrafts();
-                  }
-                }}
-                rows={3}
-                placeholder='e.g. "I spent 6 months building a vendor assessment program from scratch..."'
-                className="w-full bg-gen-bg-0 border border-gen-border-1 rounded-lg px-3 py-2 text-[15px] text-gen-text-0 placeholder:text-gen-text-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gen-accent/50 focus-visible:border-gen-accent resize-none"
-              />
-            </div>
-          )}
-
-          {/* Bottom bar */}
-          <div className="flex items-center justify-end mt-6 pt-4 border-t border-gen-border-1">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center bg-gen-bg-2 rounded-lg p-0.5">
-                {(["short", "medium", "long"] as const).map((len) => (
-                  <button
-                    key={len}
-                    onClick={() => setGen((prev) => ({ ...prev, draftLength: len }))}
-                    className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors duration-150 ease-[var(--ease-snappy)] capitalize ${
-                      gen.draftLength === len
-                        ? "bg-gen-bg-0 text-gen-text-0 shadow-sm"
-                        : "text-gen-text-3 hover:text-gen-text-1"
-                    }`}
-                  >
-                    {len}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={handleGenerateDrafts}
-                disabled={!gen.selectedAngle || loading}
+                disabled={!showDraftControls || loading}
                 className="px-4 py-2 bg-gen-text-0 text-gen-bg-0 text-[15px] font-medium rounded-[10px] hover:bg-white transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Generate drafts

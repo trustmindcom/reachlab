@@ -228,6 +228,11 @@ export interface HealthData {
 
 // ── Generate Pipeline Types ─────────────────────────────────
 
+export interface GenStartResponse {
+  generation_id: number;
+  author_intent: string;
+}
+
 export interface GenResearchResponse {
   research_id: number;
   stories: GenStory[];
@@ -327,6 +332,7 @@ export interface GenHistoryResponse {
 
 export interface GenHistoryDetail {
   id: number;
+  author_intent: string | null;
   research_id: number | null;
   post_type: string;
   selected_story_index: number | null;

@@ -113,7 +113,12 @@ describe("drafter", () => {
       angles: ["Cost reduction angle"],
       is_stretch: false,
     };
-    const result = await generateDrafts(client, db, 1, logger, story);
+    const result = await generateDrafts(client, db, 1, logger, {
+      generationId: 1,
+      authorIntent: "Explain why lower AI costs change operating decisions.",
+      anchorEvidence: story,
+      supportingEvidence: [],
+    });
     expect(result.drafts).toHaveLength(3);
     expect(result.drafts[0].type).toBe("contrarian");
     expect(result.drafts[1].type).toBe("operator");

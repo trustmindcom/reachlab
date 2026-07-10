@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import fs from "fs";
 import path from "path";
 import { initDatabase } from "../db/index.js";
+import { insertLegacyGenerationFixture } from "./helpers/generation-fixtures.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-persona-guard.db");
 
@@ -26,12 +27,12 @@ afterAll(async () => {
 async function createTestGeneration(personaId: number): Promise<number> {
   const db = initDatabase(TEST_DB_PATH);
   try {
-    const { insertResearch, insertGeneration } = await import("../db/generate-queries.js");
+    const { insertResearch } = await import("../db/generate-queries.js");
     const researchId = insertResearch(db, personaId, {
       post_type: "general",
       stories_json: "[]",
     });
-    const genId = insertGeneration(db, personaId, {
+    const genId = insertLegacyGenerationFixture(db, personaId, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,

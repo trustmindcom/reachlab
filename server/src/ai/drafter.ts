@@ -5,7 +5,8 @@ import { MODELS } from "./client.js";
 import { streamWithIdleTimeout } from "./stream-with-idle.js";
 import { AiLogger } from "./logger.js";
 import { assemblePrompt } from "./prompt-assembler.js";
-import type { Story, Draft } from "../db/generate-queries.js";
+import type { Draft } from "../db/generate-queries.js";
+import { renderWritingContext, type WritingContext } from "./writing-context.js";
 
 export interface DraftResult {
   drafts: Draft[];
@@ -14,22 +15,13 @@ export interface DraftResult {
   output_tokens: number;
 }
 
-export interface BrainstormResult {
-  angles: string[];
-  input_tokens: number;
-  output_tokens: number;
-}
-
-/** Context for draft generation: either a news story or a freeform topic+angle. */
-export type DraftContext = Story | { topic: string; angle: string };
-
 const VARIATION_INSTRUCTIONS: Record<string, string> = {
   contrarian:
     "Write a CONTRARIAN variation. Challenge the obvious take. Lead with what most people get wrong about this topic. Be specific about why the conventional wisdom fails.",
   operator:
     "Write an OPERATOR variation. Ground the post in practitioner perspective — the kind of thing someone who has done the work would notice. If an Author Profile is provided in the system prompt, draw on those specific experiences. If NOT, write from a general practitioner's viewpoint without inventing specific personal details (no fake companies, timelines, or projects).",
   future:
-    "Write a FUTURE-FACING variation. Extrapolate from this story to what it means 2-5 years out. Make a specific prediction grounded in the current evidence. Be bold but defensible.",
+    "Write a FUTURE-FACING variation. Extrapolate from the author's controlling intent to what it means 2-5 years out. Make a specific prediction grounded in the author's argument. When evidence is provided, use it only as factual support; it may inform but must not replace or redefine the intent. Be bold but defensible.",
 };
 
 export type DraftLength = "short" | "medium" | "long";
@@ -47,94 +39,23 @@ export const LENGTH_INSTRUCTIONS: Record<DraftLength, string> = {
 };
 
 /**
- * Brainstorm 5-7 bold angle bullets for a topic, using the full prompt context
- * (rules, coaching insights, author profile, anti-AI tropes).
- */
-export async function brainstormAngles(
-  client: Anthropic,
-  db: Database.Database,
-  personaId: number,
-  logger: AiLogger,
-  topic: string,
-): Promise<BrainstormResult> {
-  const assembled = assemblePrompt(db, personaId, "");
-  const start = Date.now();
-  const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
-    model: MODELS.SONNET,
-    max_tokens: 1500,
-    system: assembled.system,
-    messages: [
-      {
-        role: "user",
-        content: `I want to write a LinkedIn post about: "${topic}"
-
-I'm not reacting to a news story — I want to share my own perspective and expertise on this topic.
-
-Generate 5-7 distinct angle bullets I could write about. Each should be:
-- A bold, specific claim or insight (not a vague theme)
-- The kind of thing that runs counter to conventional wisdom, reveals a hidden truth, or reframes how people think about this topic
-- Something that would make a practitioner stop scrolling and think "that's a good point"
-- Written as a single sentence that could serve as the post's thesis
-
-Vary the types: include hot takes, contrarian views, practical frameworks, and "here's what nobody talks about" angles.
-
-Return JSON only (no markdown fences):
-{ "angles": ["angle 1", "angle 2", ...] }`,
-      },
-    ],
-  });
-
-  const duration = Date.now() - start;
-  logger.log({
-    step: "brainstorm_angles",
-    model: MODELS.SONNET,
-    input_messages: JSON.stringify([{ role: "user", content: `Brainstorm angles: ${topic}` }]),
-    output_text: text,
-    tool_calls: null,
-    input_tokens,
-    output_tokens,
-    thinking_tokens,
-    duration_ms: duration,
-  });
-
-  const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Brainstorm response did not contain valid JSON");
-  }
-  const parsed = JSON.parse(jsonrepair(jsonMatch[0]));
-  return {
-    angles: Array.isArray(parsed.angles) ? parsed.angles : [],
-    input_tokens,
-    output_tokens,
-  };
-}
-
-function isStory(ctx: DraftContext): ctx is Story {
-  return "headline" in ctx;
-}
-
-/**
  * Generate 3 draft variations (contrarian, operator, future-facing).
- * Accepts either a news Story or a freeform {topic, angle} for thought-leadership posts.
  */
 export async function generateDrafts(
   client: Anthropic,
   db: Database.Database,
   personaId: number,
   logger: AiLogger,
-  context: DraftContext,
+  context: WritingContext,
   personalConnection?: string,
   length?: DraftLength
 ): Promise<DraftResult> {
-  const storyContext = isStory(context)
-    ? `**${context.headline}**\n${context.summary}\nSource: ${context.source} | ${context.age}\nPossible angles: ${context.angles.join("; ")}`
-    : `Topic: ${context.topic}\n\nAngle: ${context.angle}\n\nThis is a thought-leadership post. No news story anchor — write from the author's own expertise, experience, and perspective.`;
+  const writingContext = renderWritingContext(context);
   const connectionContext = personalConnection
     ? `\n\n## Personal Connection\n${personalConnection}`
     : "";
   const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
-  const assembled = assemblePrompt(db, personaId, storyContext);
+  const assembled = assemblePrompt(db, personaId, "");
 
   const draftPromises = Object.entries(VARIATION_INSTRUCTIONS).map(
     async ([variationType, instruction]): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
@@ -146,7 +67,9 @@ export async function generateDrafts(
         messages: [
           {
             role: "user",
-            content: `${instruction}${connectionContext}${lengthContext}
+            content: `${writingContext}
+
+${instruction}${connectionContext}${lengthContext}
 
 Return JSON:
 {
@@ -203,7 +126,7 @@ Return JSON:
 
   return {
     drafts,
-    prompt_snapshot: assembled.system,
+    prompt_snapshot: `${assembled.system}\n\n${writingContext}`,
     input_tokens: totalInput,
     output_tokens: totalOutput,
   };
@@ -217,17 +140,25 @@ export async function reviseDrafts(
   db: Database.Database,
   personaId: number,
   logger: AiLogger,
+  context: WritingContext,
   currentDrafts: Draft[],
   feedback: string,
   length?: DraftLength
 ): Promise<DraftResult> {
   const assembled = assemblePrompt(db, personaId, "");
+  const writingContext = renderWritingContext(context);
   const lengthContext = length ? `\n\n## Length\n${LENGTH_INSTRUCTIONS[length]}` : "";
 
   const draftPromises = currentDrafts.map(
     async (draft, i): Promise<{ draft: Draft; input_tokens: number; output_tokens: number }> => {
       const start = Date.now();
-      const currentDraftText = `HOOK: ${draft.hook}\n\nBODY: ${draft.body}\n\nCLOSING: ${draft.closing}`;
+      const currentDraftData = JSON.stringify({
+        type: draft.type,
+        hook: draft.hook,
+        body: draft.body,
+        closing: draft.closing,
+      });
+      const feedbackData = JSON.stringify(feedback);
 
       const { text, input_tokens, output_tokens, thinking_tokens } = await streamWithIdleTimeout(client, {
         model: MODELS.SONNET,
@@ -236,14 +167,18 @@ export async function reviseDrafts(
         messages: [
           {
             role: "user",
-            content: `Here is a ${draft.type} draft variation I generated:
+            content: `${writingContext}
 
-${currentDraftText}
+## SELECTED DRAFT TO REVISE
 
-The user reviewed all three drafts and gave this feedback:
-"${feedback}"
+Selected draft data: ${currentDraftData}
 
-Rewrite this ${draft.type} variation to address the feedback. Keep the same variation style (${VARIATION_INSTRUCTIONS[draft.type] ? draft.type : "general"}) but incorporate what the user wants changed.${lengthContext}
+## FEEDBACK
+
+The user reviewed the selected drafts and gave this feedback data:
+${feedbackData}
+
+Rewrite this selected variation to address the feedback. Preserve the variation characteristics represented in the selected draft data while incorporating what the user wants changed.${lengthContext}
 
 Return JSON:
 {
@@ -300,7 +235,7 @@ Return JSON:
 
   return {
     drafts,
-    prompt_snapshot: assembled.system,
+    prompt_snapshot: `${assembled.system}\n\n${writingContext}`,
     input_tokens: totalInput,
     output_tokens: totalOutput,
   };

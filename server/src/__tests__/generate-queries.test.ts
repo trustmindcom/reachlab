@@ -10,7 +10,6 @@ import {
   updateCoachingInsight,
   insertResearch,
   getResearch,
-  insertGeneration,
   startGeneration,
   getGeneration,
   updateGeneration,
@@ -37,6 +36,7 @@ import {
   updateRule,
 } from "../db/generate-queries.js";
 import { initDatabase } from "../db/index.js";
+import { insertLegacyGenerationFixture } from "./helpers/generation-fixtures.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-generate-queries.db");
 const PERSONA_ID = 1;
@@ -198,7 +198,7 @@ describe("generations", () => {
       post_type: "topic",
       stories_json: JSON.stringify([]),
     });
-    genId = insertGeneration(db, PERSONA_ID, {
+    genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "topic",
       selected_story_index: 0,
@@ -232,7 +232,7 @@ describe("generations", () => {
 describe("generation_revisions", () => {
   it("inserts a revision", () => {
     const researchId = insertResearch(db, PERSONA_ID, { post_type: "news", stories_json: "[]" });
-    const genId = insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "news",
       selected_story_index: 0,
@@ -276,7 +276,7 @@ describe("coaching_change_log", () => {
 describe("generation_topic_log", () => {
   it("tracks topic selections", () => {
     const researchId = insertResearch(db, PERSONA_ID, { post_type: "news", stories_json: "[]" });
-    const genId = insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "news",
       selected_story_index: 0,
@@ -325,7 +325,7 @@ describe("generation_messages queries", () => {
       post_type: "general",
       stories_json: "[]",
     });
-    const genId = insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,
@@ -357,12 +357,32 @@ describe("generation_messages queries", () => {
 });
 
 describe("getActiveGeneration", () => {
+  it("returns the newest nondiscarded author-intent row before drafts exist", () => {
+    const generationId = startGeneration(db, PERSONA_ID, "Restore this early intent");
+
+    const active = getActiveGeneration(db, PERSONA_ID);
+
+    expect(active?.id).toBe(generationId);
+    expect(active?.author_intent).toBe("Restore this early intent");
+    expect(active?.drafts_json).toBeNull();
+  });
+
+  it("skips a corrupt newest intent draft row and restores the prior valid row", () => {
+    const fallbackId = startGeneration(db, PERSONA_ID, "Restore this valid early row");
+    const corruptId = startGeneration(db, PERSONA_ID, "Do not restore corrupt drafts");
+    updateGeneration(db, corruptId, { drafts_json: "not JSON" });
+
+    const active = getActiveGeneration(db, PERSONA_ID);
+
+    expect(active?.id).toBe(fallbackId);
+  });
+
   it("returns the most recent draft generation with drafts", () => {
     const researchId = insertResearch(db, PERSONA_ID, {
       post_type: "general",
       stories_json: JSON.stringify([{ headline: "Active test" }]),
     });
-    const genId = insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,
@@ -375,7 +395,7 @@ describe("getActiveGeneration", () => {
     expect(active!.status).toBe("draft");
   });
 
-  it("does not return discarded generations", () => {
+  it("does not return a discarded generation", () => {
     // Get the current active, then discard it
     const active = getActiveGeneration(db, PERSONA_ID);
     expect(active).toBeDefined();
@@ -386,7 +406,7 @@ describe("getActiveGeneration", () => {
       post_type: "general",
       stories_json: "[]",
     });
-    const genId = insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,
@@ -394,10 +414,9 @@ describe("getActiveGeneration", () => {
     });
     updateGeneration(db, genId, { status: "discarded" });
 
-    // Use a separate persona to avoid interference from other tests
     const result = getActiveGeneration(db, PERSONA_ID);
-    // All draft generations for this persona should be discarded at this point
-    expect(result).toBeUndefined();
+    expect(result?.id).not.toBe(genId);
+    expect(result?.status).toBe("draft");
   });
 
   it("does not return generations with empty drafts", () => {
@@ -406,7 +425,7 @@ describe("getActiveGeneration", () => {
       stories_json: "[]",
     });
     // Insert a generation with empty drafts array
-    insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,
@@ -414,11 +433,7 @@ describe("getActiveGeneration", () => {
     });
 
     const active = getActiveGeneration(db, PERSONA_ID);
-    // Should not return the empty-drafts generation
-    if (active) {
-      const drafts = JSON.parse(active.drafts_json!);
-      expect(drafts.length).toBeGreaterThan(0);
-    }
+    expect(active?.id).not.toBe(genId);
   });
 
   it("does not return generations older than 7 days", () => {
@@ -426,7 +441,7 @@ describe("getActiveGeneration", () => {
       post_type: "general",
       stories_json: "[]",
     });
-    const genId = insertGeneration(db, PERSONA_ID, {
+    const genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,
@@ -447,7 +462,7 @@ describe("generation_messages tool_blocks_json", () => {
 
   beforeAll(() => {
     const researchId = insertResearch(db, PERSONA_ID, { post_type: "general", stories_json: "[]" });
-    genId = insertGeneration(db, PERSONA_ID, {
+    genId = insertLegacyGenerationFixture(db, PERSONA_ID, {
       research_id: researchId,
       post_type: "general",
       selected_story_index: 0,
