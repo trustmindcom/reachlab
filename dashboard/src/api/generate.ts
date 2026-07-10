@@ -1,6 +1,7 @@
 import { getUnscoped, withPersonaId } from "./helpers.js";
 import type {
   DiscoveryResponse,
+  GenStartResponse,
   GenResearchResponse,
   GenDraftsResponse,
   GenChatResponse,
@@ -21,8 +22,32 @@ import type {
   ExtractedProfileResponse,
 } from "./types.js";
 
+async function generateResponse<T>(response: Response): Promise<T> {
+  if (response.ok) return response.json() as Promise<T>;
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    body = undefined;
+  }
+  const message = body && typeof body === "object"
+    ? ["error", "detail", "message"]
+        .map((key) => (body as Record<string, unknown>)[key])
+        .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : undefined;
+  throw new Error(message ?? `API error: ${response.status}`);
+}
+
 export const generateApi = {
   // ── Generate Pipeline ─────────────────────────────────────
+
+  startGeneration: (authorIntent: string) =>
+    fetch(withPersonaId(`/api/generate/start`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author_intent: authorIntent }),
+    }).then((r) => generateResponse<GenStartResponse>(r)),
 
   generateDiscover: () =>
     fetch(withPersonaId(`/api/generate/discover`), { method: "POST" }).then((r) => {
@@ -30,52 +55,33 @@ export const generateApi = {
       return r.json() as Promise<DiscoveryResponse>;
     }),
 
-  generateResearch: (topic: string, avoid?: string[], sourceContext?: { summary: string; source_headline: string; source_url: string }) =>
+  generateResearch: (generationId: number, avoid?: string[], sourceContext?: { summary: string; source_headline: string; source_url: string }) =>
     fetch(withPersonaId(`/api/generate/research`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic,
+        generation_id: generationId,
         ...(avoid && avoid.length > 0 && { avoid }),
         ...(sourceContext && { source_context: sourceContext }),
       }),
-    }).then((r) => {
-      if (!r.ok) throw new Error(`API error: ${r.status}`);
-      return r.json() as Promise<GenResearchResponse>;
-    }),
-
-  brainstormAngles: (topic: string) =>
-    fetch(withPersonaId(`/api/generate/brainstorm`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic }),
-    }).then((r) => {
-      if (!r.ok) throw new Error(`API error: ${r.status}`);
-      return r.json() as Promise<{ angles: string[] }>;
-    }),
+    }).then((r) => generateResponse<GenResearchResponse>(r)),
 
   generateDrafts: (
-    researchId: number | null,
+    generationId: number,
     storyIndex: number | null,
     personalConnection?: string,
     length?: "short" | "medium" | "long",
-    topic?: string,
-    angle?: string,
   ) =>
     fetch(withPersonaId(`/api/generate/drafts`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...(researchId != null && storyIndex != null
-          ? { research_id: researchId, story_index: storyIndex }
-          : { topic, angle }),
+        generation_id: generationId,
+        ...(storyIndex !== null && { story_index: storyIndex }),
         personal_connection: personalConnection,
         length,
       }),
-    }).then((r) => {
-      if (!r.ok) throw new Error(`API error: ${r.status}`);
-      return r.json() as Promise<GenDraftsResponse>;
-    }),
+    }).then((r) => generateResponse<GenDraftsResponse>(r)),
 
   reviseDrafts: (generationId: number, feedback: string) =>
     fetch(withPersonaId(`/api/generate/revise-drafts`), {

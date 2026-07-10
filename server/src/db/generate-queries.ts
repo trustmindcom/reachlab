@@ -147,41 +147,6 @@ export function getPostTypeTemplate(
 
 // ── Generations ────────────────────────────────────────────
 
-export function insertGeneration(
-  db: Database.Database,
-  personaId: number,
-  data: {
-    research_id?: number | null;
-    post_type: string;
-    selected_story_index?: number | null;
-    drafts_json?: string;
-    prompt_snapshot?: string;
-    personal_connection?: string;
-    draft_length?: string;
-    brainstorm_topic?: string;
-    brainstorm_angle?: string;
-  }
-): number {
-  const result = db
-    .prepare(
-      `INSERT INTO generations (persona_id, research_id, post_type, selected_story_index, drafts_json, prompt_snapshot, personal_connection, draft_length, brainstorm_topic, brainstorm_angle)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      personaId,
-      data.research_id ?? null,
-      data.post_type,
-      data.selected_story_index ?? null,
-      data.drafts_json ?? null,
-      data.prompt_snapshot ?? null,
-      data.personal_connection ?? null,
-      data.draft_length ?? null,
-      data.brainstorm_topic ?? null,
-      data.brainstorm_angle ?? null,
-    );
-  return Number(result.lastInsertRowid);
-}
-
 export function startGeneration(
   db: Database.Database,
   personaId: number,
@@ -469,18 +434,17 @@ export function getCoachingChange(db: Database.Database, id: number): any | unde
 // ── Active generation (auto-restore) ────────────────────
 
 export function getActiveGeneration(db: Database.Database, personaId: number): GenerationRecord | undefined {
-  // Only restore generations that have drafts (step 2+). Step-1-only work (topic + research
-  // but no drafts yet) is excluded intentionally — research is cheap to redo and the user
-  // hasn't invested significant review effort at that point.
   return db.prepare(`
     SELECT * FROM generations
     WHERE persona_id = ?
       AND status = 'draft'
-      AND drafts_json IS NOT NULL
-      AND json_valid(drafts_json)
-      AND json_array_length(drafts_json) > 0
+      AND ((author_intent IS NOT NULL AND drafts_json IS NULL) OR (
+        drafts_json IS NOT NULL
+        AND json_valid(drafts_json)
+        AND json_array_length(drafts_json) > 0
+      ))
       AND updated_at > datetime('now', '-7 days')
-    ORDER BY updated_at DESC
+    ORDER BY updated_at DESC, id DESC
     LIMIT 1
   `).get(personaId) as GenerationRecord | undefined;
 }

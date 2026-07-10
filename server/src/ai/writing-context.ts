@@ -44,6 +44,7 @@ export function loadWritingContext(
   db: Database.Database,
   personaId: number,
   generationId: number,
+  selectedStoryIndexOverride?: number | null,
 ): WritingContext {
   const generation = db.prepare(`
     SELECT id, author_intent, research_id, selected_story_index
@@ -56,6 +57,9 @@ export function loadWritingContext(
 
   let anchorEvidence: Story | null = null;
   let supportingEvidence: Story[] = [];
+  const selectedIndex = selectedStoryIndexOverride === undefined
+    ? generation.selected_story_index
+    : selectedStoryIndexOverride;
 
   if (generation.research_id !== null) {
     const research = db.prepare(`
@@ -77,8 +81,6 @@ export function loadWritingContext(
       throw new Error("Generation research contains invalid stories");
     }
     const stories: Story[] = parsedStories.data;
-    const selectedIndex = generation.selected_story_index;
-
     if (selectedIndex !== null) {
       if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= stories.length) {
         throw new Error("Generation has invalid selected story index");
@@ -88,7 +90,7 @@ export function loadWritingContext(
     } else {
       supportingEvidence = stories;
     }
-  } else if (generation.selected_story_index !== null) {
+  } else if (selectedIndex !== null) {
     throw new Error("Generation has invalid selected story index");
   }
 

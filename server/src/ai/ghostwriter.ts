@@ -6,6 +6,7 @@ import { GHOSTWRITER_TOOLS, createGhostwriterState, executeGhostwriterTool } fro
 import { insertGenerationMessage } from "../db/generate-queries.js";
 import type { AiLogger } from "./logger.js";
 import { agentTurn } from "./agent-loop.js";
+import { renderWritingContext, type WritingContext } from "./writing-context.js";
 
 // Re-export so existing imports from ghostwriter.js keep working
 export { expandMessageRow, CLEARED_TOOL_RESULT, type StoredToolBlock } from "./agent-loop.js";
@@ -71,30 +72,41 @@ When you update the draft, always use the update_draft tool with the FULL draft 
 After updating, explain what you changed in 1-2 sentences, then ask ONE focused question to guide the next refinement.`;
 
 export function buildFirstTurnPrompt(
+  context: WritingContext,
   selectedDrafts: Draft[],
   userFeedback: string,
-  storyContext: string
 ): string {
+  const writingContext = renderWritingContext(context);
   const draftsSection = selectedDrafts
-    .map((d, i) => `### Draft ${i + 1} (${d.type})\n**Hook:** ${d.hook}\n\n${d.body}\n\n**Closing:** ${d.closing}`)
+    .map((draft, index) => `Selected draft ${index + 1}: ${JSON.stringify({
+      type: draft.type,
+      hook: draft.hook,
+      body: draft.body,
+      closing: draft.closing,
+    })}`)
     .join("\n\n");
+  const feedbackData = userFeedback
+    ? JSON.stringify(userFeedback)
+    : "(No specific guidance)";
 
-  return `You are a LinkedIn ghostwriter. The user has selected draft variations and wants you to combine and refine them into a single strong post through conversation.
+  return `${writingContext}
+
+You are a LinkedIn ghostwriter. The user has selected draft variations and wants you to combine and refine them into a single strong post through conversation.
 
 ## Selected Drafts
 ${draftsSection || "(No drafts provided)"}
 
 ## User's Guidance
-${userFeedback || "(No specific guidance)"}
+${feedbackData}
 
-${storyContext ? `## Story Context\n${storyContext}\n` : ""}
 ${BEHAVIORAL_INSTRUCTIONS}`;
 }
 
-export function buildSubsequentTurnPrompt(storyContext: string): string {
-  return `You are a LinkedIn ghostwriter helping refine a draft through conversation. The draft is being edited in a side panel — the user can see and edit it directly.
+export function buildSubsequentTurnPrompt(context: WritingContext): string {
+  return `${renderWritingContext(context)}
 
-${storyContext ? `## Story Context\n${storyContext}\n` : ""}
+You are a LinkedIn ghostwriter helping refine a draft through conversation. The draft is being edited in a side panel — the user can see and edit it directly.
+
 ${BEHAVIORAL_INSTRUCTIONS}`;
 }
 

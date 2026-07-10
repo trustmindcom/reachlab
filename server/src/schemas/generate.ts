@@ -1,9 +1,12 @@
 import { z } from "zod";
 
+export const startGenerationBody = z.object({
+  author_intent: z.string().trim().min(1).max(10000),
+});
+
 export const researchBody = z.object({
-  topic: z.string().trim().min(1),
+  generation_id: z.number().int().positive(),
   avoid: z.array(z.string().max(500)).max(50).optional(),
-  sources: z.array(z.string()).optional(),
   source_context: z.object({
     summary: z.string().max(2000),
     source_headline: z.string().max(500),
@@ -12,19 +15,10 @@ export const researchBody = z.object({
 });
 
 export const draftsBody = z.object({
-  research_id: z.number().int().positive().optional(),
+  generation_id: z.number().int().positive(),
   story_index: z.number().int().min(0).optional(),
-  topic: z.string().trim().min(1).max(1000).optional(),
-  angle: z.string().trim().min(1).max(2000).optional(),
   personal_connection: z.string().optional(),
   length: z.enum(["short", "medium", "long"]).optional(),
-}).refine(
-  (data) => (data.research_id != null && data.story_index != null) || (data.topic && data.angle),
-  { message: "Either research_id+story_index or topic+angle required" }
-);
-
-export const brainstormBody = z.object({
-  topic: z.string().trim().min(1).max(1000),
 });
 
 export const reviseDraftsBody = z.object({

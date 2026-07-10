@@ -18,9 +18,9 @@ import {
 } from "../api/client";
 
 export interface GenerationState {
+  authorIntent: string;
   // Discovery
   discoveryTopics: DiscoveryTopic[] | null;
-  selectedTopic: string | null;
   // Research
   researchId: number | null;
   stories: GenStory[];
@@ -39,10 +39,6 @@ export interface GenerationState {
   finalDraft: string;
   qualityGate: GenCoachCheckQuality | null;
   appliedInsights: GenCoachingInsight[];
-  // Brainstorm (thought-leadership path)
-  brainstormAngles: string[];
-  brainstormTopic: string | null;
-  selectedAngle: string | null;
   // Chat
   chatMessages: Array<{ role: "user" | "assistant"; content: string }>;
   // Status
@@ -52,8 +48,8 @@ export interface GenerationState {
 export type SetGen = React.Dispatch<React.SetStateAction<GenerationState>>;
 
 const initialState: GenerationState = {
+  authorIntent: "",
   discoveryTopics: null,
-  selectedTopic: null,
   researchId: null,
   stories: [],
   articleCount: 0,
@@ -69,9 +65,6 @@ const initialState: GenerationState = {
   finalDraft: "",
   qualityGate: null,
   appliedInsights: [],
-  brainstormAngles: [],
-  brainstormTopic: null,
-  selectedAngle: null,
   chatMessages: [],
 };
 
@@ -80,7 +73,7 @@ interface RestoreResult {
   step: 1 | 2 | 3;
 }
 
-async function restoreGeneration(data: GenHistoryDetail): Promise<RestoreResult | null> {
+export async function restoreGeneration(data: GenHistoryDetail): Promise<RestoreResult | null> {
   let drafts: GenDraft[];
   let selectedIndices: number[];
   let qualityGate: GenCoachCheckQuality | null;
@@ -107,6 +100,7 @@ async function restoreGeneration(data: GenHistoryDetail): Promise<RestoreResult 
 
   const state: GenerationState = {
     ...initialState,
+    authorIntent: data.author_intent ?? "",
     researchId: data.research_id,
     stories: data.stories ?? [],
     articleCount: data.article_count ?? 0,
@@ -121,8 +115,6 @@ async function restoreGeneration(data: GenHistoryDetail): Promise<RestoreResult 
     qualityGate,
     personalConnection: data.personal_connection ?? "",
     draftLength: data.draft_length && ["short", "medium", "long"].includes(data.draft_length) ? data.draft_length as "short" | "medium" | "long" : "medium",
-    brainstormTopic: data.brainstorm_topic ?? null,
-    selectedAngle: data.brainstorm_angle ?? null,
     chatMessages,
     status: data.status,
   };
@@ -180,6 +172,10 @@ export default function Generate() {
     setStep(1);
   };
 
+  const markUserActed = () => {
+    userActedRef.current = true;
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -207,6 +203,8 @@ export default function Generate() {
             loading={loading}
             setLoading={setLoading}
             onNext={() => setStep(2)}
+            onStartOver={resetPipeline}
+            onUserActed={markUserActed}
           />
         )}
         {subTab === "Generate" && step === 2 && (

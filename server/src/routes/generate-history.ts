@@ -39,6 +39,8 @@ export function registerHistoryRoutes(app: FastifyInstance, db: Database.Databas
           const stories: Story[] = JSON.parse(research.stories_json);
           storyHeadline = stories[g.selected_story_index]?.headline ?? "";
         }
+      } else if (g.author_intent) {
+        storyHeadline = g.author_intent.slice(0, 80);
       } else if ((g as any).brainstorm_angle) {
         storyHeadline = (g as any).brainstorm_angle.slice(0, 80);
       }
