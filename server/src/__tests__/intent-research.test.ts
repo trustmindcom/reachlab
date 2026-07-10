@@ -70,7 +70,11 @@ describe("researchIntent", () => {
     const selectRelevant = vi.fn()
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([olderRelevantResult.url]);
-    const synthesize = vi.fn().mockResolvedValueOnce([story]);
+    const synthesizedStory = {
+      ...story,
+      source_url: olderRelevantResult.url,
+    };
+    const synthesize = vi.fn().mockResolvedValueOnce([synthesizedStory]);
 
     const result = await researchIntent({ intent, now, search, selectRelevant, synthesize });
 
@@ -80,7 +84,7 @@ describe("researchIntent", () => {
     expect(result.searchScope).toBe("all_time");
     expect(result.recentCutoff).toBe("05/10/2026");
     expect(result.evidence).toEqual([olderRelevantResult]);
-    expect(result.stories).toEqual([story]);
+    expect(result.stories).toEqual([synthesizedStory]);
     expect(selectRelevant.mock.calls[1][0]).toEqual({ intent, pages: [olderRelevantResult] });
     expect(synthesize).toHaveBeenCalledWith({ intent, pages: [olderRelevantResult] });
   });
@@ -107,6 +111,31 @@ describe("researchIntent", () => {
     expect(search).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["non-HTTP(S)", "file:///tmp/evidence"],
+  ])("rejects typed synthesis with %s source_url", async (_label, sourceUrl) => {
+    const search = vi.fn().mockResolvedValueOnce([recentResult]);
+    const selectRelevant = vi.fn().mockResolvedValueOnce([recentResult.url]);
+    const synthesize = vi.fn().mockResolvedValueOnce([{ ...story, source_url: sourceUrl }]);
+
+    await expect(researchIntent({ intent, now, search, selectRelevant, synthesize }))
+      .rejects.toThrow("Synthesis returned invalid stories");
+  });
+
+  it("rejects a typed synthesis source_url that was not selected as evidence", async () => {
+    const search = vi.fn().mockResolvedValueOnce([recentResult]);
+    const selectRelevant = vi.fn().mockResolvedValueOnce([recentResult.url]);
+    const synthesize = vi.fn().mockResolvedValueOnce([{
+      ...story,
+      source_url: "https://example.com/unselected",
+    }]);
+
+    await expect(researchIntent({ intent, now, search, selectRelevant, synthesize }))
+      .rejects.toThrow("Synthesis returned invalid stories");
+  });
+
   it("returns successful empty all-time evidence when no result is relevant", async () => {
     const search = vi.fn()
       .mockResolvedValueOnce([irrelevantResult])
@@ -126,7 +155,10 @@ describe("researchIntent", () => {
     const secondRecent = { ...recentResult, title: "Second result", url: "https://example.com/second" };
     const search = vi.fn().mockResolvedValueOnce([recentResult, secondRecent]);
     const selectRelevant = vi.fn().mockResolvedValueOnce([secondRecent.url]);
-    const synthesize = vi.fn().mockResolvedValueOnce([story]);
+    const synthesize = vi.fn().mockResolvedValueOnce([{
+      ...story,
+      source_url: secondRecent.url,
+    }]);
 
     await researchIntent({ intent, now, search, selectRelevant, synthesize });
 

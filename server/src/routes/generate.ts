@@ -14,6 +14,7 @@ import {
   getAntiAiTropesEnabled,
   getActiveGeneration,
   insertGenerationMessage,
+  getGenerationMessageCount,
   getGenerationMessages,
   getRuleCount,
   getMaxRuleSortOrder,
@@ -29,7 +30,7 @@ import { researchStories } from "../ai/researcher.js";
 import { selectRelevantIntentPages, synthesizeIntentPages } from "../ai/researcher.js";
 import { researchIntent, searchPerplexity } from "../ai/intent-research.js";
 import { loadWritingContext } from "../ai/writing-context.js";
-import { generateDrafts, reviseDrafts } from "../ai/drafter.js";
+import { generateDrafts, restartDraftsFromIntent, reviseDrafts } from "../ai/drafter.js";
 import { combineDrafts } from "../ai/combiner.js";
 import { coachCheck } from "../ai/coach-check.js";
 import { registerCoachingRoutes } from "./generate-coaching.js";
@@ -54,9 +55,11 @@ function parsePersistedDraftSelection(
   } catch {
     return { valid: false };
   }
-  if (!Array.isArray(parsed) || parsed.some((index) =>
-    !Number.isInteger(index) || index < 0 || index >= draftCount
-  )) {
+  if (
+    !Array.isArray(parsed)
+    || parsed.some((index) => !Number.isInteger(index) || index < 0 || index >= draftCount)
+    || new Set(parsed).size !== parsed.length
+  ) {
     return { valid: false };
   }
   return { valid: true, indices: parsed as number[] };
@@ -97,11 +100,11 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(400).send({ error: "Generation has no author intent" });
     }
 
-    const client = getClient();
-    const runId = createRun(db, personaId, "generate_research", 0);
+    const runId = createRun(db, personaId, "generate_research", 0, generation_id);
     const logger = new AiLogger(db, runId);
 
     try {
+      const client = getClient();
       let researchData: Parameters<typeof insertResearch>[2];
       let stories: Story[];
       let articleCount: number;
@@ -195,11 +198,11 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       throw err;
     }
 
-    const client = getClient();
-    const runId = createRun(db, personaId, "generate_drafts", 0);
+    const runId = createRun(db, personaId, "generate_drafts", 0, body.generation_id);
     const logger = new AiLogger(db, runId);
 
     try {
+      const client = getClient();
       const result = await generateDrafts(
         client, db, personaId, logger, context, body.personal_connection, body.length,
       );
@@ -233,7 +236,7 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
 
   app.post("/api/generate/revise-drafts", async (request, reply) => {
     const personaId = getPersonaId(request);
-    const { generation_id, feedback } = validateBody(reviseDraftsBody, request.body);
+    const { generation_id, feedback, mode } = validateBody(reviseDraftsBody, request.body);
 
     const generation = getGeneration(db, generation_id);
     if (!generation) {
@@ -252,20 +255,39 @@ export function registerGenerateRoutes(app: FastifyInstance, db: Database.Databa
       return reply.status(400).send({ error: "Generation has invalid selected draft indices" });
     }
     const selectedIndices = selection.indices;
-    if (selectedIndices.length === 0) {
+    if (mode === "revise_selected" && selectedIndices.length === 0) {
       return reply.status(400).send({ error: "Select at least one draft to revise" });
     }
+    if (mode === "restart_from_intent" && selectedIndices.length !== 0) {
+      return reply.status(400).send({ error: "Clear selected drafts before restarting from intent" });
+    }
+    if (
+      mode === "restart_from_intent"
+      && (
+        (generation.final_draft !== null && generation.final_draft.length > 0)
+        || generation.quality_gate_json !== null
+        || getGenerationMessageCount(db, generation_id) > 0
+      )
+    ) {
+      return reply.status(400).send({ error: "Cannot restart a generation with downstream editor state" });
+    }
     const selectedDrafts = selectedIndices.map((index) => currentDrafts[index]);
-    const client = getClient();
-    const runId = createRun(db, personaId, "revise_drafts", 0);
+    const runId = createRun(db, personaId, "revise_drafts", 0, generation_id);
     const logger = new AiLogger(db, runId);
 
     try {
-      const result = await reviseDrafts(
-        client, db, personaId, logger,
-        context, selectedDrafts, feedback,
-        (generation as any).draft_length
-      );
+      const client = getClient();
+      const result = mode === "revise_selected"
+        ? await reviseDrafts(
+          client, db, personaId, logger,
+          context, selectedDrafts, feedback,
+          (generation as any).draft_length,
+        )
+        : await restartDraftsFromIntent(
+          client, db, personaId, logger,
+          context, feedback,
+          (generation as any).draft_length,
+        );
 
       updateGeneration(db, generation_id, {
         drafts_json: JSON.stringify(result.drafts),
@@ -516,6 +538,19 @@ Return JSON only:
     if (!gen) return reply.status(404).send({ error: "Generation not found" });
 
     const { selected_draft_indices, combining_guidance } = validateBody(selectionBody, request.body);
+    let drafts: unknown;
+    try {
+      drafts = gen.drafts_json ? JSON.parse(gen.drafts_json) : [];
+    } catch {
+      return reply.status(400).send({ error: "Generation drafts are malformed" });
+    }
+    if (!Array.isArray(drafts)) {
+      return reply.status(400).send({ error: "Generation drafts are malformed" });
+    }
+    if (new Set(selected_draft_indices).size !== selected_draft_indices.length
+      || selected_draft_indices.some((index) => index >= drafts.length)) {
+      return reply.status(400).send({ error: "Invalid draft selection" });
+    }
     const updates: Parameters<typeof updateGeneration>[2] = {
       selected_draft_indices: JSON.stringify(selected_draft_indices),
     };
@@ -572,11 +607,11 @@ Return JSON only:
     }
     activeGhostwriteRequests.add(generation_id);
 
-    const client = getClient();
-    const runId = createRun(db, personaId, "ghostwriter", 0);
+    const runId = createRun(db, personaId, "ghostwriter", 0, generation_id);
     const logger = new AiLogger(db, runId);
 
     try {
+      const client = getClient();
       // Load history — consistent limit (20, matching restore)
       const history = getGenerationMessages(db, generation_id, 20).reverse();
 

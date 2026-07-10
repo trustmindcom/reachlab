@@ -65,6 +65,32 @@ describe("generateApi intent-led request contracts", () => {
     });
   });
 
+  it("revises from persisted selection without sending topic, angle, or draft bodies", async () => {
+    const { generateApi } = await import("../generate");
+    await generateApi.reviseDrafts(17, "Start from my intent again", "restart_from_intent");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/generate/revise-drafts?personaId=1");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      generation_id: 17,
+      feedback: "Start from my intent again",
+      mode: "restart_from_intent",
+    });
+  });
+
+  it("surfaces the safe server error from a revision response", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: "Revision provider is unavailable" }),
+    });
+    const { generateApi } = await import("../generate");
+
+    await expect(
+      generateApi.reviseDrafts(17, "Try another direction", "restart_from_intent"),
+    ).rejects.toThrow("Revision provider is unavailable");
+  });
+
   it.each([
     ["startGeneration", () => ({ error: "Start rejected safely" }), "Start rejected safely"],
     ["generateResearch", () => ({ detail: "Research unavailable safely" }), "Research unavailable safely"],

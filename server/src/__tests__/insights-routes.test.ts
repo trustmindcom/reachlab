@@ -164,6 +164,46 @@ describe("GET /api/insights/logs/:runId", () => {
   });
 });
 
+describe("GET /api/insights/runs", () => {
+  it("lists completed and failed runs correlated to the same generation", async () => {
+    const generationId = Number(db.prepare(
+      `INSERT INTO generations (persona_id, post_type, status, author_intent)
+       VALUES (1, 'general', 'draft', 'Diagnostic correlation intent')`,
+    ).run().lastInsertRowid);
+    const completedRunId = Number(db.prepare(
+      `INSERT INTO ai_runs (persona_id, triggered_by, post_count, status, generation_id)
+       VALUES (1, 'generate_drafts', 0, 'completed', ?)`,
+    ).run(generationId).lastInsertRowid);
+    const failedRunId = Number(db.prepare(
+      `INSERT INTO ai_runs (persona_id, triggered_by, post_count, status, generation_id, error)
+       VALUES (1, 'revise_drafts', 0, 'failed', ?, 'provider unavailable')`,
+    ).run(generationId).lastInsertRowid);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/insights/runs",
+      headers: { "x-persona-id": "1" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const runs = res.json().runs.filter((run: { id: number }) =>
+      run.id === completedRunId || run.id === failedRunId
+    );
+    expect(runs).toEqual([
+      expect.objectContaining({
+        id: failedRunId,
+        status: "failed",
+        generation_id: generationId,
+      }),
+      expect.objectContaining({
+        id: completedRunId,
+        status: "completed",
+        generation_id: generationId,
+      }),
+    ]);
+  });
+});
+
 describe("GET /api/insights/gaps", () => {
   it("returns empty array when no gaps logged", async () => {
     const res = await app.inject({ method: "GET", url: "/api/insights/gaps", headers: { "x-persona-id": "1" } });

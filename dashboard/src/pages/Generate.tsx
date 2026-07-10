@@ -80,7 +80,13 @@ export async function restoreGeneration(data: GenHistoryDetail): Promise<Restore
   try {
     drafts = data.drafts_json ? JSON.parse(data.drafts_json) : [];
     const rawIndices = data.selected_draft_indices ? JSON.parse(data.selected_draft_indices) : [];
-    selectedIndices = Array.isArray(rawIndices) ? rawIndices.filter((i: unknown) => Number.isInteger(i)) : [];
+    selectedIndices = Array.isArray(rawIndices)
+      ? rawIndices.filter((i: unknown, index: number, values: unknown[]) =>
+          Number.isInteger(i)
+          && (i as number) >= 0
+          && (i as number) < drafts.length
+          && values.indexOf(i) === index)
+      : [];
     qualityGate = data.quality_gate_json ? JSON.parse(data.quality_gate_json) : null;
   } catch (err) {
     console.error("[Generate] Failed to parse generation JSON:", err);

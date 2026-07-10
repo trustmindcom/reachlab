@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   synthesizeIntentPages: vi.fn(),
   generateDrafts: vi.fn(),
   reviseDrafts: vi.fn(),
+  restartDraftsFromIntent: vi.fn(),
 }));
 
 vi.mock("../ai/client.js", () => ({
@@ -39,12 +40,19 @@ vi.mock("../ai/researcher.js", () => ({
 vi.mock("../ai/drafter.js", () => ({
   generateDrafts: mocks.generateDrafts,
   reviseDrafts: mocks.reviseDrafts,
+  restartDraftsFromIntent: mocks.restartDraftsFromIntent,
   LENGTH_RANGES: {},
   LENGTH_INSTRUCTIONS: {},
 }));
 
 import { buildApp } from "../app.js";
-import { getGeneration, insertResearch, startGeneration, updateGeneration } from "../db/generate-queries.js";
+import {
+  getGeneration,
+  insertGenerationMessage,
+  insertResearch,
+  startGeneration,
+  updateGeneration,
+} from "../db/generate-queries.js";
 import { insertLegacyGenerationFixture } from "./helpers/generation-fixtures.js";
 
 const TEST_DB_PATH = path.join(import.meta.dirname, "../../data/test-generate-intent-routes.db");
@@ -65,6 +73,7 @@ beforeEach(async () => {
   mocks.synthesizeIntentPages.mockReset();
   mocks.generateDrafts.mockReset();
   mocks.reviseDrafts.mockReset();
+  mocks.restartDraftsFromIntent.mockReset();
   app = buildApp(TEST_DB_PATH);
   await app.ready();
 });
@@ -109,6 +118,104 @@ describe("POST /api/generate/start", () => {
 
     expect(response.statusCode).toBe(400);
     expect(mocks.getClient).not.toHaveBeenCalled();
+  });
+});
+
+describe("writing run generation correlation", () => {
+  function latestRun(triggeredBy: string) {
+    const db = initDatabase(TEST_DB_PATH);
+    try {
+      return db.prepare(
+        `SELECT generation_id, status FROM ai_runs
+         WHERE triggered_by = ? ORDER BY id DESC LIMIT 1`,
+      ).get(triggeredBy) as { generation_id: number | null; status: string } | undefined;
+    } finally {
+      db.close();
+    }
+  }
+
+  it("correlates a successful research run to the touched generation", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const generationId = startGeneration(db, 1, "Research correlation intent");
+    db.close();
+    mocks.researchIntent.mockResolvedValue({
+      stories: [], evidence: [], searchScope: "all_time", recentCutoff: "05/10/2026",
+    });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/research?personaId=1",
+      payload: { generation_id: generationId },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(latestRun("generate_research")).toEqual({
+      generation_id: generationId,
+      status: "completed",
+    });
+  });
+
+  it("correlates a successful draft run to the touched generation", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const generationId = startGeneration(db, 1, "Draft correlation intent");
+    db.close();
+    mocks.generateDrafts.mockResolvedValue({
+      drafts: [], prompt_snapshot: "snapshot", input_tokens: 0, output_tokens: 0,
+    });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/drafts?personaId=1",
+      payload: { generation_id: generationId },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(latestRun("generate_drafts")).toEqual({
+      generation_id: generationId,
+      status: "completed",
+    });
+  });
+
+  it("correlates a failed revision run to the touched generation", async () => {
+    const drafts = [{
+      type: "operator", hook: "Hook", body: "Body", closing: "Close",
+      word_count: 3, structure_label: "Operator",
+    }];
+    const db = initDatabase(TEST_DB_PATH);
+    const generationId = startGeneration(db, 1, "Revision correlation intent");
+    updateGeneration(db, generationId, {
+      drafts_json: JSON.stringify(drafts),
+      selected_draft_indices: "[0]",
+    });
+    db.close();
+    mocks.reviseDrafts.mockRejectedValue(new Error("provider unavailable"));
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Revise", mode: "revise_selected" },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(latestRun("revise_drafts")).toEqual({
+      generation_id: generationId,
+      status: "failed",
+    });
+  });
+
+  it("correlates a failed ghostwriter run to the touched generation", async () => {
+    const db = initDatabase(TEST_DB_PATH);
+    const generationId = startGeneration(db, 1, "Ghostwriter correlation intent");
+    updateGeneration(db, generationId, { drafts_json: "[]", selected_draft_indices: "[]" });
+    db.close();
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/ghostwrite?personaId=1",
+      payload: { generation_id: generationId, message: "Write this" },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(latestRun("ghostwriter")).toEqual({
+      generation_id: generationId,
+      status: "failed",
+    });
   });
 });
 
@@ -499,7 +606,8 @@ describe("POST /api/generate/revise-drafts stored-intent authority", () => {
       method: "POST", url: "/api/generate/revise-drafts?personaId=1",
       payload: {
         generation_id: generationId,
-        feedback: "Make it concrete",
+        feedback: "  Make it concrete  ",
+        mode: "revise_selected",
         topic: "Caller replacement topic",
         angle: "Caller replacement angle",
       },
@@ -526,7 +634,7 @@ describe("POST /api/generate/revise-drafts stored-intent authority", () => {
 
     const response = await app.inject({
       method: "POST", url: "/api/generate/revise-drafts?personaId=1",
-      payload: { generation_id: generationId, feedback: "Try again" },
+      payload: { generation_id: generationId, feedback: "Try again", mode: "revise_selected" },
     });
 
     expect(response.statusCode).toBe(500);
@@ -543,7 +651,7 @@ describe("POST /api/generate/revise-drafts stored-intent authority", () => {
 
     const response = await app.inject({
       method: "POST", url: "/api/generate/revise-drafts?personaId=1",
-      payload: { generation_id: generationId, feedback: "Try again" },
+      payload: { generation_id: generationId, feedback: "Try again", mode: "revise_selected" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -557,7 +665,7 @@ describe("POST /api/generate/revise-drafts stored-intent authority", () => {
 
     const response = await app.inject({
       method: "POST", url: "/api/generate/revise-drafts?personaId=2",
-      payload: { generation_id: generationId, feedback: "Try again" },
+      payload: { generation_id: generationId, feedback: "Try again", mode: "revise_selected" },
     });
 
     expect(response.statusCode).toBe(403);
@@ -571,7 +679,7 @@ describe("POST /api/generate/revise-drafts stored-intent authority", () => {
 
     const response = await app.inject({
       method: "POST", url: "/api/generate/revise-drafts?personaId=1",
-      payload: { generation_id: generationId, feedback: "Try again" },
+      payload: { generation_id: generationId, feedback: "Try again", mode: "revise_selected" },
     });
 
     expect(response.statusCode).toBe(500);
@@ -596,13 +704,237 @@ describe("POST /api/generate/revise-drafts stored-intent authority", () => {
 
     const response = await app.inject({
       method: "POST", url: "/api/generate/revise-drafts?personaId=1",
-      payload: { generation_id: generationId, feedback: "Revise both" },
+      payload: { generation_id: generationId, feedback: "Revise both", mode: "revise_selected" },
     });
 
     expect(response.statusCode, response.body).toBe(200);
     const checkDb = initDatabase(TEST_DB_PATH);
     try {
       expect(getGeneration(checkDb, generationId)!.selected_draft_indices).toBe("[]");
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it("restarts from stored intent and evidence with zero selected indices", async () => {
+    const generationId = await createRevisionGeneration();
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, { selected_draft_indices: JSON.stringify([]) });
+    db.close();
+    const restartedDrafts = [
+      { type: "contrarian", hook: "Fresh 1", body: "Fresh body 1", closing: "Fresh close 1", word_count: 6, structure_label: "Contrarian" },
+      { type: "operator", hook: "Fresh 2", body: "Fresh body 2", closing: "Fresh close 2", word_count: 6, structure_label: "Operator" },
+      { type: "future", hook: "Fresh 3", body: "Fresh body 3", closing: "Fresh close 3", word_count: 6, structure_label: "Future" },
+    ];
+    mocks.restartDraftsFromIntent.mockResolvedValue({
+      drafts: restartedDrafts, prompt_snapshot: "restart snapshot", input_tokens: 3, output_tokens: 3,
+    });
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "  Start fresh  ", mode: "restart_from_intent" },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(mocks.restartDraftsFromIntent).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 1, expect.anything(),
+      expect.objectContaining({ generationId, authorIntent: "Stored revision intent" }),
+      "Start fresh", "short",
+    );
+    expect(mocks.reviseDrafts).not.toHaveBeenCalled();
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      expect(JSON.parse(getGeneration(checkDb, generationId)!.drafts_json!)).toEqual(restartedDrafts);
+      expect(getGeneration(checkDb, generationId)!.selected_draft_indices).toBe("[]");
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it.each([
+    ["revise_selected", []],
+    ["restart_from_intent", [1]],
+  ] as const)("rejects %s selection mismatch before AI client or run construction", async (mode, indices) => {
+    const generationId = await createRevisionGeneration();
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, { selected_draft_indices: JSON.stringify(indices) });
+    const runCountBefore = (db.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count;
+    db.close();
+    mocks.getClient.mockClear();
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Try again", mode },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(mocks.getClient).not.toHaveBeenCalled();
+    expect(mocks.reviseDrafts).not.toHaveBeenCalled();
+    expect(mocks.restartDraftsFromIntent).not.toHaveBeenCalled();
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      expect((checkDb.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count)
+        .toBe(runCountBefore);
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it("rejects duplicate persisted selected indices before AI client or run construction", async () => {
+    const generationId = await createRevisionGeneration();
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, { selected_draft_indices: JSON.stringify([1, 1]) });
+    const runCountBefore = (db.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count;
+    db.close();
+    mocks.getClient.mockClear();
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Revise it", mode: "revise_selected" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(mocks.getClient).not.toHaveBeenCalled();
+    expect(mocks.reviseDrafts).not.toHaveBeenCalled();
+    expect(mocks.restartDraftsFromIntent).not.toHaveBeenCalled();
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      expect((checkDb.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count)
+        .toBe(runCountBefore);
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it("rejects restart with a final draft before AI client or run construction and preserves restore state", async () => {
+    const generationId = await createRevisionGeneration();
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, {
+      selected_draft_indices: JSON.stringify([]),
+      final_draft: "Keep this final draft",
+    });
+    const before = getGeneration(db, generationId)!;
+    const runCountBefore = (db.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count;
+    db.close();
+    mocks.getClient.mockClear();
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Start over", mode: "restart_from_intent" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(mocks.getClient).not.toHaveBeenCalled();
+    expect(mocks.restartDraftsFromIntent).not.toHaveBeenCalled();
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      expect(getGeneration(checkDb, generationId)).toMatchObject({
+        drafts_json: before.drafts_json,
+        selected_draft_indices: "[]",
+        final_draft: "Keep this final draft",
+        quality_gate_json: before.quality_gate_json,
+      });
+      expect((checkDb.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count)
+        .toBe(runCountBefore);
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it("rejects restart with quality-gate state before AI client or run construction and preserves it", async () => {
+    const generationId = await createRevisionGeneration();
+    const qualityGate = JSON.stringify({ passed: true, checks: [] });
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, {
+      selected_draft_indices: JSON.stringify([]),
+      quality_gate_json: qualityGate,
+    });
+    const before = getGeneration(db, generationId)!;
+    const runCountBefore = (db.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count;
+    db.close();
+    mocks.getClient.mockClear();
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Start over", mode: "restart_from_intent" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(mocks.getClient).not.toHaveBeenCalled();
+    expect(mocks.restartDraftsFromIntent).not.toHaveBeenCalled();
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      expect(getGeneration(checkDb, generationId)).toMatchObject({
+        drafts_json: before.drafts_json,
+        selected_draft_indices: "[]",
+        final_draft: before.final_draft,
+        quality_gate_json: qualityGate,
+      });
+      expect((checkDb.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count)
+        .toBe(runCountBefore);
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it("rejects restart with generation messages before AI client or run construction and preserves them", async () => {
+    const generationId = await createRevisionGeneration();
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, { selected_draft_indices: JSON.stringify([]) });
+    insertGenerationMessage(db, {
+      generation_id: generationId,
+      role: "user",
+      content: "Keep this downstream message",
+    });
+    const before = getGeneration(db, generationId)!;
+    const runCountBefore = (db.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count;
+    db.close();
+    mocks.getClient.mockClear();
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Start over", mode: "restart_from_intent" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(mocks.getClient).not.toHaveBeenCalled();
+    expect(mocks.restartDraftsFromIntent).not.toHaveBeenCalled();
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      expect(getGeneration(checkDb, generationId)).toMatchObject({
+        drafts_json: before.drafts_json,
+        selected_draft_indices: "[]",
+        final_draft: before.final_draft,
+        quality_gate_json: before.quality_gate_json,
+      });
+      expect(checkDb.prepare(
+        "SELECT role, content FROM generation_messages WHERE generation_id = ?",
+      ).all(generationId)).toEqual([{ role: "user", content: "Keep this downstream message" }]);
+      expect((checkDb.prepare("SELECT COUNT(*) AS count FROM ai_runs").get() as { count: number }).count)
+        .toBe(runCountBefore);
+    } finally {
+      checkDb.close();
+    }
+  });
+
+  it("keeps drafts and empty selection unchanged when restart fails", async () => {
+    const generationId = await createRevisionGeneration();
+    const db = initDatabase(TEST_DB_PATH);
+    updateGeneration(db, generationId, { selected_draft_indices: JSON.stringify([]) });
+    db.close();
+    mocks.restartDraftsFromIntent.mockRejectedValue(new Error("provider unavailable"));
+
+    const response = await app.inject({
+      method: "POST", url: "/api/generate/revise-drafts?personaId=1",
+      payload: { generation_id: generationId, feedback: "Start fresh", mode: "restart_from_intent" },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const checkDb = initDatabase(TEST_DB_PATH);
+    try {
+      const generation = getGeneration(checkDb, generationId)!;
+      expect(generation.drafts_json).toBe(JSON.stringify(drafts));
+      expect(generation.selected_draft_indices).toBe(JSON.stringify([]));
     } finally {
       checkDb.close();
     }

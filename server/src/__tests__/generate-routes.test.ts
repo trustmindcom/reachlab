@@ -271,7 +271,11 @@ describe("POST /api/generate/ghostwrite", () => {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
-        drafts_json: "[]",
+        drafts_json: JSON.stringify([
+          { type: "contrarian", hook: "A", body: "A", closing: "A", word_count: 3, structure_label: "A" },
+          { type: "operator", hook: "B", body: "B", closing: "B", word_count: 3, structure_label: "B" },
+          { type: "future", hook: "C", body: "C", closing: "C", word_count: 3, structure_label: "C" },
+        ]),
       });
 
       // Close before inject so the app can use the DB
@@ -304,7 +308,11 @@ describe("PATCH /api/generate/:id/selection", () => {
         research_id: researchId,
         post_type: "general",
         selected_story_index: 0,
-        drafts_json: "[]",
+        drafts_json: JSON.stringify([
+          { type: "contrarian", hook: "A", body: "A", closing: "A", word_count: 3, structure_label: "A" },
+          { type: "operator", hook: "B", body: "B", closing: "B", word_count: 3, structure_label: "B" },
+          { type: "future", hook: "C", body: "C", closing: "C", word_count: 3, structure_label: "C" },
+        ]),
       });
       db.close();
     } catch (e) {
@@ -319,6 +327,41 @@ describe("PATCH /api/generate/:id/selection", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
+  });
+
+  it.each([
+    ["duplicate", [1, 1]],
+    ["negative", [-1]],
+    ["noninteger", [0.5]],
+    ["out of bounds", [2]],
+  ])("rejects %s indices and leaves selection unchanged", async (_label, indices) => {
+    const db = initDatabase(TEST_DB_PATH);
+    const { getGeneration } = await import("../db/generate-queries.js");
+    const genId = insertLegacyGenerationFixture(db, 1, {
+      post_type: "general",
+      drafts_json: JSON.stringify([
+        { type: "contrarian", hook: "A", body: "A", closing: "A", word_count: 3, structure_label: "A" },
+        { type: "operator", hook: "B", body: "B", closing: "B", word_count: 3, structure_label: "B" },
+      ]),
+    });
+    db.prepare(`
+      UPDATE generations
+      SET selected_draft_indices = ?, combining_guidance = ?
+      WHERE id = ?
+    `).run(JSON.stringify([0]), "Keep me", genId);
+    db.close();
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/api/generate/${genId}/selection?personaId=1`,
+      payload: { selected_draft_indices: indices, combining_guidance: "Replace me" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const checkDb = initDatabase(TEST_DB_PATH);
+    expect(getGeneration(checkDb, genId)?.selected_draft_indices).toBe(JSON.stringify([0]));
+    expect(getGeneration(checkDb, genId)?.combining_guidance).toBe("Keep me");
+    checkDb.close();
   });
 
   it("returns 403 for wrong persona", async () => {

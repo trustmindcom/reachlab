@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type GenDraft } from "../../api/client";
 import type { SetGen } from "../Generate";
 import DraftSidebar from "./components/DraftSidebar";
 import DraftReader from "./components/DraftReader";
 import ScannerLoader from "./components/ScannerLoader";
+import { reviseButtonLabel } from "./reviseButtonLabel";
 
 const REVISING_MESSAGES = [
   "Reading your feedback...",
@@ -55,20 +56,44 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
   const [reviseFeedback, setReviseFeedback] = useState(gen.combiningGuidance ?? "");
   const [loaderMessages, setLoaderMessages] = useState(COMBINING_MESSAGES);
   const [error, setError] = useState<string | null>(null);
+  const revisionPendingRef = useRef(false);
+  const revisionRequestTokenRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      revisionRequestTokenRef.current += 1;
+      revisionPendingRef.current = false;
+      setLoading(false);
+    };
+  }, [setLoading]);
 
   const selectedCount = gen.selectedDraftIndices.length;
 
   const handleRevise = async () => {
-    if (!reviseFeedback.trim()) return;
+    if (loading || revisionPendingRef.current || !reviseFeedback.trim()) return;
     if (gen.generationId === null) {
       setError("No active generation. Try starting a new draft.");
       return;
     }
+    const requestToken = revisionRequestTokenRef.current + 1;
+    revisionRequestTokenRef.current = requestToken;
+    const isCurrentRequest = () => (
+      mountedRef.current && revisionRequestTokenRef.current === requestToken
+    );
+    revisionPendingRef.current = true;
     setError(null);
     setLoaderMessages(REVISING_MESSAGES);
     setLoading(true);
     try {
-      const res = await api.reviseDrafts(gen.generationId, reviseFeedback.trim());
+      const feedback = reviseFeedback.trim();
+      const mode = selectedCount === 0 ? "restart_from_intent" : "revise_selected";
+      await api.saveSelection(gen.generationId, gen.selectedDraftIndices, feedback);
+      if (!isCurrentRequest()) return;
+      const res = await api.reviseDrafts(gen.generationId, feedback, mode);
+      if (!isCurrentRequest()) return;
       setGen((prev) => ({
         ...prev,
         drafts: res.drafts,
@@ -76,10 +101,14 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
       }));
       setReviseFeedback("");
     } catch (err: any) {
+      if (!isCurrentRequest()) return;
       console.error("Revise failed:", err);
       setError(err?.message ?? "Revision failed. Try again.");
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) {
+        revisionPendingRef.current = false;
+        setLoading(false);
+      }
     }
   };
 
@@ -151,7 +180,11 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
 
       {/* Error feedback */}
       {error && (
-        <div className="mt-4 px-1 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mt-4 px-1 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[14px] text-red-400"
+        >
           {error}
         </div>
       )}
@@ -159,6 +192,7 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
       {/* Guidance — single input, two actions */}
       <div className="mt-4 px-1">
         <textarea
+          aria-label="Draft feedback"
           value={reviseFeedback}
           onChange={(e) => {
             setReviseFeedback(e.target.value);
@@ -170,10 +204,10 @@ export default function DraftVariations({ gen, setGen, loading, setLoading, onBa
         <div className="flex justify-end gap-2 mt-2">
           <button
             onClick={handleRevise}
-            disabled={!reviseFeedback.trim()}
+            disabled={loading || !reviseFeedback.trim()}
             className="px-4 py-2 border border-gen-border-2 text-gen-text-1 text-[14px] font-medium rounded-lg hover:bg-gen-bg-2 transition-colors duration-150 ease-[var(--ease-snappy)] disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Revise all 3
+            {reviseButtonLabel(selectedCount)}
           </button>
           {selectedCount >= 2 && (
             <button

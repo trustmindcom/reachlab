@@ -130,6 +130,20 @@ export async function agentTurn(config: AgentTurnConfig): Promise<AgentTurnResul
         },
         { signal: controller.signal }
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.log({
+        step: "agent_turn",
+        model,
+        input_messages: JSON.stringify({ system: systemPrompt, messages: apiMessages }),
+        output_text: `Provider call failed: ${message}`,
+        tool_calls: null,
+        input_tokens: 0,
+        output_tokens: 0,
+        thinking_tokens: 0,
+        duration_ms: Date.now() - iterStart,
+      });
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
@@ -141,7 +155,7 @@ export async function agentTurn(config: AgentTurnConfig): Promise<AgentTurnResul
     logger.log({
       step: "agent_turn",
       model,
-      input_messages: JSON.stringify(apiMessages.slice(-1)),
+      input_messages: JSON.stringify({ system: systemPrompt, messages: apiMessages }),
       output_text: JSON.stringify(response.content),
       tool_calls: null,
       input_tokens: response.usage.input_tokens,

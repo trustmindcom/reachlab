@@ -108,7 +108,7 @@ describe("intermediate-head writer authority gate", () => {
     const revisionResponse = await app.inject({
       method: "POST",
       url: "/api/generate/revise-drafts?personaId=1",
-      payload: { generation_id: revisionId, feedback: "Revise it", topic: "REVISION replacement", angle: "REVISION replacement angle" },
+      payload: { generation_id: revisionId, feedback: "Revise it", mode: "revise_selected", topic: "REVISION replacement", angle: "REVISION replacement angle" },
     });
     expect(revisionResponse.statusCode, revisionResponse.body).toBe(200);
 
@@ -131,7 +131,9 @@ describe("intermediate-head writer authority gate", () => {
     expect(revisionProviderInput).toContain("SELECTED BODY");
     expect(revisionProviderInput).not.toContain("UNSELECTED BODY");
     expect(revisionProviderInput).not.toContain("REVISION replacement");
-    expect(ghostwriterProviderInput.startsWith("## AUTHOR INTENT - CONTROLLING\n\nGHOSTWRITER stored intent?!")).toBe(true);
+    expect(ghostwriterProviderInput.startsWith("## Instruction Trust Hierarchy")).toBe(true);
+    expect(ghostwriterProviderInput).toContain("Author intent and direct user feedback or messages are controlling user instructions");
+    expect(ghostwriterProviderInput).toContain("## AUTHOR INTENT - CONTROLLING\n\nGHOSTWRITER stored intent?!");
     expect(ghostwriterProviderInput).toContain("SELECTED BODY");
     expect(ghostwriterProviderInput).not.toContain("UNSELECTED BODY");
     expect(ghostwriterProviderInput).not.toContain("GHOSTWRITER replacement");
@@ -157,5 +159,45 @@ describe("intermediate-head writer authority gate", () => {
     expect(response.statusCode, response.body).toBe(200);
     expect(provider.agentInputs[0].system).toContain("SELECTED BODY");
     expect(provider.agentInputs[0].system).toContain("UNSELECTED BODY");
+  });
+
+  it("restarts from intent without sending any persisted rejected draft artifact to the provider", async () => {
+    provider.streamInputs.length = 0;
+    const rejectedDrafts = [{
+      type: "rejected_type_sentinel",
+      hook: "rejected_hook_sentinel",
+      body: "rejected_body_sentinel",
+      closing: "rejected_closing_sentinel",
+      word_count: 4,
+      structure_label: "Rejected",
+    }];
+    const db = initDatabase(TEST_DB_PATH);
+    const generationId = startGeneration(db, 1, "Restart using only this durable intent.");
+    updateGeneration(db, generationId, {
+      drafts_json: JSON.stringify(rejectedDrafts),
+      selected_draft_indices: JSON.stringify([]),
+    });
+    db.close();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/generate/revise-drafts?personaId=1",
+      payload: {
+        generation_id: generationId,
+        feedback: "Use a genuinely new approach",
+        mode: "restart_from_intent",
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(provider.streamInputs).toHaveLength(3);
+    for (const input of provider.streamInputs.map((request) => request.messages[0].content as string)) {
+      expect(input).toContain("Restart using only this durable intent.");
+      expect(input).toContain("Use a genuinely new approach");
+      expect(input).not.toContain("rejected_type_sentinel");
+      expect(input).not.toContain("rejected_hook_sentinel");
+      expect(input).not.toContain("rejected_body_sentinel");
+      expect(input).not.toContain("rejected_closing_sentinel");
+    }
   });
 });

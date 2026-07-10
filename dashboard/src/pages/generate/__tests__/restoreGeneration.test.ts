@@ -55,4 +55,70 @@ describe("intent-led generation restore", () => {
     expect(restored?.state).not.toHaveProperty("brainstormTopic");
     expect(restored?.state).not.toHaveProperty("selectedAngle");
   });
+
+  it("keeps a generation with a final draft at step three", async () => {
+    const { restoreGeneration } = await import("../../Generate");
+    const detail = {
+      id: 74,
+      author_intent: "Preserve downstream editor state",
+      research_id: null,
+      post_type: "general",
+      selected_story_index: null,
+      drafts_json: JSON.stringify([]),
+      selected_draft_indices: JSON.stringify([]),
+      final_draft: "Keep this final draft",
+      quality_gate_json: null,
+      combining_guidance: null,
+      personal_connection: null,
+      draft_length: "medium",
+      prompt_snapshot: null,
+      status: "draft",
+      persona_id: 1,
+      brainstorm_topic: null,
+      brainstorm_angle: null,
+      created_at: "2026-07-10T00:00:00Z",
+      stories: [],
+      article_count: 0,
+      source_count: 0,
+    } satisfies GenHistoryDetail;
+
+    const restored = await restoreGeneration(detail);
+
+    expect(restored?.step).toBe(3);
+    expect(restored?.state.finalDraft).toBe("Keep this final draft");
+  });
+
+  it("restores only unique in-range draft selection indices from malformed history", async () => {
+    const { restoreGeneration } = await import("../../Generate");
+    const detail = {
+      id: 75,
+      author_intent: "Restore valid historical selection only",
+      research_id: null,
+      post_type: "general",
+      selected_story_index: null,
+      drafts_json: JSON.stringify([
+        { type: "contrarian", hook: "A", body: "A", closing: "A", word_count: 3, structure_label: "A" },
+        { type: "operator", hook: "B", body: "B", closing: "B", word_count: 3, structure_label: "B" },
+      ]),
+      selected_draft_indices: JSON.stringify([1, 1, -1, 2, 0.5, "0", 0]),
+      final_draft: null,
+      quality_gate_json: null,
+      combining_guidance: "Combine valid drafts",
+      personal_connection: null,
+      draft_length: "medium",
+      prompt_snapshot: null,
+      status: "draft",
+      persona_id: 1,
+      brainstorm_topic: null,
+      brainstorm_angle: null,
+      created_at: "2026-07-10T00:00:00Z",
+      stories: [],
+      article_count: 0,
+      source_count: 0,
+    } satisfies GenHistoryDetail;
+
+    const restored = await restoreGeneration(detail);
+
+    expect(restored?.state.selectedDraftIndices).toEqual([1, 0]);
+  });
 });
