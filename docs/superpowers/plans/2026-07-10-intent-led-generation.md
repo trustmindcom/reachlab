@@ -36,7 +36,7 @@ Non-goals:
 - no generic Insights authorization or logging redesign,
 - no destructive SQLite table rebuild to remove old nullable columns.
 
-Before each PR, create an isolated worktree from fresh `origin/main`. Preserve the dirty primary checkout. Verify the next migration number before PR 1; the plan uses `033` because the current tree ends at `032`.
+Before each PR, create an isolated worktree from fresh `origin/main`. Preserve the dirty primary checkout. Verify the next migration number before PR 1; the verified baseline ends at `029`, so this implementation uses `030`.
 
 ## Final File Shape
 
@@ -68,7 +68,7 @@ Historical `brainstorm_topic` and `brainstorm_angle` columns remain untouched. N
 
 **Files:**
 
-- Create: `server/src/db/migrations/033-intent-led-generation.sql`
+- Create: `server/src/db/migrations/030-intent-led-generation.sql`
 - Create: `server/src/ai/intent-research.ts`
 - Create: `server/src/ai/writing-context.ts`
 - Modify: `server/src/db/generate-queries.ts`
@@ -109,7 +109,7 @@ pnpm --filter linkedin-analytics-server test -- src/__tests__/generate-queries.t
 
 Expected: FAIL because `author_intent` and `startGeneration` do not exist.
 
-- [ ] Create migration `033-intent-led-generation.sql`:
+- [ ] Create migration `030-intent-led-generation.sql`:
 
 ```sql
 ALTER TABLE generations ADD COLUMN author_intent TEXT
@@ -146,7 +146,7 @@ export function startGeneration(
 
 - [ ] Permit `updateGeneration` to update only the new-flow fields `research_id`, `selected_story_index`, `personal_connection`, and `draft_length` in addition to its existing allowlist. Do not add `author_intent` to the update allowlist.
 
-- [ ] Re-run the query test and the real migration tests. Expected: PASS, including applying migrations through `032` and then `033` to a database containing an existing generation.
+- [ ] Re-run the query test and the real migration tests. Expected: PASS, including applying migrations through `029` and then `030` to a database containing an existing generation.
 
 ### Task 1.2: Add Recent-Then-All-Time Research As One Unit
 
